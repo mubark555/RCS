@@ -1,0 +1,11 @@
+# ملفات ناتجة من التجربة
+result.pptx
+out_files/
+template.pptx
+names.xlsx
+
+# بايثون
+__pycache__/
+*.pyc
+.venv/
+venv/

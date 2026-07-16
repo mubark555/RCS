@@ -51,8 +51,11 @@ export default function MeetingsPage() {
 
   return (
     <div>
-      <div className="section-title" style={{ marginTop: 10, justifyContent: "space-between" }}>
-        <span>📅 جدولة الاجتماعات</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>
+          {items.length} اجتماع
+        </span>
+        <div style={{ marginInlineStart: "auto" }} />
         <button className="btn primary" onClick={() => setEditing({})}>
           + اجتماع جديد
         </button>

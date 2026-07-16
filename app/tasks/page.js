@@ -69,8 +69,11 @@ export default function TasksPage() {
 
   return (
     <div>
-      <div className="section-title" style={{ marginTop: 10, justifyContent: "space-between" }}>
-        <span>📋 إدارة المهام ({filtered.length})</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>
+          {filtered.length} من {tasks.length} مهمة
+        </span>
+        <div style={{ marginInlineStart: "auto" }} />
         <button className="btn primary" onClick={() => setEditing({})}>
           + مهمة جديدة
         </button>

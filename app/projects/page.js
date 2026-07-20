@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { projectsStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
@@ -10,6 +10,15 @@ import Icon from "@/components/Icon";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
 
 const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
 
 export default function ProjectsPage() {
   const { canManage, scopeProjects, users, reloadProjects } = useRole();
@@ -130,8 +139,16 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
     members: projMembers(initial || {}),
   });
   const [saving, setSaving] = useState(false);
+  const logoRef = useRef(null);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const setArr = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+  async function onLogo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = await fileToDataUrl(file);
+    setF((s) => ({ ...s, logo: url }));
+    if (logoRef.current) logoRef.current.value = "";
+  }
 
   const managerOptions = users.filter((u) => u.role !== "client");
   const clientOptions = users.filter((u) => u.role === "client");
@@ -157,8 +174,12 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
         <label className="field full"><span>الوصف</span><textarea rows={2} value={f.description} onChange={set("description")} placeholder="نبذة عن المشروع…" /></label>
 
         <label className="field">
-          <span>شعار المشروع (رابط صورة)</span>
-          <input value={f.logo} onChange={set("logo")} placeholder="https://…/logo.png" />
+          <span>شعار المشروع (رفع صورة أو رابط)</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input ref={logoRef} type="file" accept="image/*" hidden onChange={onLogo} />
+            <button type="button" className="btn" onClick={() => logoRef.current?.click()}><Icon name="upload" size={15} /> رفع</button>
+            <input value={f.logo?.startsWith("data:") ? "" : (f.logo || "")} onChange={set("logo")} placeholder="أو رابط صورة…" />
+          </div>
         </label>
         <div className="field">
           <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>معاينة</span>

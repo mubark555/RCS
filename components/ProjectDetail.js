@@ -16,7 +16,7 @@ export default function ProjectDetail({ project, onClose }) {
   const [files, setFiles] = useState([]);
   const [users, setUsers] = useState([]);
   const [busyFile, setBusyFile] = useState(false);
-  const fileRef = useRef(null);
+  const [lnk, setLnk] = useState({ label: "", url: "" });
 
   async function reloadFiles() {
     const a = await filesStore.list().catch(() => []);
@@ -36,18 +36,15 @@ export default function ProjectDetail({ project, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [project, onClose]);
 
-  async function onUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function addLink() {
+    if (!lnk.url.trim()) return;
     setBusyFile(true);
     try {
-      await filesStore.upload(file, { project: project.name, category: "ملف", note: "" });
+      await filesStore.addLink({ name: lnk.label || lnk.url, url: lnk.url, project: project.name, category: "Google Drive" });
+      setLnk({ label: "", url: "" });
       await reloadFiles();
-    } catch (err) {
-      alert("تعذّر الرفع: " + (err?.message || err));
     } finally {
       setBusyFile(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -57,7 +54,7 @@ export default function ProjectDetail({ project, onClose }) {
   }
 
   async function delFile(f) {
-    if (!confirm(`حذف الملف؟\n\n${f.name}`)) return;
+    if (!confirm(`حذف الرابط؟\n\n${f.name}`)) return;
     await filesStore.remove(f);
     await reloadFiles();
   }
@@ -133,26 +130,26 @@ export default function ProjectDetail({ project, onClose }) {
             {tasks.length > 15 && <div className="muted" style={{ padding: 8, fontSize: 12 }}>+ {tasks.length - 15} مهمة أخرى…</div>}
           </div>
 
-          <div className="d-section" style={{ display: "flex", alignItems: "center" }}>
-            أرشيف المشروع — الملفات ({files.length})
-            {!readOnly && (
-              <>
-                <input ref={fileRef} type="file" hidden onChange={onUpload} />
-                <button className="btn sm primary" style={{ marginInlineStart: "auto" }} disabled={busyFile} onClick={() => fileRef.current?.click()}>
-                  <Icon name="upload" size={14} /> {busyFile ? "جاري الرفع…" : "رفع ملف"}
-                </button>
-              </>
-            )}
-          </div>
+          <div className="d-section">أرشيف المشروع — روابط Google Drive ({files.length})</div>
           <div className="detail-block">
-            {files.length === 0 ? <span className="muted">لا ملفات بعد — ارفع ملفات هذا المشروع هنا.</span> : files.map((f) => (
+            {files.length === 0 ? <span className="muted">لا روابط بعد — أضِف روابط ملفات المشروع (Google Drive).</span> : files.map((f) => (
               <div className="file-line" key={f.id}>
-                <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name={f.kind === "link" ? "link" : "file"} size={15} /></span>
-                <span style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => openFile(f)}>{f.name}</span>
+                <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="link" size={15} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                  {f.category && <small className="muted">{f.category}</small>}
+                </div>
                 <button className="btn sm" onClick={() => openFile(f)}>فتح</button>
                 {!readOnly && <button className="btn sm danger icon" onClick={() => delFile(f)}><Icon name="trash" size={14} /></button>}
               </div>
             ))}
+            {!readOnly && (
+              <div className="inline-form" style={{ marginTop: 10 }}>
+                <input placeholder="الوصف (مثال: عرض تقديمي)" value={lnk.label} onChange={(e) => setLnk({ ...lnk, label: e.target.value })} />
+                <input placeholder="رابط Google Drive…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
+                <button className="btn primary" type="button" onClick={addLink} disabled={busyFile || !lnk.url.trim()}>إضافة</button>
+              </div>
+            )}
           </div>
 
           <div className="d-section">محاضر الاجتماعات ({meetings.length})</div>

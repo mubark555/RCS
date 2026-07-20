@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isCloud } from "@/lib/supabase";
 import { useRole } from "@/components/RoleProvider";
+import { useSettings } from "@/components/SettingsProvider";
 import Icon from "@/components/Icon";
 
 const ALL_LINKS = [
@@ -12,6 +13,7 @@ const ALL_LINKS = [
   { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
+  { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
 ];
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
@@ -19,15 +21,18 @@ const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 export default function Sidebar() {
   const path = usePathname();
   const { users, viewer, viewerId, setViewer, role } = useRole();
+  const { settings } = useSettings();
   const links = ALL_LINKS.filter((l) => l.roles.includes(role));
 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="logo">ڤ</span>
+        <span className="logo" style={{ overflow: "hidden", padding: 0 }}>
+          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : settings.logoText}
+        </span>
         <span>
-          <b>ڤيوليت</b>
-          <small>DIGITAL MARKETING</small>
+          <b>{settings.appName}</b>
+          <small>{settings.tagline}</small>
         </span>
       </div>
 

@@ -4,6 +4,7 @@ import "@fontsource/cairo/600.css";
 import "@fontsource/cairo/700.css";
 import "@fontsource/cairo/800.css";
 import "./globals.css";
+import { SettingsProvider } from "@/components/SettingsProvider";
 import { RoleProvider } from "@/components/RoleProvider";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
@@ -18,15 +19,17 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
       <body>
-        <RoleProvider>
-          <div className="app">
-            <Sidebar />
-            <div className="main">
-              <TopBar />
-              <div className="content">{children}</div>
+        <SettingsProvider>
+          <RoleProvider>
+            <div className="app">
+              <Sidebar />
+              <div className="main">
+                <TopBar />
+                <div className="content">{children}</div>
+              </div>
             </div>
-          </div>
-        </RoleProvider>
+          </RoleProvider>
+        </SettingsProvider>
       </body>
     </html>
   );

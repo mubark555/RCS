@@ -5,18 +5,23 @@ import Link from "next/link";
 import { tasksStore, meetingsStore } from "@/lib/store";
 import Donut from "@/components/Donut";
 import Badge from "@/components/Badge";
+import { useRole } from "@/components/RoleProvider";
 import { STATUS_META, HEALTH_META, PRIORITY_META, PROJECTS } from "@/lib/constants";
 
 const DAY = 86400000;
 
 export default function Home() {
-  const [tasks, setTasks] = useState(null);
-  const [meetings, setMeetings] = useState([]);
+  const { viewer, role, clientProject } = useRole();
+  const [allTasks, setAllTasks] = useState(null);
+  const [allMeetings, setAllMeetings] = useState([]);
 
   useEffect(() => {
-    tasksStore.list().then(setTasks).catch(() => setTasks([]));
-    meetingsStore.list().then(setMeetings).catch(() => setMeetings([]));
+    tasksStore.list().then(setAllTasks).catch(() => setAllTasks([]));
+    meetingsStore.list().then(setAllMeetings).catch(() => setAllMeetings([]));
   }, []);
+
+  const tasks = clientProject && allTasks ? allTasks.filter((t) => t.project === clientProject) : allTasks;
+  const meetings = clientProject ? (allMeetings || []).filter((m) => m.project === clientProject) : allMeetings;
 
   const s = useMemo(() => {
     if (!tasks) return null;
@@ -91,10 +96,14 @@ export default function Home() {
     <div>
       {/* الهيرو */}
       <div className="hero">
-        <span className="h-av">ف</span>
+        <span className="h-av">{(viewer?.name || "ف").slice(0, 1)}</span>
         <div>
-          <h2>مرحباً بفريق ڤيوليت 👋</h2>
-          <p>لديك {week.length} استحقاق يحتاج المتابعة خلال هذا الأسبوع</p>
+          <h2>مرحباً {viewer?.name ? viewer.name : "بفريق ڤيوليت"} 👋</h2>
+          <p>
+            {clientProject
+              ? `متابعة مشروع ${clientProject} — ${week.length} استحقاق هذا الأسبوع`
+              : `لديك ${week.length} استحقاق يحتاج المتابعة خلال هذا الأسبوع`}
+          </p>
         </div>
         <div className="h-stats">
           <div className="h-chip"><div className="n">{s.total}</div><div className="l">إجمالي المهام</div></div>

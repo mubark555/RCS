@@ -59,6 +59,40 @@ create table if not exists public.files (
 
 create index if not exists files_project_idx on public.files (project);
 
+-- ------------------------- المشاريع -------------------------
+create table if not exists public.projects (
+  id          uuid primary key default gen_random_uuid(),
+  order_index int         default 0,
+  name        text        not null,
+  description text        default '',
+  manager     text        default '',   -- مدير المشروع (اسم مستخدم)
+  client      text        default '',   -- العميل (اسم مستخدم)
+  color       text        default '#e05a50',
+  status      text        default 'نشط',
+  created_at  timestamptz default now()
+);
+
+-- ------------------------- المستخدمون -------------------------
+create table if not exists public.users (
+  id          uuid primary key default gen_random_uuid(),
+  order_index int         default 0,
+  name        text        not null,
+  role        text        default 'member',  -- manager | member | client
+  title       text        default '',
+  project     text        default '',        -- المشروع المرتبط (للعميل)
+  email       text        default '',
+  created_at  timestamptz default now()
+);
+
+-- ------------------------- أعمدة إضافية -------------------------
+alter table public.tasks    add column if not exists holder   text  default '';
+alter table public.tasks    add column if not exists handoffs jsonb default '[]'::jsonb;
+alter table public.meetings add column if not exists attendees jsonb default '[]'::jsonb;
+alter table public.meetings add column if not exists links     jsonb default '[]'::jsonb;
+alter table public.files    add column if not exists kind text default 'file'; -- file | link
+alter table public.files    add column if not exists url  text default '';
+alter table public.files    alter column path drop not null;   -- الروابط بلا مسار تخزين
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
@@ -67,20 +101,25 @@ create index if not exists files_project_idx on public.files (project);
 alter table public.tasks    enable row level security;
 alter table public.meetings enable row level security;
 alter table public.files    enable row level security;
+alter table public.projects enable row level security;
+alter table public.users    enable row level security;
 
 do $$
 begin
-  -- tasks
   if not exists (select 1 from pg_policies where tablename='tasks' and policyname='tasks_all') then
     create policy tasks_all on public.tasks for all using (true) with check (true);
   end if;
-  -- meetings
   if not exists (select 1 from pg_policies where tablename='meetings' and policyname='meetings_all') then
     create policy meetings_all on public.meetings for all using (true) with check (true);
   end if;
-  -- files
   if not exists (select 1 from pg_policies where tablename='files' and policyname='files_all') then
     create policy files_all on public.files for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='projects' and policyname='projects_all') then
+    create policy projects_all on public.projects for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='users' and policyname='users_all') then
+    create policy users_all on public.users for all using (true) with check (true);
   end if;
 end $$;
 

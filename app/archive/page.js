@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filesStore, isCloud } from "@/lib/store";
+import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import { PROJECTS } from "@/lib/constants";
 
-const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "أخرى"];
+const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "محاضر", "تسجيلات", "أخرى"];
 
 export default function ArchivePage() {
+  const { readOnly, clientProject } = useRole();
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");
   const [q, setQ] = useState("");
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [modal, setModal] = useState(null); // 'upload' | 'link'
   const [busyId, setBusyId] = useState(null);
 
   async function reload() {
@@ -25,12 +27,13 @@ export default function ArchivePage() {
   const filtered = useMemo(() => {
     if (!files) return [];
     return files.filter((f) => {
+      if (clientProject && f.project !== clientProject) return false;
       if (fProject && f.project !== fProject) return false;
       if (fCat && f.category !== fCat) return false;
       if (q && !`${f.name} ${f.note}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [files, fProject, fCat, q]);
+  }, [files, fProject, fCat, q, clientProject]);
 
   async function open(rec) {
     setBusyId(rec.id);
@@ -43,7 +46,7 @@ export default function ArchivePage() {
   }
 
   async function del(rec) {
-    if (!confirm(`حذف الملف؟\n\n${rec.name}`)) return;
+    if (!confirm(`حذف؟\n\n${rec.name}`)) return;
     setBusyId(rec.id);
     try {
       await filesStore.remove(rec);
@@ -58,40 +61,38 @@ export default function ArchivePage() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>
-          {filtered.length} ملف
-        </span>
+        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{filtered.length} عنصر</span>
         <div style={{ marginInlineStart: "auto" }} />
-        <button className="btn primary" onClick={() => setUploadOpen(true)}>
-          ⬆ رفع ملف
-        </button>
+        {!readOnly && (
+          <>
+            <button className="btn" onClick={() => setModal("link")}>🔗 إضافة رابط</button>
+            <button className="btn primary" onClick={() => setModal("upload")}>⬆ رفع ملف</button>
+          </>
+        )}
       </div>
 
-      {!isCloud && (
-        <div className="card" style={{ borderColor: "#7c5b17", background: "rgba(251,191,36,0.06)", marginBottom: 14, fontSize: 13 }}>
-          ملاحظة: أنت في الوضع المحلي التجريبي — تُحفظ الملفات داخل متصفحك فقط
-          (يُنصح بأحجام صغيرة). عند ربط Supabase تُرفع الملفات للتخزين السحابي وتُشارك مع الفريق.
+      {!isCloud && !readOnly && (
+        <div className="card" style={{ borderColor: "#f3cfc9", background: "#fcece9", marginBottom: 14, fontSize: 13, color: "#cf4940" }}>
+          الوضع المحلي التجريبي: تُحفظ الملفات المرفوعة داخل متصفحك فقط. الروابط تعمل دائماً. عند ربط Supabase تُرفع للتخزين السحابي وتُشارك مع الفريق.
         </div>
       )}
 
       <div className="toolbar">
         <input placeholder="🔍 بحث…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 200 }} />
-        <select value={fProject} onChange={(e) => setFProject(e.target.value)}>
-          <option value="">كل المشاريع</option>
-          {PROJECTS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
+        {!clientProject && (
+          <select value={fProject} onChange={(e) => setFProject(e.target.value)}>
+            <option value="">كل المشاريع</option>
+            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
         <select value={fCat} onChange={(e) => setFCat(e.target.value)}>
           <option value="">كل التصنيفات</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty">لا توجد ملفات. ابدأ برفع أول ملف ⬆</div>
+        <div className="empty"><div className="big">🗂️</div>لا توجد عناصر.</div>
       ) : (
         filtered.map((f) => (
           <div className="list-card" key={f.id}>
@@ -101,50 +102,44 @@ export default function ArchivePage() {
               <div className="meta">
                 {f.project && <span>📁 {f.project}</span>}
                 {f.category && <span>🏷️ {f.category}</span>}
-                <span>{fmtSize(f.size)}</span>
+                {f.kind === "link" ? <span>🔗 رابط</span> : <span>{fmtSize(f.size)}</span>}
                 {f.created_at && <span>{new Date(f.created_at).toLocaleDateString("ar-SA")}</span>}
               </div>
               {f.note && <div style={{ marginTop: 5, fontSize: 13 }}>{f.note}</div>}
             </div>
             <div className="row-actions">
               <button className="btn sm" disabled={busyId === f.id} onClick={() => open(f)}>فتح</button>
-              <button className="btn sm danger" disabled={busyId === f.id} onClick={() => del(f)}>🗑</button>
+              {!readOnly && <button className="btn sm danger" disabled={busyId === f.id} onClick={() => del(f)}>🗑</button>}
             </div>
           </div>
         ))
       )}
 
-      {uploadOpen && (
-        <Modal title="رفع ملف جديد" onClose={() => setUploadOpen(false)}>
-          <UploadForm
-            categories={CATEGORIES}
-            onCancel={() => setUploadOpen(false)}
-            onDone={async () => {
-              setUploadOpen(false);
-              await reload();
-            }}
-          />
+      {modal === "upload" && (
+        <Modal title="رفع ملف جديد" onClose={() => setModal(null)}>
+          <UploadForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
+        </Modal>
+      )}
+      {modal === "link" && (
+        <Modal title="إضافة رابط / مرفق" onClose={() => setModal(null)}>
+          <LinkForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
         </Modal>
       )}
     </div>
   );
 }
 
-function UploadForm({ categories, onDone, onCancel }) {
+function UploadForm({ onDone, onCancel }) {
   const fileRef = useRef(null);
-  const [meta, setMeta] = useState({ project: "", category: categories[0], note: "" });
+  const [meta, setMeta] = useState({ project: "", category: CATEGORIES[0], note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   async function submit(e) {
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setErr("اختر ملفاً أولاً");
-      return;
-    }
-    setBusy(true);
-    setErr("");
+    if (!file) { setErr("اختر ملفاً أولاً"); return; }
+    setBusy(true); setErr("");
     try {
       await filesStore.upload(file, meta);
       await onDone();
@@ -157,38 +152,70 @@ function UploadForm({ categories, onDone, onCancel }) {
 
   return (
     <form onSubmit={submit}>
-      <label className="field">
-        <span>الملف *</span>
-        <input type="file" ref={fileRef} />
-      </label>
+      <label className="field"><span>الملف *</span><input type="file" ref={fileRef} /></label>
       <div className="form-grid">
-        <label className="field">
-          <span>المشروع</span>
+        <label className="field"><span>المشروع</span>
           <select value={meta.project} onChange={(e) => setMeta({ ...meta, project: e.target.value })}>
             <option value="">—</option>
-            {PROJECTS.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
+            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
-        <label className="field">
-          <span>التصنيف</span>
+        <label className="field"><span>التصنيف</span>
           <select value={meta.category} onChange={(e) => setMeta({ ...meta, category: e.target.value })}>
-            {categories.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
       </div>
-      <label className="field">
-        <span>ملاحظة</span>
-        <input value={meta.note} onChange={(e) => setMeta({ ...meta, note: e.target.value })} />
-      </label>
-      {err && <div style={{ color: "#fca5a5", fontSize: 13, marginBottom: 10 }}>{err}</div>}
+      <label className="field"><span>ملاحظة</span><input value={meta.note} onChange={(e) => setMeta({ ...meta, note: e.target.value })} /></label>
+      {err && <div style={{ color: "#cf4940", fontSize: 13, marginBottom: 10 }}>{err}</div>}
       <div className="modal-actions">
-        <button type="submit" className="btn primary" disabled={busy}>
-          {busy ? "جاري الرفع…" : "رفع"}
-        </button>
+        <button type="submit" className="btn primary" disabled={busy}>{busy ? "جاري الرفع…" : "رفع"}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
+      </div>
+    </form>
+  );
+}
+
+function LinkForm({ onDone, onCancel }) {
+  const [f, setF] = useState({ name: "", url: "", project: "", category: "محاضر", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!f.url.trim()) { setErr("أدخل الرابط"); return; }
+    setBusy(true); setErr("");
+    try {
+      await filesStore.addLink(f);
+      await onDone();
+    } catch (e2) {
+      setErr("خطأ: " + (e2?.message || e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <label className="field"><span>الرابط *</span><input value={f.url} onChange={set("url")} placeholder="https://…" /></label>
+      <label className="field"><span>الاسم / الوصف</span><input value={f.name} onChange={set("name")} placeholder="مثال: محضر اجتماع 20 يوليو" /></label>
+      <div className="form-grid">
+        <label className="field"><span>المشروع</span>
+          <select value={f.project} onChange={set("project")}>
+            <option value="">—</option>
+            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>التصنيف</span>
+          <select value={f.category} onChange={set("category")}>
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
+      {err && <div style={{ color: "#cf4940", fontSize: 13, marginBottom: 10 }}>{err}</div>}
+      <div className="modal-actions">
+        <button type="submit" className="btn primary" disabled={busy}>{busy ? "…" : "إضافة"}</button>
         <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
       </div>
     </form>
@@ -196,6 +223,11 @@ function UploadForm({ categories, onDone, onCancel }) {
 }
 
 function iconFor(f) {
+  if (f.kind === "link") {
+    if (/تسجيل/.test(f.category || "")) return "🎥";
+    if (/محاضر|محضر/.test(f.category || "")) return "📝";
+    return "🔗";
+  }
   const m = (f.mime || "").toLowerCase();
   const n = (f.name || "").toLowerCase();
   if (m.startsWith("image/")) return "🖼️";
@@ -206,15 +238,10 @@ function iconFor(f) {
   if (n.match(/\.(zip|rar|7z)$/)) return "🗜️";
   return "📎";
 }
-
 function fmtSize(bytes) {
   if (!bytes) return "—";
   const u = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let n = bytes;
-  while (n >= 1024 && i < u.length - 1) {
-    n /= 1024;
-    i++;
-  }
+  let i = 0, n = bytes;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
 }

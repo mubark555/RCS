@@ -5,6 +5,8 @@ import { tasksStore } from "@/lib/store";
 import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
 import TaskForm from "@/components/TaskForm";
+import TaskDetail from "@/components/TaskDetail";
+import { useRole } from "@/components/RoleProvider";
 import {
   STATUS_META,
   PRIORITY_META,
@@ -15,11 +17,13 @@ import {
 } from "@/lib/constants";
 
 export default function TasksPage() {
+  const { readOnly, clientProject } = useRole();
   const [tasks, setTasks] = useState(null);
   const [q, setQ] = useState("");
   const [fProject, setFProject] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [editing, setEditing] = useState(null); // task object or {} for new
+  const [viewing, setViewing] = useState(null); // task being viewed in detail drawer
   const [busy, setBusy] = useState(false);
 
   async function reload() {
@@ -39,6 +43,7 @@ export default function TasksPage() {
   const filtered = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
+      if (clientProject && t.project !== clientProject) return false;
       if (fProject && t.project !== fProject) return false;
       if (fStatus && t.status !== fStatus) return false;
       if (q) {
@@ -79,9 +84,11 @@ export default function TasksPage() {
           {filtered.length} من {tasks.length} مهمة
         </span>
         <div style={{ marginInlineStart: "auto" }} />
-        <button className="btn primary" onClick={() => setEditing({})}>
-          + مهمة جديدة
-        </button>
+        {!readOnly && (
+          <button className="btn primary" onClick={() => setEditing({})}>
+            + مهمة جديدة
+          </button>
+        )}
       </div>
 
       <div className="toolbar">
@@ -137,12 +144,15 @@ export default function TasksPage() {
             <tbody>
               {filtered.map((t) => (
                 <tr key={t.id}>
-                  <td className="task-cell">
+                  <td
+                    className="task-cell"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => setViewing(t)}
+                    title="اضغط لفتح التفاصيل"
+                  >
                     {t.task}
                     {t.blocker && (
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                        ⚠ {t.blocker}
-                      </div>
+                      <div className="cell-block">⚠ {t.blocker}</div>
                     )}
                   </td>
                   <td>{t.project}</td>
@@ -156,8 +166,9 @@ export default function TasksPage() {
                   <td><Badge map={HEALTH_META} value={t.health} /></td>
                   <td>
                     <div className="row-actions">
-                      <button className="btn sm ghost" onClick={() => setEditing(t)}>✎</button>
-                      <button className="btn sm danger" disabled={busy} onClick={() => handleDelete(t)}>🗑</button>
+                      <button className="btn sm ghost" title="فتح التفاصيل" onClick={() => setViewing(t)}>👁</button>
+                      {!readOnly && <button className="btn sm ghost" title="تعديل" onClick={() => setEditing(t)}>✎</button>}
+                      {!readOnly && <button className="btn sm danger" title="حذف" disabled={busy} onClick={() => handleDelete(t)}>🗑</button>}
                     </div>
                   </td>
                 </tr>
@@ -165,6 +176,25 @@ export default function TasksPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewing && (
+        <TaskDetail
+          task={viewing}
+          onClose={() => setViewing(null)}
+          onUpdate={async (id, patch) => {
+            await tasksStore.update(id, patch);
+            await reload();
+          }}
+          onEdit={(t) => {
+            setViewing(null);
+            setEditing(t);
+          }}
+          onDelete={async (t) => {
+            setViewing(null);
+            await handleDelete(t);
+          }}
+        />
       )}
 
       {editing && (

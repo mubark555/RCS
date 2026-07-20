@@ -72,6 +72,20 @@ create table if not exists public.projects (
   created_at  timestamptz default now()
 );
 
+-- ------------------------- مؤشرات الأداء -------------------------
+create table if not exists public.kpis (
+  id          uuid primary key default gen_random_uuid(),
+  order_index int         default 0,
+  name        text        not null,
+  category    text        default '',
+  unit        text        default '',
+  current     numeric     default 0,
+  target      numeric     default 0,
+  up          boolean     default true,
+  trend       text        default '',
+  created_at  timestamptz default now()
+);
+
 -- ------------------------- المستخدمون -------------------------
 create table if not exists public.users (
   id          uuid primary key default gen_random_uuid(),
@@ -105,6 +119,7 @@ alter table public.meetings enable row level security;
 alter table public.files    enable row level security;
 alter table public.projects enable row level security;
 alter table public.users    enable row level security;
+alter table public.kpis     enable row level security;
 
 do $$
 begin
@@ -122,6 +137,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='users' and policyname='users_all') then
     create policy users_all on public.users for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='kpis' and policyname='kpis_all') then
+    create policy kpis_all on public.kpis for all using (true) with check (true);
   end if;
 end $$;
 

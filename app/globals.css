@@ -21,7 +21,7 @@
   --shadow-lg: 0 20px 48px rgba(66, 48, 40, 0.16);
   --radius: 20px;
   --radius-sm: 14px;
-  --sidebar-w: 260px;
+  --sidebar-w: 284px;
 }
 
 * {
@@ -82,16 +82,17 @@ a {
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
-  background: var(--sidebar);
-  padding: 24px 16px;
+  background: var(--surface);
+  padding: 24px 18px;
   position: sticky;
   top: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   overflow-y: auto;
-  border-inline-start: 1px solid var(--border);
+  box-shadow: -10px 0 34px rgba(60, 50, 40, 0.05);
+  z-index: 20;
 }
 .sidebar .brand {
   display: flex;
@@ -154,13 +155,13 @@ a {
   text-align: center;
 }
 .side-link:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--surface-2);
   color: var(--ink);
 }
 .side-link.active {
   background: var(--ink);
   color: #fff;
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 20px rgba(44, 43, 52, 0.28);
 }
 .side-foot {
   margin-top: auto;
@@ -169,11 +170,9 @@ a {
 .side-user {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  gap: 11px;
+  padding: 14px 6px 4px;
+  border-top: 1px solid var(--border);
 }
 .side-user .av {
   width: 38px;
@@ -204,7 +203,7 @@ a {
   padding: 9px 12px;
   margin-top: 8px;
   border-radius: 12px;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
 }
 .side-mode .d {
@@ -1037,10 +1036,10 @@ tbody tr:last-child td {
 
 /* ============ تبديل الدور ============ */
 .role-switch {
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 16px;
+  padding: 14px;
   margin-bottom: 10px;
 }
 .rs-label {
@@ -1373,6 +1372,109 @@ tbody tr:last-child td {
   color: var(--muted);
   padding: 16px 0;
   opacity: 0.5;
+}
+
+/* ============ الأداء والمستهدفات (KPIs) ============ */
+.kpi-summary {
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.kpi-ring {
+  width: 84px;
+  height: 84px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.kpi-ring .inner {
+  width: 64px;
+  height: 64px;
+  border-radius: 99px;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.kpi-sum-stats {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  min-width: 300px;
+}
+.ks-box {
+  background: var(--surface-2);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.ks-box .k {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.ks-box .v {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.kpi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+.kpi-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  transition: 0.18s;
+}
+.kpi-item:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+.kpi-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.kpi-cat {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.kpi-name {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 48px;
+  color: var(--ink);
+}
+.kpi-val {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.kpi-val .cur {
+  font-size: 27px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.kpi-val .tgt {
+  color: var(--muted);
+  font-size: 13.5px;
 }
 
 /* ============ لوحة القيادة (التصميم الجديد) ============ */

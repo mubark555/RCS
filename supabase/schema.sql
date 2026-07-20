@@ -109,6 +109,24 @@ alter table public.files    add column if not exists kind text default 'file'; -
 alter table public.files    add column if not exists url  text default '';
 alter table public.files    alter column path drop not null;   -- الروابط بلا مسار تخزين
 
+-- ===== مزامنة المخطط مع نموذج التطبيق الحالي (آمنة للتكرار) =====
+-- المهام: سلسلة الموافقات + وقت الإكمال (للأرشفة)
+alter table public.tasks    add column if not exists chain        jsonb default '[]'::jsonb;
+alter table public.tasks    add column if not exists completed_at timestamptz;
+alter table public.tasks    add column if not exists order_index  int   default 0;
+
+-- الاجتماعات: القرارات/المهام الناتجة
+alter table public.meetings add column if not exists action_items jsonb default '[]'::jsonb;
+
+-- المشاريع: شعار + تعدد المدراء/العملاء/الأعضاء
+alter table public.projects add column if not exists logo     text  default '';
+alter table public.projects add column if not exists managers jsonb default '[]'::jsonb;
+alter table public.projects add column if not exists clients  jsonb default '[]'::jsonb;
+alter table public.projects add column if not exists members  jsonb default '[]'::jsonb;
+
+-- المستخدمون: رقم الجوال
+alter table public.users    add column if not exists phone text default '';
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

@@ -65,10 +65,7 @@ export default function ArchivePage() {
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{filtered.length} عنصر</span>
         <div style={{ marginInlineStart: "auto" }} />
         {!readOnly && (
-          <>
-            <button className="btn" onClick={() => setModal("link")}><Icon name="link" size={16} /> إضافة رابط</button>
-            <button className="btn primary" onClick={() => setModal("upload")}><Icon name="upload" size={16} /> رفع ملف</button>
-          </>
+          <button className="btn primary" onClick={() => setModal("upload")}><Icon name="upload" size={16} /> رفع ملف</button>
         )}
       </div>
 
@@ -121,11 +118,6 @@ export default function ArchivePage() {
       {modal === "upload" && (
         <Modal title="رفع ملف جديد" onClose={() => setModal(null)}>
           <UploadForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
-        </Modal>
-      )}
-      {modal === "link" && (
-        <Modal title="إضافة رابط / مرفق" onClose={() => setModal(null)}>
-          <LinkForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
         </Modal>
       )}
     </div>

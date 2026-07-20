@@ -156,8 +156,8 @@ export default function TasksPage() {
                       <div className="cell-block">⚠ {t.blocker}</div>
                     )}
                   </td>
-                  <td>{t.project}</td>
-                  <td className="muted">{t.activity}</td>
+                  <td className="nowrap">{t.project}</td>
+                  <td className="muted nowrap">{t.activity}</td>
                   <td><Badge map={PRIORITY_META} value={t.priority} /></td>
                   <td><Badge map={STATUS_META} value={t.status} /></td>
                   <td style={{ whiteSpace: "nowrap" }}>{t.assigned_to}</td>

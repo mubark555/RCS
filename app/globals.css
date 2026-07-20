@@ -647,7 +647,12 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13.5px;
-  min-width: 940px;
+  min-width: 1180px;
+}
+/* الأعمدة القصيرة لا تلتف */
+tbody td.nowrap,
+thead th.nowrap {
+  white-space: nowrap;
 }
 thead th {
   text-align: right;

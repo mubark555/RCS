@@ -10,7 +10,7 @@ import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
-  attendees: [], links: [], agenda: "", minutes: "", status: "Scheduled",
+  attendees: [], links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
 };
 
 const LINK_TYPES = ["تسجيل", "مستند", "رابط"];
@@ -80,6 +80,7 @@ export default function MeetingsPage() {
           meeting={minutesOf}
           readOnly={readOnly}
           onClose={() => setMinutesOf(null)}
+          onUpdated={reload}
           onEdit={(m) => { setMinutesOf(null); setEditing(m); }}
         />
       )}
@@ -184,12 +185,22 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
   const setLink = (i, k, v) => setF((s) => ({ ...s, links: s.links.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
   const rmLink = (i) => setF((s) => ({ ...s, links: s.links.filter((_, j) => j !== i) }));
 
+  const ai = Array.isArray(f.action_items) ? f.action_items : [];
+  const addAI = () => setF((s) => ({ ...s, action_items: [...ai, { text: "", assignee: "", due: "" }] }));
+  const setAI = (i, k, v) => setF((s) => ({ ...s, action_items: ai.map((a, j) => (j === i ? { ...a, [k]: v } : a)) }));
+  const rmAI = (i) => setF((s) => ({ ...s, action_items: ai.filter((_, j) => j !== i) }));
+
   async function submit(e) {
     e.preventDefault();
     if (!f.title.trim() || !f.start_at) return;
     setSaving(true);
     try {
-      await onSave({ ...f, duration: Number(f.duration) || 30, links: f.links.filter((l) => l.url) });
+      await onSave({
+        ...f,
+        duration: Number(f.duration) || 30,
+        links: f.links.filter((l) => l.url),
+        action_items: ai.filter((a) => a.text && a.text.trim()),
+      });
     } finally {
       setSaving(false);
     }
@@ -239,8 +250,26 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
         <label className="field full"><span>جدول الأعمال</span><textarea rows={3} value={f.agenda} onChange={set("agenda")} placeholder="النقاط المطروحة للنقاش…" /></label>
         <label className="field full">
           <span>محضر الاجتماع (يُكتب هنا ويُصدَّر لاحقاً)</span>
-          <textarea rows={5} value={f.minutes} onChange={set("minutes")} placeholder="القرارات، المخرجات، المهام المتفق عليها…" />
+          <textarea rows={5} value={f.minutes} onChange={set("minutes")} placeholder="أهم النقاط والمخرجات…" />
         </label>
+
+        <div className="field full">
+          <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>
+            القرارات والمهام الناتجة (Action Items — تتحول لمهام)
+            <button type="button" className="btn sm ghost" style={{ marginInlineStart: "auto" }} onClick={addAI}>+ إضافة قرار</button>
+          </span>
+          {ai.map((a, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input placeholder="القرار / المهمة" value={a.text} onChange={(e) => setAI(i, "text", e.target.value)} style={{ flex: 2 }} />
+              <select value={a.assignee} onChange={(e) => setAI(i, "assignee", e.target.value)} style={{ flex: 1, minWidth: 110 }}>
+                <option value="">المسؤول…</option>
+                {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+              </select>
+              <input type="date" value={a.due || ""} onChange={(e) => setAI(i, "due", e.target.value)} style={{ width: 150 }} />
+              <button type="button" className="btn sm danger icon" onClick={() => rmAI(i)}><Icon name="close" size={14} /></button>
+            </div>
+          ))}
+        </div>
 
         <div className="field full">
           <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>

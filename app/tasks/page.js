@@ -29,6 +29,11 @@ export default function TasksPage() {
 
   useEffect(() => {
     reload().catch(() => setTasks([]));
+    // تعبئة البحث من رابط الشريط العلوي (?q=...)
+    try {
+      const p = new URLSearchParams(window.location.search).get("q");
+      if (p) setQ(p);
+    } catch {}
   }, []);
 
   const filtered = useMemo(() => {

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { isCloud } from "@/lib/supabase";
 
 const LINKS = [
-  { href: "/", label: "لوحة المؤشرات", ico: "▚" },
+  { href: "/", label: "الرئيسية", ico: "⌂" },
   { href: "/tasks", label: "المهام", ico: "✓" },
   { href: "/meetings", label: "الاجتماعات", ico: "🗓" },
   { href: "/archive", label: "الأرشيف", ico: "🗂" },
@@ -16,10 +16,10 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="logo">◈</span>
+        <span className="logo">ڤ</span>
         <span>
-          <b>سيم برايم</b>
-          <small>إدارة المشاريع — فيوليت</small>
+          <b>ڤيوليت</b>
+          <small>DIGITAL MARKETING</small>
         </span>
       </div>
 
@@ -42,10 +42,17 @@ export default function Sidebar() {
       </nav>
 
       <div className="side-foot">
+        <div className="side-user">
+          <span className="av">ف</span>
+          <span>
+            <b>فريق ڤيوليت</b>
+            <small>إدارة مشاريع سيم برايم</small>
+          </span>
+        </div>
         <div className="side-mode">
           <span
             className="d"
-            style={{ background: isCloud ? "#34d399" : "#fbbf24" }}
+            style={{ background: isCloud ? "#3f8e7f" : "#e0a23a" }}
           />
           {isCloud ? "متصل بالسحابة" : "الوضع المحلي (تجريبي)"}
         </div>

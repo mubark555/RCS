@@ -9,9 +9,8 @@ import Icon from "@/components/Icon";
 const ALL_LINKS = [
   { href: "/", label: "الرئيسية", ico: "home", roles: ["manager", "member", "client"] },
   { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
-  { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member"] },
+  { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
-  { href: "/archive", label: "الأرشيف", ico: "archive", roles: ["manager", "member", "client"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
 ];
 

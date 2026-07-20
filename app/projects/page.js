@@ -5,10 +5,14 @@ import { projectsStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import ProjectDetail from "@/components/ProjectDetail";
+import ChipMulti from "@/components/ChipMulti";
 import Icon from "@/components/Icon";
+import { projManagers, projClients, projMembers } from "@/lib/constants";
+
+const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
 
 export default function ProjectsPage() {
-  const { canManage, clientProject, users } = useRole();
+  const { canManage, scopeProjects, users, reloadProjects } = useRole();
   const [projects, setProjects] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [viewing, setViewing] = useState(null);
@@ -17,6 +21,7 @@ export default function ProjectsPage() {
   async function reload() {
     setProjects(await projectsStore.list());
     setTasks(await tasksStore.list());
+    reloadProjects();
   }
   useEffect(() => {
     reload().catch(() => setProjects([]));
@@ -24,8 +29,8 @@ export default function ProjectsPage() {
 
   const shown = useMemo(() => {
     if (!projects) return [];
-    return clientProject ? projects.filter((p) => p.name === clientProject) : projects;
-  }, [projects, clientProject]);
+    return scopeProjects ? projects.filter((p) => scopeProjects.includes(p.name)) : projects;
+  }, [projects, scopeProjects]);
 
   function statOf(name) {
     const items = tasks.filter((t) => t.project === name);
@@ -52,26 +57,31 @@ export default function ProjectsPage() {
       <div className="proj-grid">
         {shown.map((p) => {
           const st = statOf(p.name);
+          const managers = projManagers(p);
+          const clients = projClients(p);
+          const members = projMembers(p);
           return (
-            <div className="proj-card" key={p.id} onClick={() => setViewing(p)}>
+            <div className="proj-card" key={p.id}>
               <div className="pc-top">
-                <span className="pc-badge" style={{ background: p.color || "#e05a50" }}>{p.name.slice(0, 1)}</span>
+                <span className="pc-badge" style={{ background: p.color || "#e05a50", padding: 0, overflow: "hidden" }}>
+                  {p.logo ? <img src={p.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.name.slice(0, 1)}
+                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h3>{p.name}</h3>
                   <div className="pc-sub">{p.status || "نشط"} · {st.total} مهمة</div>
                 </div>
-                {canManage && (
-                  <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn sm ghost icon" onClick={() => setEditing(p)} title="تعديل"><Icon name="edit" size={15} /></button>
-                    <button className="btn sm danger icon" onClick={() => del(p)} title="حذف"><Icon name="trash" size={15} /></button>
-                  </div>
-                )}
+                <div className="row-actions">
+                  <button className="btn sm ghost icon" title="عرض التفاصيل" onClick={() => setViewing(p)}><Icon name="eye" size={16} /></button>
+                  {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={15} /></button>}
+                  {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={15} /></button>}
+                </div>
               </div>
               {p.description && <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{p.description}</div>}
               <div className="progress"><span style={{ width: `${st.pct}%`, background: p.color || "#e05a50" }} /></div>
               <div className="pc-row"><span>الإنجاز</span><b>{st.done}/{st.total} · {st.pct}%</b></div>
-              <div className="pc-row"><span>مدير المشروع</span><b>{p.manager || "—"}</b></div>
-              <div className="pc-row"><span>العميل</span><b>{p.client || "—"}</b></div>
+              <div className="pc-row"><span>المدراء</span><b>{managers.join("، ") || "—"}</b></div>
+              <div className="pc-row"><span>العملاء</span><b>{clients.join("، ") || "—"}</b></div>
+              <div className="pc-row"><span>الموظفون</span><b>{members.length ? `${members.length} موظف` : "—"}</b></div>
             </div>
           );
         })}
@@ -98,21 +108,30 @@ export default function ProjectsPage() {
   );
 }
 
-const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
-
 function ProjectForm({ initial, users, onSave, onCancel }) {
-  const [f, setF] = useState({ name: "", description: "", manager: "", client: "", color: COLORS[0], status: "نشط", ...(initial || {}) });
+  const [f, setF] = useState({
+    name: "", description: "", logo: "", color: COLORS[0], status: "نشط",
+    ...(initial || {}),
+    managers: projManagers(initial || {}),
+    clients: projClients(initial || {}),
+    members: projMembers(initial || {}),
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
-  const managers = users.filter((u) => u.role !== "client");
-  const clients = users.filter((u) => u.role === "client");
+  const setArr = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  const managerOptions = users.filter((u) => u.role !== "client");
+  const clientOptions = users.filter((u) => u.role === "client");
+  const memberOptions = users.filter((u) => u.role === "member" || u.role === "manager");
 
   async function submit(e) {
     e.preventDefault();
     if (!f.name.trim()) return;
     setSaving(true);
     try {
-      await onSave(f);
+      // تنظيف الحقول المفردة القديمة
+      const { manager, client, ...rest } = f;
+      await onSave(rest);
     } finally {
       setSaving(false);
     }
@@ -122,21 +141,32 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
     <form onSubmit={submit}>
       <div className="form-grid">
         <label className="field full"><span>اسم المشروع *</span><input value={f.name} onChange={set("name")} required /></label>
-        <label className="field full"><span>الوصف</span><textarea rows={2} value={f.description} onChange={set("description")} /></label>
+        <label className="field full"><span>الوصف</span><textarea rows={2} value={f.description} onChange={set("description")} placeholder="نبذة عن المشروع…" /></label>
+
         <label className="field">
-          <span>مدير المشروع</span>
-          <select value={f.manager} onChange={set("manager")}>
-            <option value="">— اختر —</option>
-            {managers.map((u) => <option key={u.id} value={u.name}>{u.name} ({u.title})</option>)}
-          </select>
+          <span>شعار المشروع (رابط صورة)</span>
+          <input value={f.logo} onChange={set("logo")} placeholder="https://…/logo.png" />
         </label>
-        <label className="field">
-          <span>العميل</span>
-          <select value={f.client} onChange={set("client")}>
-            <option value="">— اختر —</option>
-            {clients.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-          </select>
-        </label>
+        <div className="field">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>معاينة</span>
+          <span className="pc-badge" style={{ background: f.color, width: 46, height: 46, borderRadius: 13, display: "inline-grid", placeItems: "center", color: "#fff", fontWeight: 800, overflow: "hidden" }}>
+            {f.logo ? <img src={f.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (f.name.slice(0, 1) || "؟")}
+          </span>
+        </div>
+
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>مدراء المشروع (يمكن اختيار أكثر من واحد)</span>
+          <ChipMulti options={managerOptions} value={f.managers} onChange={setArr("managers")} empty="أضِف مستخدمين أولاً" />
+        </div>
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>حسابات العملاء (موظفو العميل — أكثر من حساب)</span>
+          <ChipMulti options={clientOptions} value={f.clients} onChange={setArr("clients")} empty="أضِف حسابات عملاء من قسم الفريق" />
+        </div>
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>الموظفون المصرّح لهم برؤية هذا المشروع</span>
+          <ChipMulti options={memberOptions} value={f.members} onChange={setArr("members")} empty="أضِف موظفين من قسم الفريق" />
+        </div>
+
         <label className="field"><span>الحالة</span>
           <select value={f.status} onChange={set("status")}>
             <option value="نشط">نشط</option>

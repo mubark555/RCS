@@ -12,7 +12,7 @@ import { STATUS_META, HEALTH_META, PRIORITY_META, PROJECTS } from "@/lib/constan
 const DAY = 86400000;
 
 export default function Home() {
-  const { viewer, role, clientProject } = useRole();
+  const { viewer, role, clientProject, scopeProjects } = useRole();
   const [allTasks, setAllTasks] = useState(null);
   const [allMeetings, setAllMeetings] = useState([]);
 
@@ -21,8 +21,8 @@ export default function Home() {
     meetingsStore.list().then(setAllMeetings).catch(() => setAllMeetings([]));
   }, []);
 
-  const tasks = clientProject && allTasks ? allTasks.filter((t) => t.project === clientProject) : allTasks;
-  const meetings = clientProject ? (allMeetings || []).filter((m) => m.project === clientProject) : allMeetings;
+  const tasks = scopeProjects && allTasks ? allTasks.filter((t) => scopeProjects.includes(t.project)) : allTasks;
+  const meetings = scopeProjects ? (allMeetings || []).filter((m) => scopeProjects.includes(m.project)) : allMeetings;
 
   const s = useMemo(() => {
     if (!tasks) return null;

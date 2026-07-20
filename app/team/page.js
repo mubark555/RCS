@@ -13,6 +13,7 @@ const ROLES = [
   { v: "client", ar: "عميل" },
 ];
 const roleAr = (r) => ROLES.find((x) => x.v === r)?.ar || r;
+const ROLE_PLURAL = { manager: "المدراء", member: "الأعضاء", client: "العملاء" };
 const colorOf = (r) => (r === "manager" ? "#e05a50" : r === "client" ? "#3a56c5" : "#3f8e7f");
 
 export default function TeamPage() {
@@ -52,7 +53,7 @@ export default function TeamPage() {
         g.list.length === 0 ? null : (
           <div key={g.v}>
             <div className="section-title">
-              {roleAr(g.v)}ون
+              {ROLE_PLURAL[g.v] || roleAr(g.v)}
               <span className="hint">({g.list.length})</span>
             </div>
             {g.list.map((u) => (

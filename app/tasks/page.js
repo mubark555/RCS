@@ -18,7 +18,7 @@ import {
 } from "@/lib/constants";
 
 export default function TasksPage() {
-  const { readOnly, clientProject } = useRole();
+  const { readOnly, scopeProjects } = useRole();
   const [tasks, setTasks] = useState(null);
   const [q, setQ] = useState("");
   const [fProject, setFProject] = useState("");
@@ -44,7 +44,7 @@ export default function TasksPage() {
   const filtered = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
-      if (clientProject && t.project !== clientProject) return false;
+      if (scopeProjects && !scopeProjects.includes(t.project)) return false;
       if (fProject && t.project !== fProject) return false;
       if (fStatus && t.status !== fStatus) return false;
       if (q) {

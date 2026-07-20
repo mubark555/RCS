@@ -1,15 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tasksStore, meetingsStore, filesStore, usersStore } from "@/lib/store";
+import { useRole } from "@/components/RoleProvider";
 import Badge from "@/components/Badge";
-import { STATUS_META, HEALTH_META } from "@/lib/constants";
+import Icon from "@/components/Icon";
+import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
+import { STATUS_META, HEALTH_META, projManagers, projClients, projMembers } from "@/lib/constants";
 
 export default function ProjectDetail({ project, onClose }) {
+  const { readOnly } = useRole();
+  const [minutesOf, setMinutesOf] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [files, setFiles] = useState([]);
   const [users, setUsers] = useState([]);
+  const [busyFile, setBusyFile] = useState(false);
+  const fileRef = useRef(null);
+
+  async function reloadFiles() {
+    const a = await filesStore.list().catch(() => []);
+    setFiles(a.filter((f) => f.project === project.name));
+  }
 
   useEffect(() => {
     function onKey(e) {
@@ -24,6 +36,32 @@ export default function ProjectDetail({ project, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [project, onClose]);
 
+  async function onUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusyFile(true);
+    try {
+      await filesStore.upload(file, { project: project.name, category: "ملف", note: "" });
+      await reloadFiles();
+    } catch (err) {
+      alert("تعذّر الرفع: " + (err?.message || err));
+    } finally {
+      setBusyFile(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function openFile(f) {
+    const url = await filesStore.getUrl(f);
+    window.open(url, "_blank");
+  }
+
+  async function delFile(f) {
+    if (!confirm(`حذف الملف؟\n\n${f.name}`)) return;
+    await filesStore.remove(f);
+    await reloadFiles();
+  }
+
   const stats = useMemo(() => {
     const total = tasks.length;
     const done = tasks.filter((t) => t.status === "Completed").length;
@@ -31,8 +69,10 @@ export default function ProjectDetail({ project, onClose }) {
     return { total, done, pct: total ? Math.round((done / total) * 100) : 0, delayed };
   }, [tasks]);
 
-  const manager = users.find((u) => u.name === project.manager);
-  const client = users.find((u) => u.name === project.client);
+  const managers = projManagers(project);
+  const clients = projClients(project);
+  const members = projMembers(project);
+  const findU = (name) => users.find((u) => u.name === name);
 
   return (
     <div className="drawer-wrap" onMouseDown={onClose}>
@@ -42,10 +82,17 @@ export default function ProjectDetail({ project, onClose }) {
             <span className="pill" style={{ background: `${project.color}22`, color: project.color, borderColor: "transparent" }}>
               {project.status || "نشط"}
             </span>
-            <button className="x" onClick={onClose} title="إغلاق">✕</button>
+            <button className="x" onClick={onClose} title="إغلاق"><Icon name="close" size={16} /></button>
           </div>
-          <h3>{project.name}</h3>
-          {project.description && <p className="muted" style={{ margin: "6px 0 0", fontSize: 13.5 }}>{project.description}</p>}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span className="pc-badge" style={{ background: project.color || "#e05a50", width: 52, height: 52, borderRadius: 15, display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 20, overflow: "hidden", flexShrink: 0 }}>
+              {project.logo ? <img src={project.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : project.name.slice(0, 1)}
+            </span>
+            <div>
+              <h3 style={{ margin: 0 }}>{project.name}</h3>
+              {project.description && <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>{project.description}</p>}
+            </div>
+          </div>
         </div>
 
         <div className="drawer-body">
@@ -57,63 +104,77 @@ export default function ProjectDetail({ project, onClose }) {
             <span style={{ width: `${stats.pct}%`, background: project.color }} />
           </div>
 
-          {/* جهات التواصل */}
-          <div className="d-section">جهات التواصل</div>
-          <ContactRow role="مدير المشروع" user={manager} fallback={project.manager} color="#e05a50" />
-          <ContactRow role="العميل" user={client} fallback={project.client} color="#3a56c5" />
+          <div className="d-section">مدراء المشروع ({managers.length})</div>
+          {managers.length === 0 ? <div className="detail-block"><span className="muted">لا مدراء.</span></div> :
+            managers.map((n) => <ContactRow key={n} role="مدير مشروع" user={findU(n)} fallback={n} color="#e05a50" />)}
 
-          {/* المهام */}
+          <div className="d-section">حسابات العملاء ({clients.length})</div>
+          {clients.length === 0 ? <div className="detail-block"><span className="muted">لا عملاء.</span></div> :
+            clients.map((n) => <ContactRow key={n} role="عميل" user={findU(n)} fallback={n} color="#3a56c5" />)}
+
+          <div className="d-section">الموظفون المصرّح لهم ({members.length})</div>
+          <div className="detail-block">
+            {members.length === 0 ? <span className="muted">لا موظفين مُسندين.</span> : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {members.map((n) => <span key={n} className="pill">{n}</span>)}
+              </div>
+            )}
+          </div>
+
           <div className="d-section">مهام المشروع ({tasks.length})</div>
           <div className="detail-block" style={{ padding: 8 }}>
-            {tasks.length === 0 ? (
-              <span className="muted">لا مهام.</span>
-            ) : (
-              tasks.slice(0, 12).map((t) => (
-                <div className="mini-item" key={t.id}>
-                  <div className="mtxt"><b>{t.task}</b><small>{t.assigned_to || "غير مُسند"}</small></div>
-                  <Badge map={STATUS_META} value={t.status} />
-                  <Badge map={HEALTH_META} value={t.health} />
-                </div>
-              ))
-            )}
-            {tasks.length > 12 && <div className="muted" style={{ padding: 8, fontSize: 12 }}>+ {tasks.length - 12} مهمة أخرى…</div>}
+            {tasks.length === 0 ? <span className="muted">لا مهام.</span> : tasks.slice(0, 15).map((t) => (
+              <div className="mini-item" key={t.id}>
+                <div className="mtxt"><b>{t.task}</b><small>{t.assigned_to || "غير مُسند"}</small></div>
+                <Badge map={STATUS_META} value={t.status} />
+                <Badge map={HEALTH_META} value={t.health} />
+              </div>
+            ))}
+            {tasks.length > 15 && <div className="muted" style={{ padding: 8, fontSize: 12 }}>+ {tasks.length - 15} مهمة أخرى…</div>}
           </div>
 
-          {/* الملفات والروابط */}
-          <div className="d-section">الملفات والروابط ({files.length})</div>
-          <div className="detail-block">
-            {files.length === 0 ? (
-              <span className="muted">لا ملفات مرتبطة.</span>
-            ) : (
-              files.map((f) => (
-                <div className="file-line" key={f.id}>
-                  <span>{f.kind === "link" ? "🔗" : "📎"}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>{f.name}</span>
-                  {f.category && <span className="pill">{f.category}</span>}
-                </div>
-              ))
+          <div className="d-section" style={{ display: "flex", alignItems: "center" }}>
+            أرشيف المشروع — الملفات ({files.length})
+            {!readOnly && (
+              <>
+                <input ref={fileRef} type="file" hidden onChange={onUpload} />
+                <button className="btn sm primary" style={{ marginInlineStart: "auto" }} disabled={busyFile} onClick={() => fileRef.current?.click()}>
+                  <Icon name="upload" size={14} /> {busyFile ? "جاري الرفع…" : "رفع ملف"}
+                </button>
+              </>
             )}
           </div>
-
-          {/* الاجتماعات */}
-          <div className="d-section">اجتماعات المشروع ({meetings.length})</div>
           <div className="detail-block">
-            {meetings.length === 0 ? (
-              <span className="muted">لا اجتماعات.</span>
-            ) : (
-              meetings.map((m) => (
-                <div className="file-line" key={m.id}>
-                  <span>🗓️</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>{m.title}</span>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    {m.start_at ? new Date(m.start_at).toLocaleDateString("ar-SA", { month: "short", day: "numeric" }) : ""}
-                  </span>
+            {files.length === 0 ? <span className="muted">لا ملفات بعد — ارفع ملفات هذا المشروع هنا.</span> : files.map((f) => (
+              <div className="file-line" key={f.id}>
+                <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name={f.kind === "link" ? "link" : "file"} size={15} /></span>
+                <span style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => openFile(f)}>{f.name}</span>
+                <button className="btn sm" onClick={() => openFile(f)}>فتح</button>
+                {!readOnly && <button className="btn sm danger icon" onClick={() => delFile(f)}><Icon name="trash" size={14} /></button>}
+              </div>
+            ))}
+          </div>
+
+          <div className="d-section">محاضر الاجتماعات ({meetings.length})</div>
+          <div className="detail-block">
+            {meetings.length === 0 ? <span className="muted">لا اجتماعات لهذا المشروع.</span> : meetings.map((m) => (
+              <div className="file-line" key={m.id}>
+                <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="calendar" size={15} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{m.title}</div>
+                  <small className="muted">{m.start_at ? new Date(m.start_at).toLocaleDateString("ar-SA", { month: "long", day: "numeric" }) : ""}{m.minutes ? " · يحوي محضراً" : ""}</small>
                 </div>
-              ))
-            )}
+                <button className="btn sm" onClick={() => setMinutesOf(m)}>المحضر</button>
+                <button className="btn sm ghost icon" title="تصدير" onClick={() => exportMinutes(m)}><Icon name="upload" size={14} /></button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+
+      {minutesOf && (
+        <MinutesModal meeting={minutesOf} readOnly={readOnly} onClose={() => setMinutesOf(null)} onUpdated={reloadFiles} onEdit={() => setMinutesOf(null)} />
+      )}
     </div>
   );
 }

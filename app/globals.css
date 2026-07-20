@@ -1266,6 +1266,70 @@ tbody tr:last-child td {
   font-weight: 800;
 }
 
+/* قوائم نقطية داخل النوافذ */
+.mlist {
+  margin: 0;
+  padding-inline-start: 20px;
+}
+.mlist li {
+  margin-bottom: 5px;
+  font-size: 13.5px;
+}
+
+/* محرّر الأسطر */
+.line-list {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 8px;
+  background: var(--surface);
+}
+.line-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+}
+.line-row .line-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.line-row input {
+  border: none;
+  background: transparent;
+  padding: 7px 4px;
+  box-shadow: none !important;
+  border-radius: 6px;
+}
+.line-row input:focus {
+  outline: none;
+  background: var(--surface-2);
+}
+.line-row:hover input {
+  background: var(--surface-2);
+}
+.line-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.line-x:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.line-hint {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 12px 2px;
+}
+
 /* نماذج مضمّنة (تحويل / إضافة رابط) */
 .inline-form {
   display: flex;

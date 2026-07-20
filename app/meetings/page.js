@@ -6,6 +6,7 @@ import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
+import LineList from "@/components/LineList";
 import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
@@ -22,7 +23,7 @@ const STATUS_AR = {
 };
 
 export default function MeetingsPage() {
-  const { readOnly, clientProject, users } = useRole();
+  const { readOnly, scopeProjects, users } = useRole();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
@@ -36,8 +37,8 @@ export default function MeetingsPage() {
 
   const scoped = useMemo(() => {
     if (!items) return [];
-    return clientProject ? items.filter((m) => m.project === clientProject) : items;
-  }, [items, clientProject]);
+    return scopeProjects ? items.filter((m) => scopeProjects.includes(m.project)) : items;
+  }, [items, scopeProjects]);
 
   const { upcoming, past } = useMemo(() => {
     const now = new Date().toISOString();
@@ -247,11 +248,14 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
           </div>
         </div>
 
-        <label className="field full"><span>جدول الأعمال</span><textarea rows={3} value={f.agenda} onChange={set("agenda")} placeholder="النقاط المطروحة للنقاش…" /></label>
-        <label className="field full">
-          <span>محضر الاجتماع (يُكتب هنا ويُصدَّر لاحقاً)</span>
-          <textarea rows={5} value={f.minutes} onChange={set("minutes")} placeholder="أهم النقاط والمخرجات…" />
-        </label>
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>جدول الأعمال</span>
+          <LineList value={f.agenda} onChange={(v) => setF((s) => ({ ...s, agenda: v }))} placeholder="النقطة المطروحة للنقاش…" />
+        </div>
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>محضر الاجتماع (يُكتب هنا ويُصدَّر لاحقاً)</span>
+          <LineList value={f.minutes} onChange={(v) => setF((s) => ({ ...s, minutes: v }))} placeholder="أهم النقاط والمخرجات…" />
+        </div>
 
         <div className="field full">
           <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>

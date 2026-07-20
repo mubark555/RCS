@@ -5,9 +5,17 @@ import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import { filesStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress } from "@/lib/constants";
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
+
+const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
+const colorFor = (name) => {
+  const s = String(name || "?");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) % AV_COLORS.length;
+  return AV_COLORS[h];
+};
 
 export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }) {
   const { users, readOnly } = useRole();
@@ -31,7 +39,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
   const val = (v) => (v && String(v).trim() ? v : "—");
   const handoffs = useMemo(() => (Array.isArray(t.handoffs) ? t.handoffs : []), [t]);
   const links = useMemo(() => (Array.isArray(t.links) ? t.links : []), [t]);
-  const holder = t.holder || t.waiting_on || t.assigned_to || "—";
+  const chain = useMemo(() => normalizeChain(t.chain), [t]);
+  const prog = chainProgress(chain);
+  const activeIdx = chain.findIndex((s) => s.status !== "done" && s.status !== "approved" && s.status !== "rejected");
+  const holder = chainHolder(chain) || t.holder || t.waiting_on || t.assigned_to || "—";
 
   async function persist(patch) {
     setT((s) => ({ ...s, ...patch }));
@@ -44,6 +55,20 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
     await persist({ holder: handTo, handoffs: [...handoffs, entry] });
     setHandTo("");
     setHandNote("");
+  }
+
+  // تنفيذ إجراء على خطوة السلسلة (إنجاز عمل / اعتماد / رفض)
+  async function actStep(i, decision) {
+    const next = chain.map((s, j) => (j === i ? { ...s, status: decision, at: new Date().toISOString() } : s));
+    const patch = { chain: next };
+    const p = chainProgress(next);
+    if (p && p.complete) {
+      patch.approval_status = "Approved";
+    } else if (decision === "rejected") {
+      patch.approval_status = "Rejected";
+      patch.health = "At Risk";
+    }
+    await persist(patch);
   }
 
   async function addLink() {
@@ -79,35 +104,88 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
           <div className="holder-box">
             <Icon name="pin" size={17} />
             <span>حالياً عند: <b>{holder}</b></span>
+            {prog && (
+              <span className="pill" style={{ marginInlineStart: "auto", color: prog.rejected ? "#dc2626" : prog.complete ? "#16a34a" : "var(--primary)", borderColor: "transparent", background: prog.rejected ? "#fdecec" : prog.complete ? "#e6f5ec" : "var(--primary-soft)" }}>
+                {prog.rejected ? "متوقفة (رفض)" : `${prog.done}/${prog.total} مكتملة`}
+              </span>
+            )}
           </div>
 
-          {handoffs.length > 0 && (
-            <div className="flow" style={{ marginTop: 12 }}>
-              {handoffs.map((h, i) => (
-                <div className="flow-item" key={i}>
-                  <span className="flow-dot">{i + 1}</span>
-                  <div className="flow-body">
-                    <b>{h.from} ← {h.to}</b>
-                    <small>
-                      {h.at ? new Date(h.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
-                      {h.note ? ` · ${h.note}` : ""}
-                    </small>
+          {chain.length > 0 ? (
+            <div className="chain-view">
+              {chain.map((s, i) => {
+                const tm = CHAIN_TYPE_META[s.type] || CHAIN_TYPE_META.work;
+                const isActive = i === activeIdx;
+                const done = s.status === "done" || s.status === "approved";
+                const rejected = s.status === "rejected";
+                return (
+                  <div className={`cv-step ${isActive ? "active" : ""} ${done ? "done" : ""} ${rejected ? "rej" : ""}`} key={i}>
+                    <div className="cv-node">
+                      <span className="cv-av" style={{ background: done ? "#16a34a" : rejected ? "#dc2626" : colorFor(s.person) }}>
+                        {done ? "✓" : rejected ? "×" : i + 1}
+                      </span>
+                      {i < chain.length - 1 && <span className="cv-line" />}
+                    </div>
+                    <div className="cv-body">
+                      <div className="cv-h">
+                        <b>{s.person}</b>
+                        <span className="cv-tag" style={{ background: tm.soft, color: tm.color }}>{tm.ar}</span>
+                        {s.action && <span className="cv-act">{s.action}</span>}
+                        {done && <span className="cv-st ok">{s.status === "approved" ? "معتمدة" : "منجزة"}</span>}
+                        {rejected && <span className="cv-st no">مرفوضة</span>}
+                        {isActive && !done && !rejected && <span className="cv-st cur">الدور الحالي</span>}
+                      </div>
+                      {s.at && (done || rejected) && (
+                        <small className="cv-time">{new Date(s.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                      )}
+                      {!readOnly && isActive && !done && !rejected && (
+                        <div className="cv-actions">
+                          {s.type === "approve" ? (
+                            <>
+                              <button className="btn sm primary" type="button" onClick={() => actStep(i, "approved")}>اعتماد</button>
+                              <button className="btn sm danger" type="button" onClick={() => actStep(i, "rejected")}>رفض</button>
+                            </>
+                          ) : (
+                            <button className="btn sm primary" type="button" onClick={() => actStep(i, "done")}>تم الإنجاز</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              {handoffs.length > 0 && (
+                <div className="flow" style={{ marginTop: 12 }}>
+                  {handoffs.map((h, i) => (
+                    <div className="flow-item" key={i}>
+                      <span className="flow-dot">{i + 1}</span>
+                      <div className="flow-body">
+                        <b>{h.from} ← {h.to}</b>
+                        <small>
+                          {h.at ? new Date(h.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                          {h.note ? ` · ${h.note}` : ""}
+                        </small>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          {!readOnly && (
-            <div className="inline-form">
-              <select value={handTo} onChange={(e) => setHandTo(e.target.value)}>
-                <option value="">تحويل إلى…</option>
-                {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-                {["VULET", "SEEM", "IT TEAM", "CONTENT"].map((x) => <option key={x} value={x}>{x}</option>)}
-              </select>
-              <input placeholder="ملاحظة (اختياري)" value={handNote} onChange={(e) => setHandNote(e.target.value)} />
-              <button className="btn primary" type="button" onClick={doHandoff} disabled={!handTo}>تحويل</button>
-            </div>
+              {!readOnly && (
+                <div className="inline-form">
+                  <select value={handTo} onChange={(e) => setHandTo(e.target.value)}>
+                    <option value="">تحويل إلى…</option>
+                    {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                    {["VULET", "SEEM", "IT TEAM", "CONTENT"].map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                  <input placeholder="ملاحظة (اختياري)" value={handNote} onChange={(e) => setHandNote(e.target.value)} />
+                  <button className="btn primary" type="button" onClick={doHandoff} disabled={!handTo}>تحويل</button>
+                </div>
+              )}
+            </>
           )}
 
           <div className="d-section">التفاصيل الأساسية</div>

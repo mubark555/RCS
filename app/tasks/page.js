@@ -23,6 +23,7 @@ export default function TasksPage() {
   const [q, setQ] = useState("");
   const [fProject, setFProject] = useState("");
   const [fStatus, setFStatus] = useState("");
+  const [fAssignee, setFAssignee] = useState("");
   const [editing, setEditing] = useState(null); // task object or {} for new
   const [viewing, setViewing] = useState(null); // task being viewed in detail drawer
   const [busy, setBusy] = useState(false);
@@ -41,19 +42,25 @@ export default function TasksPage() {
     } catch {}
   }, []);
 
+  const assignees = useMemo(() => {
+    if (!tasks) return [];
+    return [...new Set(tasks.map((t) => (t.assigned_to || "").trim()).filter(Boolean))].sort();
+  }, [tasks]);
+
   const filtered = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
       if (scopeProjects && !scopeProjects.includes(t.project)) return false;
       if (fProject && t.project !== fProject) return false;
       if (fStatus && t.status !== fStatus) return false;
+      if (fAssignee && (t.assigned_to || "").trim() !== fAssignee) return false;
       if (q) {
         const hay = `${t.task} ${t.activity} ${t.assigned_to} ${t.notes}`.toLowerCase();
         if (!hay.includes(q.toLowerCase())) return false;
       }
       return true;
     });
-  }, [tasks, q, fProject, fStatus]);
+  }, [tasks, q, fProject, fStatus, fAssignee, scopeProjects]);
 
   async function handleSave(payload) {
     if (editing && editing.id) {
@@ -115,8 +122,14 @@ export default function TasksPage() {
             </option>
           ))}
         </select>
-        {(q || fProject || fStatus) && (
-          <button className="btn sm ghost" onClick={() => { setQ(""); setFProject(""); setFStatus(""); }}>
+        <select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)} title="فلترة حسب الموظف المسؤول">
+          <option value="">كل الموظفين</option>
+          {assignees.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+        {(q || fProject || fStatus || fAssignee) && (
+          <button className="btn sm ghost" onClick={() => { setQ(""); setFProject(""); setFStatus(""); setFAssignee(""); }}>
             مسح الفلاتر
           </button>
         )}

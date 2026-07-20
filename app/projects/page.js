@@ -17,6 +17,7 @@ export default function ProjectsPage() {
   const [tasks, setTasks] = useState([]);
   const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [fMember, setFMember] = useState("");
 
   async function reload() {
     setProjects(await projectsStore.list());
@@ -29,8 +30,14 @@ export default function ProjectsPage() {
 
   const shown = useMemo(() => {
     if (!projects) return [];
-    return scopeProjects ? projects.filter((p) => scopeProjects.includes(p.name)) : projects;
-  }, [projects, scopeProjects]);
+    let list = scopeProjects ? projects.filter((p) => scopeProjects.includes(p.name)) : projects;
+    if (fMember) {
+      list = list.filter((p) =>
+        projManagers(p).includes(fMember) || projMembers(p).includes(fMember) || projClients(p).includes(fMember)
+      );
+    }
+    return list;
+  }, [projects, scopeProjects, fMember]);
 
   function statOf(name) {
     const items = tasks.filter((t) => t.project === name);
@@ -48,8 +55,14 @@ export default function ProjectsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{shown.length} مشروع</span>
+        <select value={fMember} onChange={(e) => setFMember(e.target.value)} style={{ width: "auto", minWidth: 190 }} title="عرض مشاريع موظف معيّن">
+          <option value="">فلترة حسب الموظف / العميل</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.name}>{u.name} ({u.role === "client" ? "عميل" : u.role === "manager" ? "مدير" : "عضو"})</option>
+          ))}
+        </select>
         <div style={{ marginInlineStart: "auto" }} />
         {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
       </div>

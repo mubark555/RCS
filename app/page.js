@@ -2,22 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { tasksStore, meetingsStore } from "@/lib/store";
-import Donut from "@/components/Donut";
-import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, HEALTH_META, PRIORITY_META, PROJECTS } from "@/lib/constants";
+import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
 
 const DAY = 86400000;
+const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
-export default function Home() {
-  const { viewer, role, clientProject, scopeProjects } = useRole();
+export default function Dashboard() {
+  const router = useRouter();
+  const { viewer, clientProject, scopeProjects } = useRole();
   const [allTasks, setAllTasks] = useState(null);
   const [allMeetings, setAllMeetings] = useState([]);
 
+  async function reload() {
+    setAllTasks(await tasksStore.list().catch(() => []));
+  }
   useEffect(() => {
-    tasksStore.list().then(setAllTasks).catch(() => setAllTasks([]));
+    reload();
     meetingsStore.list().then(setAllMeetings).catch(() => setAllMeetings([]));
   }, []);
 
@@ -27,173 +32,150 @@ export default function Home() {
   const s = useMemo(() => {
     if (!tasks) return null;
     const total = tasks.length;
-    const by = (fn) => tasks.filter(fn).length;
-    const completed = by((t) => t.status === "Completed");
-    const inProgress = by((t) => t.status === "In Progress");
-    const delayed = by((t) => t.health === "Delayed");
-    const atRisk = by((t) => t.health === "At Risk");
+    const completed = tasks.filter((t) => t.status === "Completed").length;
     const pct = total ? Math.round((completed / total) * 100) : 0;
+    const delayed = tasks.filter((t) => t.health === "Delayed").length;
+    const attentionN = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").length;
 
-    const byProject = PROJECTS.map((p) => {
-      const items = tasks.filter((t) => t.project === p);
-      const done = items.filter((t) => t.status === "Completed").length;
-      return { project: p, total: items.length, done, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
-    })
-      .filter((x) => x.total > 0)
-      .sort((a, b) => b.total - a.total);
-
-    const statusSeg = Object.keys(STATUS_META).map((k) => ({
-      label: STATUS_META[k].ar,
-      value: by((t) => t.status === k),
-      color: STATUS_META[k].color,
-    }));
-
-    const attention = tasks
-      .filter((t) => t.health === "Delayed" || t.health === "At Risk")
-      .slice(0, 6);
-
-    return { total, completed, inProgress, delayed, atRisk, pct, byProject, statusSeg, attention };
-  }, [tasks]);
-
-  // "هذا الأسبوع": مهام مستحقة قريباً/متأخرة + اجتماعات قادمة
-  const week = useMemo(() => {
-    if (!tasks) return [];
-    const now = Date.now();
-    const horizon = now + 12 * DAY;
-    const items = [];
-
-    for (const t of tasks) {
-      if (t.status === "Completed" || !t.due_date) continue;
-      const due = new Date(t.due_date).getTime();
-      if (isNaN(due) || due > horizon) continue;
-      items.push({
-        id: "t" + t.id,
-        kind: "task",
-        title: t.task,
-        project: t.project,
-        date: due,
-        late: due < now - DAY / 2,
+    const today = startOfDay(new Date());
+    const horizon = today + 14 * DAY;
+    const deadlines = tasks
+      .filter((t) => t.status !== "Completed" && t.due_date)
+      .map((t) => ({ t, due: startOfDay(new Date(t.due_date)) }))
+      .filter((x) => !isNaN(x.due) && x.due <= horizon)
+      .sort((a, b) => a.due - b.due)
+      .slice(0, 7)
+      .map(({ t, due }) => {
+        let st = due < today ? "متأخر" : due === today ? "اليوم" : "قادم";
+        return { t, due, status: st };
       });
-    }
-    for (const m of meetings || []) {
-      const st = new Date(m.start_at).getTime();
-      if (isNaN(st) || m.status === "Cancelled" || st < now - DAY || st > horizon) continue;
-      items.push({ id: "m" + m.id, kind: "meeting", title: m.title, project: m.project, date: st, late: false });
-    }
-    return items.sort((a, b) => a.date - b.date).slice(0, 8);
-  }, [tasks, meetings]);
+    const weekCount = tasks.filter((t) => {
+      if (t.status === "Completed" || !t.due_date) return false;
+      const d = startOfDay(new Date(t.due_date));
+      return !isNaN(d) && d >= today && d <= today + 7 * DAY;
+    }).length;
+
+    const attention = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").slice(0, 4);
+    return { total, completed, pct, delayed, attentionN, deadlines, weekCount, attention };
+  }, [tasks]);
 
   const nextMeetings = useMemo(() => {
     const now = new Date().toISOString();
     return (meetings || [])
       .filter((m) => m.status !== "Cancelled" && m.start_at >= now)
       .sort((a, b) => a.start_at.localeCompare(b.start_at))
-      .slice(0, 2);
+      .slice(0, 3);
   }, [meetings]);
 
+  async function markDone(t) {
+    await tasksStore.update(t.id, { status: "Completed" });
+    await reload();
+  }
+
   if (!s) return <div className="empty">جاري التحميل…</div>;
+
+  const DL_COLORS = { "متأخر": ["#fdeceb", "#e0574e"], "اليوم": ["#fbf0de", "#c88a2e"], "قادم": ["#eaf6ef", "#3f9d6d"] };
 
   return (
     <div>
       {/* الهيرو */}
-      <div className="hero">
-        <span className="h-av">{(viewer?.name || "ف").slice(0, 1)}</span>
-        <div>
-          <h2>مرحباً {viewer?.name ? viewer.name : "بفريق ڤيوليت"}</h2>
+      <div className="dash-hero">
+        <span className="hav">{(viewer?.name || "ف").slice(0, 1)}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2>مرحباً {viewer?.name || "بفريق ڤيوليت"} 👋</h2>
           <p>
-            {clientProject
-              ? `متابعة مشروع ${clientProject} — ${week.length} استحقاق هذا الأسبوع`
-              : `لديك ${week.length} استحقاق يحتاج المتابعة خلال هذا الأسبوع`}
+            {clientProject ? `متابعة مشروع ${clientProject} — ` : "لديك "}
+            <b>{s.weekCount} استحقاقات</b> تحتاج المتابعة و<b>{s.delayed} مهام متعثرة</b> هذا الأسبوع
           </p>
         </div>
-        <div className="h-stats">
-          <div className="h-chip"><div className="n">{s.total}</div><div className="l">إجمالي المهام</div></div>
-          <div className="h-chip"><div className="n">{s.pct}%</div><div className="l">نسبة الإنجاز</div></div>
-          <div className="h-chip"><div className="n" style={{ color: "#e05a50" }}>{s.delayed + s.atRisk}</div><div className="l">تحتاج انتباه</div></div>
+        <button className="hero-btn" onClick={() => router.push("/tasks")}>عرض مهامي</button>
+      </div>
+
+      {/* المؤشرات */}
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <span className="kpi-ic" style={{ background: "#eaf1fd", color: "#2e77e5" }}><Icon name="tasks" size={24} /></span>
+          <div><div className="num">{s.total}</div><div className="lbl">إجمالي المهام</div></div>
+        </div>
+        <div className="kpi-card">
+          <span className="ring" style={{ background: `conic-gradient(#3f9d6d ${s.pct}%, #ede7da 0)` }}>
+            <span className="inner">{s.pct}%</span>
+          </span>
+          <div><div className="num">{s.pct}%</div><div className="lbl">نسبة الإنجاز</div></div>
+        </div>
+        <div className="kpi-card">
+          <span className="kpi-ic" style={{ background: "#fdeceb", color: "#e0574e" }}><Icon name="alert" size={24} /></span>
+          <div><div className="num">{s.attentionN}</div><div className="lbl">تحتاج انتباه</div></div>
+        </div>
+        <div className="kpi-card">
+          <span className="kpi-ic" style={{ background: "#fbf0de", color: "#c88a2e" }}><Icon name="clock" size={24} /></span>
+          <div><div className="num">{s.weekCount}</div><div className="lbl">استحقاقات الأسبوع</div></div>
         </div>
       </div>
 
-      <div className="dash-2col">
-        {/* هذا الأسبوع */}
-        <div className="card">
-          <div className="section-title" style={{ justifyContent: "space-between" }}>
-            <span>هذا الأسبوع <span className="hint">· استحقاقات ومحطات</span></span>
+      <div className="dash-cols">
+        {/* استحقاقات ومحطات */}
+        <div className="card" style={{ borderRadius: 24 }}>
+          <div className="section-title" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+            <span>استحقاقات ومحطات</span>
             <Link href="/tasks" className="pill">عرض الكل</Link>
           </div>
-          {week.length === 0 ? (
-            <div className="empty" style={{ padding: "30px 0" }}>لا استحقاقات قريبة</div>
-          ) : (
-            week.map((it) => <TimelineRow key={it.id} it={it} />)
-          )}
+          <div className="muted" style={{ fontSize: 13, marginBottom: 16, paddingInlineStart: 15 }}>هذا الأسبوع · {s.deadlines.length} بند</div>
+          {s.deadlines.length === 0 ? <div className="empty" style={{ padding: "30px 0" }}>لا استحقاقات قريبة</div> :
+            s.deadlines.map(({ t, due, status }) => {
+              const [bg, c] = DL_COLORS[status];
+              return (
+                <div className="dl-item" key={t.id}>
+                  <button className="dl-check" title="وضع علامة مكتمل" onClick={() => markDone(t)} />
+                  <div className="dl-body" onClick={() => router.push("/tasks")} style={{ cursor: "pointer" }}>
+                    <b>{t.task}</b>
+                    <small>{t.project} · {fmtDay(due)}</small>
+                  </div>
+                  <span className="dl-pill" style={{ background: bg, color: c }}>{status}</span>
+                </div>
+              );
+            })}
         </div>
 
         {/* العمود الجانبي */}
-        <div>
-          <div className="card" style={{ marginBottom: 18 }}>
-            <div className="section-title" style={{ justifyContent: "space-between" }}>
-              <span>اجتماعات العملاء القادمة</span>
-              <Link href="/meetings" className="pill">الجدول</Link>
-            </div>
-            {nextMeetings.length === 0 ? (
-              <div className="empty" style={{ padding: "24px 0" }}>لا اجتماعات قادمة</div>
-            ) : (
-              nextMeetings.map((m) => <MeetingMini key={m.id} m={m} />)
-            )}
-          </div>
-
-          <div className="card">
+        <div className="dash-side">
+          <div className="card" style={{ borderRadius: 24 }}>
             <div className="section-title" style={{ justifyContent: "space-between" }}>
               <span>مهام تحتاج انتباه</span>
-              <Link href="/tasks" className="pill">الكل</Link>
+              <Link href="/tasks" style={{ color: "var(--primary)", fontWeight: 700, fontSize: 13 }}>الكل</Link>
             </div>
-            {s.attention.length === 0 ? (
-              <div className="empty" style={{ padding: "24px 0" }}>لا مهام متعثرة</div>
-            ) : (
-              s.attention.map((t) => (
-                <div className="mini-item" key={t.id}>
-                  <Badge map={HEALTH_META} value={t.health} />
-                  <div className="mtxt">
-                    <b>{t.task}</b>
-                    <small>{t.project} · {t.assigned_to || "غير مُسند"}</small>
+            {s.attention.length === 0 ? <div className="empty" style={{ padding: "24px 0" }}>لا مهام متعثرة</div> :
+              s.attention.map((t) => {
+                const pm = PRIORITY_META[t.priority] || PRIORITY_META.High;
+                const hm = HEALTH_META[t.health] || HEALTH_META["At Risk"];
+                return (
+                  <div className="att-box" key={t.id}>
+                    <div className="top">
+                      <span className="miniflag" style={{ background: `${pm.color}1e`, color: pm.color }}>{pm.ar}</span>
+                      <span className="miniflag" style={{ background: `${hm.color}1e`, color: hm.color }}>{hm.ar}</span>
+                    </div>
+                    <div className="att-title">{t.task}</div>
+                    <div className="att-sub">{t.project} · {t.assigned_to || "غير مُسند"}</div>
                   </div>
-                  <Badge map={PRIORITY_META} value={t.priority} />
-                </div>
-              ))
-            )}
+                );
+              })}
           </div>
-        </div>
-      </div>
 
-      {/* التحليلات */}
-      <div className="dash-2col">
-        <div className="card">
-          <div className="section-title">التقدّم حسب المشروع</div>
-          {s.byProject.map((p) => (
-            <div key={p.project} style={{ marginBottom: 15 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 7 }}>
-                <strong>{p.project}</strong>
-                <span className="muted" style={{ fontWeight: 700 }}>{p.done}/{p.total} · {p.pct}%</span>
-              </div>
-              <div className="progress">
-                <span style={{ width: `${p.pct}%`, background: "linear-gradient(90deg,#e05a50,#f0917a)" }} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="card">
-          <div className="section-title">توزيع الحالات</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", justifyContent: "center" }}>
-            <Donut segments={s.statusSeg} centerTop={s.total} centerBottom="مهمة" />
-            <div className="legend" style={{ minWidth: 150, flex: 1 }}>
-              {s.statusSeg.map((seg) => (
-                <div className="lrow" key={seg.label}>
-                  <span className="ld" style={{ background: seg.color }} />
-                  <span>{seg.label}</span>
-                  <span className="ln">{seg.value}</span>
-                </div>
-              ))}
-            </div>
+          <div className="card" style={{ borderRadius: 24 }}>
+            <div className="section-title"><span>اجتماعات العملاء القادمة</span></div>
+            {nextMeetings.length === 0 ? <div className="empty" style={{ padding: "24px 0" }}>لا اجتماعات قادمة</div> :
+              nextMeetings.map((m) => {
+                const d = new Date(m.start_at);
+                return (
+                  <div className="mtg-item" key={m.id}>
+                    <div className="date-box"><span className="mo">{MONTHS[d.getMonth()]}</span><span className="dy">{d.getDate()}</span></div>
+                    <div className="mbody">
+                      <b>{m.title}</b>
+                      <small>{d.toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}{m.location ? ` · ${m.location}` : ""}</small>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       </div>
@@ -201,53 +183,7 @@ export default function Home() {
   );
 }
 
-function TimelineRow({ it }) {
-  const meta =
-    it.kind === "meeting"
-      ? { ico: "calendar", tint: "#3f8e7f", bg: "#e4f0ec", type: "اجتماع" }
-      : { ico: "check", tint: "#e05a50", bg: "#fcece9", type: "مهمة" };
-  const d = new Date(it.date);
-  const dateStr = d.toLocaleDateString("ar-SA", { month: "long", day: "numeric" });
-  return (
-    <div className="tl-item">
-      <span className="tl-ico" style={{ background: meta.bg, color: meta.tint }}><Icon name={meta.ico} size={17} /></span>
-      <div className="tl-body">
-        <b>{it.title}</b>
-        <small>{it.project ? it.project + " · " : ""}{dateStr}</small>
-      </div>
-      {it.late ? (
-        <span className="badge" style={{ background: "#fcece9", color: "#cf4940" }}>
-          <span className="dot" style={{ background: "#cf4940" }} />متأخر
-        </span>
-      ) : (
-        <span className="tl-type">{meta.type}</span>
-      )}
-    </div>
-  );
-}
-
-function MeetingMini({ m }) {
-  const d = new Date(m.start_at);
-  const dateStr = d.toLocaleString("ar-SA", { weekday: "long", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <span className="tl-ico" style={{ background: "#e4f0ec", color: "#3f8e7f" }}><Icon name="calendar" size={17} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ fontSize: 14, color: "var(--ink)", display: "block" }}>{m.title}</b>
-          <small className="muted" style={{ fontSize: 12 }}>{dateStr}</small>
-        </div>
-      </div>
-      {m.agenda && (
-        <div className="note-box">
-          <b>ماذا نعرض</b>
-          {m.agenda}
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--primary)" }}>
-        {m.project && <span>{m.project}</span>}
-        {m.location && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="link" size={13} /> رابط الاجتماع</span>}
-      </div>
-    </div>
-  );
+function fmtDay(ts) {
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }

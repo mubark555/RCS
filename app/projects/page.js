@@ -10,6 +10,13 @@ import Icon from "@/components/Icon";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
 
 const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
+const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
+const colorFor = (name) => {
+  const s = String(name || "?");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) % AV_COLORS.length;
+  return AV_COLORS[h];
+};
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -27,6 +34,8 @@ export default function ProjectsPage() {
   const [tasks, setTasks] = useState([]);
   const [editing, setEditing] = useState(null);
   const [fMember, setFMember] = useState("");
+  const [pq, setPq] = useState("");
+  const [sort, setSort] = useState("default");
 
   async function reload() {
     setProjects(await projectsStore.list());
@@ -37,6 +46,12 @@ export default function ProjectsPage() {
     reload().catch(() => setProjects([]));
   }, []);
 
+  function statOf(name) {
+    const items = tasks.filter((t) => t.project === name);
+    const done = items.filter((t) => t.status === "Completed").length;
+    return { total: items.length, done, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
+  }
+
   const shown = useMemo(() => {
     if (!projects) return [];
     let list = scopeProjects ? projects.filter((p) => scopeProjects.includes(p.name)) : projects;
@@ -45,14 +60,21 @@ export default function ProjectsPage() {
         projManagers(p).includes(fMember) || projMembers(p).includes(fMember) || projClients(p).includes(fMember)
       );
     }
+    if (pq.trim()) {
+      const q = pq.trim();
+      list = list.filter((p) =>
+        `${p.name} ${p.description} ${projClients(p).join(" ")}`.includes(q)
+      );
+    }
+    if (sort !== "default") {
+      list = list.slice().sort((a, b) => {
+        const sa = statOf(a.name), sb = statOf(b.name);
+        return sort === "progress" ? sb.pct - sa.pct : sb.total - sa.total;
+      });
+    }
     return list;
-  }, [projects, scopeProjects, fMember]);
-
-  function statOf(name) {
-    const items = tasks.filter((t) => t.project === name);
-    const done = items.filter((t) => t.status === "Completed").length;
-    return { total: items.length, done, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, scopeProjects, fMember, pq, sort, tasks]);
 
   async function del(p) {
     if (!confirm(`حذف المشروع؟\n\n${p.name}`)) return;
@@ -66,48 +88,91 @@ export default function ProjectsPage() {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{shown.length} مشروع</span>
-        <select value={fMember} onChange={(e) => setFMember(e.target.value)} style={{ width: "auto", minWidth: 190 }} title="عرض مشاريع موظف معيّن">
-          <option value="">فلترة حسب الموظف / العميل</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.name}>{u.name} ({u.role === "client" ? "عميل" : u.role === "manager" ? "مدير" : "عضو"})</option>
-          ))}
-        </select>
         <div style={{ marginInlineStart: "auto" }} />
         {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
       </div>
 
-      <div className="proj-grid">
-        {shown.map((p) => {
-          const st = statOf(p.name);
-          const managers = projManagers(p);
-          const clients = projClients(p);
-          const members = projMembers(p);
-          return (
-            <div className="proj-card" key={p.id} onClick={() => router.push(`/projects/${p.id}`)}>
-              <div className="pc-top">
-                <span className="pc-badge" style={{ background: p.color || "#e05a50", padding: 0, overflow: "hidden" }}>
-                  {p.logo ? <img src={p.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.name.slice(0, 1)}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3>{p.name}</h3>
-                  <div className="pc-sub">{p.status || "نشط"} · {st.total} مهمة</div>
+      <div className="pj-toolbar">
+        <div className="pj-search">
+          <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={17} /></span>
+          <input placeholder="ابحث في المشاريع…" value={pq} onChange={(e) => setPq(e.target.value)} />
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: "auto" }}>
+          <option value="default">ترتيب: الافتراضي</option>
+          <option value="progress">الأعلى إنجازاً</option>
+          <option value="tasks">الأكثر مهامًا</option>
+        </select>
+        <select value={fMember} onChange={(e) => setFMember(e.target.value)} style={{ width: "auto", minWidth: 180 }} title="عرض مشاريع موظف معيّن">
+          <option value="">كل الموظفين</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.name}>{u.name} ({u.role === "client" ? "عميل" : u.role === "manager" ? "مدير" : "عضو"})</option>
+          ))}
+        </select>
+      </div>
+
+      {shown.length === 0 ? (
+        <div className="empty">لا توجد مشاريع مطابقة.</div>
+      ) : (
+        <div className="pj-grid">
+          {shown.map((p) => {
+            const st = statOf(p.name);
+            const managers = projManagers(p);
+            const clients = projClients(p);
+            const members = projMembers(p);
+            const statusColor = p.status === "مكتمل" ? { bg: "#e0f2ec", fg: "#0d9488" } : p.status === "معلّق" ? { bg: "#fdf0dd", fg: "#b45309" } : { bg: "#e7f4ec", fg: "#3f9d6d" };
+            const extra = members.length > 3 ? members.length - 3 : 0;
+            return (
+              <div className="pj-card" key={p.id} onClick={() => router.push(`/projects/${p.id}`)}>
+                <div className="pj-top">
+                  <span className="pj-logo" style={{ background: p.color || "#e05a50" }}>
+                    {p.logo ? <img src={p.logo} alt="" /> : p.name.slice(0, 1)}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pj-name">{p.name}</div>
+                    <div className="pj-sub">{p.status || "نشط"} · {st.total} مهمة</div>
+                  </div>
+                  <span className="pj-status" style={{ background: statusColor.bg, color: statusColor.fg }}>{p.status || "نشط"}</span>
                 </div>
-                <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                  <button className="btn sm ghost icon" title="عرض التفاصيل" onClick={() => router.push(`/projects/${p.id}`)}><Icon name="eye" size={16} /></button>
-                  {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={15} /></button>}
-                  {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={15} /></button>}
+
+                <p className="pj-desc">{p.description || "—"}</p>
+
+                <div className="pj-prog">
+                  <div className="pj-prog-row"><span className="l">الإنجاز</span><span className="v">{st.done}/{st.total} · {st.pct}%</span></div>
+                  <div className="progress"><span style={{ width: `${st.pct}%`, background: p.color || "#e05a50" }} /></div>
+                </div>
+
+                <div className="pj-split">
+                  <div>
+                    <div className="k">مدير المشروع</div>
+                    <div className="pj-mini-user">
+                      <span className="pj-mini-av" style={{ background: colorFor(managers[0]) }}>{(managers[0] || "؟").slice(0, 1)}</span>
+                      <b>{managers[0] || "—"}{managers.length > 1 ? ` +${managers.length - 1}` : ""}</b>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="k">العميل</div>
+                    <b style={{ display: "block", paddingTop: 5 }}>{clients[0] || "—"}{clients.length > 1 ? ` +${clients.length - 1}` : ""}</b>
+                  </div>
+                </div>
+
+                <div className="pj-foot">
+                  <div className="pj-team">
+                    {members.slice(0, 3).map((m, i) => (
+                      <span key={m} className="av" style={{ background: colorFor(m) }}>{m.slice(0, 1)}</span>
+                    ))}
+                    <span className="pj-team-label">{extra ? `+${extra} أعضاء` : `${members.length} أعضاء`}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+                    {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={14} /></button>}
+                    {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={14} /></button>}
+                    <button className="pj-open" onClick={() => router.push(`/projects/${p.id}`)}>فتح المشروع ‹</button>
+                  </div>
                 </div>
               </div>
-              {p.description && <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{p.description}</div>}
-              <div className="progress"><span style={{ width: `${st.pct}%`, background: p.color || "#e05a50" }} /></div>
-              <div className="pc-row"><span>الإنجاز</span><b>{st.done}/{st.total} · {st.pct}%</b></div>
-              <div className="pc-row"><span>المدراء</span><b>{managers.join("، ") || "—"}</b></div>
-              <div className="pc-row"><span>العملاء</span><b>{clients.join("، ") || "—"}</b></div>
-              <div className="pc-row"><span>الموظفون</span><b>{members.length ? `${members.length} موظف` : "—"}</b></div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
 
       {editing && (

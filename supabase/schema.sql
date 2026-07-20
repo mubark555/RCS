@@ -89,6 +89,8 @@ alter table public.tasks    add column if not exists holder   text  default '';
 alter table public.tasks    add column if not exists handoffs jsonb default '[]'::jsonb;
 alter table public.meetings add column if not exists attendees jsonb default '[]'::jsonb;
 alter table public.meetings add column if not exists links     jsonb default '[]'::jsonb;
+alter table public.meetings add column if not exists minutes   text  default '';
+alter table public.tasks    add column if not exists links     jsonb default '[]'::jsonb;
 alter table public.files    add column if not exists kind text default 'file'; -- file | link
 alter table public.files    add column if not exists url  text default '';
 alter table public.files    alter column path drop not null;   -- الروابط بلا مسار تخزين

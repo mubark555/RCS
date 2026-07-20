@@ -7,7 +7,7 @@ import { filesStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
 
-const LINK_TYPES = ["مستند", "محضر", "تسجيل", "مرجع"];
+const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
 export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }) {
   const { users, readOnly } = useRole();

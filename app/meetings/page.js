@@ -5,12 +5,15 @@ import { meetingsStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
+import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
-  attendees: [], links: [], agenda: "", status: "Scheduled",
+  attendees: [], links: [], agenda: "", minutes: "", status: "Scheduled",
 };
+
+const LINK_TYPES = ["تسجيل", "مستند", "رابط"];
 
 const STATUS_AR = {
   Scheduled: { ar: "مجدول", color: "#2563eb" },
@@ -22,6 +25,7 @@ export default function MeetingsPage() {
   const { readOnly, clientProject, users } = useRole();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [minutesOf, setMinutesOf] = useState(null);
 
   async function reload() {
     setItems(await meetingsStore.list());
@@ -61,14 +65,23 @@ export default function MeetingsPage() {
       {upcoming.length === 0 ? (
         <div className="empty">لا توجد اجتماعات قادمة.</div>
       ) : (
-        upcoming.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onChange={reload} />)
+        upcoming.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} />)
       )}
 
       {past.length > 0 && (
         <>
           <div className="section-title">السابقة / المنتهية ({past.length})</div>
-          {past.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onChange={reload} dim />)}
+          {past.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} dim />)}
         </>
+      )}
+
+      {minutesOf && (
+        <MinutesModal
+          meeting={minutesOf}
+          readOnly={readOnly}
+          onClose={() => setMinutesOf(null)}
+          onEdit={(m) => { setMinutesOf(null); setEditing(m); }}
+        />
       )}
 
       {editing && (
@@ -90,7 +103,7 @@ export default function MeetingsPage() {
   );
 }
 
-function MeetingCard({ m, onEdit, onChange, dim, readOnly }) {
+function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
   const st = STATUS_AR[m.status] || STATUS_AR.Scheduled;
   const dt = m.start_at ? new Date(m.start_at) : null;
   const dateStr = dt
@@ -122,16 +135,20 @@ function MeetingCard({ m, onEdit, onChange, dim, readOnly }) {
         {attendees.length > 0 && (
           <div className="meta" style={{ marginTop: 6 }}>الحضور: {attendees.join("، ")}</div>
         )}
-        {m.agenda && <div style={{ marginTop: 8, fontSize: 13 }}>{m.agenda}</div>}
-        {links.length > 0 && (
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {links.map((l, i) => (
-              <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <Icon name="link" size={13} /> {l.label || l.type || "رابط"}
-              </a>
-            ))}
-          </div>
-        )}
+        {m.agenda && <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-2)" }}>{m.agenda}</div>}
+        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <button className="pill" onClick={onMinutes} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: m.minutes ? "var(--primary)" : "var(--text-2)", borderColor: m.minutes ? "#f3cfc9" : "var(--border)" }}>
+            <Icon name="file" size={13} /> {m.minutes ? "عرض المحضر" : "المحضر"}
+          </button>
+          <button className="pill" onClick={() => exportMinutes(m)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Icon name="upload" size={13} /> تصدير
+          </button>
+          {links.map((l, i) => (
+            <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <Icon name="link" size={13} /> {l.label || l.type || "رابط"}
+            </a>
+          ))}
+        </div>
       </div>
       {!readOnly && (
         <div className="row-actions">
@@ -163,7 +180,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
   const toggleAtt = (name) =>
     setF((s) => ({ ...s, attendees: s.attendees.includes(name) ? s.attendees.filter((x) => x !== name) : [...s.attendees, name] }));
 
-  const addLink = () => setF((s) => ({ ...s, links: [...s.links, { type: "محضر", label: "", url: "" }] }));
+  const addLink = () => setF((s) => ({ ...s, links: [...s.links, { type: "تسجيل", label: "", url: "" }] }));
   const setLink = (i, k, v) => setF((s) => ({ ...s, links: s.links.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
   const rmLink = (i) => setF((s) => ({ ...s, links: s.links.filter((_, j) => j !== i) }));
 
@@ -219,27 +236,28 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
           </div>
         </div>
 
+        <label className="field full"><span>جدول الأعمال</span><textarea rows={3} value={f.agenda} onChange={set("agenda")} placeholder="النقاط المطروحة للنقاش…" /></label>
+        <label className="field full">
+          <span>محضر الاجتماع (يُكتب هنا ويُصدَّر لاحقاً)</span>
+          <textarea rows={5} value={f.minutes} onChange={set("minutes")} placeholder="القرارات، المخرجات، المهام المتفق عليها…" />
+        </label>
+
         <div className="field full">
           <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>
-            المرفقات والروابط (محاضر / تسجيلات)
+            المرفقات والروابط (اختيارية — تسجيل / مستند)
             <button type="button" className="btn sm ghost" style={{ marginInlineStart: "auto" }} onClick={addLink}>+ إضافة رابط</button>
           </span>
           {f.links.map((l, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <select value={l.type} onChange={(e) => setLink(i, "type", e.target.value)} style={{ width: 120 }}>
-                <option value="محضر">محضر</option>
-                <option value="تسجيل">تسجيل</option>
-                <option value="مستند">مستند</option>
-                <option value="رابط">رابط</option>
+                {LINK_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
               <input placeholder="الوصف" value={l.label} onChange={(e) => setLink(i, "label", e.target.value)} />
               <input placeholder="https://…" value={l.url} onChange={(e) => setLink(i, "url", e.target.value)} />
-              <button type="button" className="btn sm danger" onClick={() => rmLink(i)}>✕</button>
+              <button type="button" className="btn sm danger icon" onClick={() => rmLink(i)}><Icon name="close" size={14} /></button>
             </div>
           ))}
         </div>
-
-        <label className="field full"><span>جدول الأعمال</span><textarea rows={3} value={f.agenda} onChange={set("agenda")} /></label>
       </div>
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "جاري الحفظ…" : "حفظ"}</button>

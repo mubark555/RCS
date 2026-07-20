@@ -36,9 +36,25 @@ body {
   font-family: "Cairo", "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui,
     -apple-system, sans-serif;
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   letter-spacing: -0.1px;
+}
+/* منع تجاوز العرض الأفقي: عناصر الشبكة/الفلكس يجب أن تنكمش */
+.main,
+.content,
+.dash-2col,
+.dash-2col > *,
+.card,
+.proj-grid,
+.hero,
+.hero > div {
+  min-width: 0;
+}
+.content {
+  max-width: 100%;
 }
 a {
   color: inherit;

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { filesStore, isCloud } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
+import Icon from "@/components/Icon";
 import { PROJECTS } from "@/lib/constants";
 
 const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "محاضر", "تسجيلات", "أخرى"];
@@ -65,8 +66,8 @@ export default function ArchivePage() {
         <div style={{ marginInlineStart: "auto" }} />
         {!readOnly && (
           <>
-            <button className="btn" onClick={() => setModal("link")}>🔗 إضافة رابط</button>
-            <button className="btn primary" onClick={() => setModal("upload")}>⬆ رفع ملف</button>
+            <button className="btn" onClick={() => setModal("link")}><Icon name="link" size={16} /> إضافة رابط</button>
+            <button className="btn primary" onClick={() => setModal("upload")}><Icon name="upload" size={16} /> رفع ملف</button>
           </>
         )}
       </div>
@@ -78,7 +79,7 @@ export default function ArchivePage() {
       )}
 
       <div className="toolbar">
-        <input placeholder="🔍 بحث…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 200 }} />
+        <input placeholder="بحث…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 200 }} />
         {!clientProject && (
           <select value={fProject} onChange={(e) => setFProject(e.target.value)}>
             <option value="">كل المشاريع</option>
@@ -92,24 +93,26 @@ export default function ArchivePage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty"><div className="big">🗂️</div>لا توجد عناصر.</div>
+        <div className="empty">لا توجد عناصر بعد.</div>
       ) : (
         filtered.map((f) => (
           <div className="list-card" key={f.id}>
-            <div className="ic">{iconFor(f)}</div>
+            <div className="ic" style={{ color: f.kind === "link" ? "var(--primary)" : "var(--text-2)" }}>
+              <Icon name={f.kind === "link" ? "link" : "file"} size={22} />
+            </div>
             <div className="body">
               <h4>{f.name}</h4>
               <div className="meta">
-                {f.project && <span>📁 {f.project}</span>}
-                {f.category && <span>🏷️ {f.category}</span>}
-                {f.kind === "link" ? <span>🔗 رابط</span> : <span>{fmtSize(f.size)}</span>}
+                {f.project && <span>{f.project}</span>}
+                {f.category && <span>{f.category}</span>}
+                {f.kind === "link" ? <span>رابط</span> : <span>{fmtSize(f.size)}</span>}
                 {f.created_at && <span>{new Date(f.created_at).toLocaleDateString("ar-SA")}</span>}
               </div>
               {f.note && <div style={{ marginTop: 5, fontSize: 13 }}>{f.note}</div>}
             </div>
             <div className="row-actions">
               <button className="btn sm" disabled={busyId === f.id} onClick={() => open(f)}>فتح</button>
-              {!readOnly && <button className="btn sm danger" disabled={busyId === f.id} onClick={() => del(f)}>🗑</button>}
+              {!readOnly && <button className="btn sm danger icon" disabled={busyId === f.id} onClick={() => del(f)} title="حذف"><Icon name="trash" size={15} /></button>}
             </div>
           </div>
         ))

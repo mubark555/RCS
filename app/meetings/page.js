@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { meetingsStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
+import Icon from "@/components/Icon";
 import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
@@ -106,27 +107,27 @@ function MeetingCard({ m, onEdit, onChange, dim, readOnly }) {
 
   return (
     <div className="list-card" style={dim ? { opacity: 0.7 } : undefined}>
-      <div className="ic">🗓️</div>
+      <div className="ic" style={{ color: "var(--primary)" }}><Icon name="calendar" size={22} /></div>
       <div className="body">
         <h4>
           {m.title}
           <span className="badge" style={{ background: `${st.color}22`, color: st.color }}>{st.ar}</span>
         </h4>
         <div className="meta">
-          <span>🕒 {dateStr}</span>
-          <span>⏱ {m.duration} دقيقة</span>
-          {m.project && <span>📁 {m.project}</span>}
-          {m.location && <span>📍 {m.location}</span>}
+          <span>{dateStr}</span>
+          <span>{m.duration} دقيقة</span>
+          {m.project && <span>{m.project}</span>}
+          {m.location && <span>{m.location}</span>}
         </div>
         {attendees.length > 0 && (
-          <div className="meta" style={{ marginTop: 6 }}>👥 {attendees.join("، ")}</div>
+          <div className="meta" style={{ marginTop: 6 }}>الحضور: {attendees.join("، ")}</div>
         )}
         {m.agenda && <div style={{ marginTop: 8, fontSize: 13 }}>{m.agenda}</div>}
         {links.length > 0 && (
           <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
             {links.map((l, i) => (
-              <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)" }}>
-                {iconForLink(l)} {l.label || "رابط"}
+              <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Icon name="link" size={13} /> {l.label || l.type || "رابط"}
               </a>
             ))}
           </div>
@@ -134,8 +135,8 @@ function MeetingCard({ m, onEdit, onChange, dim, readOnly }) {
       </div>
       {!readOnly && (
         <div className="row-actions">
-          <button className="btn sm ghost" onClick={onEdit}>✎</button>
-          <button className="btn sm danger" onClick={del}>🗑</button>
+          <button className="btn sm ghost icon" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>
+          <button className="btn sm danger icon" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>
         </div>
       )}
     </div>

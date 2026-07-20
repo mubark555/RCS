@@ -5,6 +5,7 @@ import Link from "next/link";
 import { tasksStore, meetingsStore } from "@/lib/store";
 import Donut from "@/components/Donut";
 import Badge from "@/components/Badge";
+import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
 import { STATUS_META, HEALTH_META, PRIORITY_META, PROJECTS } from "@/lib/constants";
 
@@ -90,7 +91,7 @@ export default function Home() {
       .slice(0, 2);
   }, [meetings]);
 
-  if (!s) return <div className="empty"><div className="big">⏳</div>جاري التحميل…</div>;
+  if (!s) return <div className="empty">جاري التحميل…</div>;
 
   return (
     <div>
@@ -98,7 +99,7 @@ export default function Home() {
       <div className="hero">
         <span className="h-av">{(viewer?.name || "ف").slice(0, 1)}</span>
         <div>
-          <h2>مرحباً {viewer?.name ? viewer.name : "بفريق ڤيوليت"} 👋</h2>
+          <h2>مرحباً {viewer?.name ? viewer.name : "بفريق ڤيوليت"}</h2>
           <p>
             {clientProject
               ? `متابعة مشروع ${clientProject} — ${week.length} استحقاق هذا الأسبوع`
@@ -116,11 +117,11 @@ export default function Home() {
         {/* هذا الأسبوع */}
         <div className="card">
           <div className="section-title" style={{ justifyContent: "space-between" }}>
-            <span>🗓️ هذا الأسبوع <span className="hint">· استحقاقات ومحطات</span></span>
+            <span>هذا الأسبوع <span className="hint">· استحقاقات ومحطات</span></span>
             <Link href="/tasks" className="pill">عرض الكل</Link>
           </div>
           {week.length === 0 ? (
-            <div className="empty" style={{ padding: "30px 0" }}>لا استحقاقات قريبة 🎉</div>
+            <div className="empty" style={{ padding: "30px 0" }}>لا استحقاقات قريبة</div>
           ) : (
             week.map((it) => <TimelineRow key={it.id} it={it} />)
           )}
@@ -130,7 +131,7 @@ export default function Home() {
         <div>
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="section-title" style={{ justifyContent: "space-between" }}>
-              <span>📇 اجتماعات العملاء القادمة</span>
+              <span>اجتماعات العملاء القادمة</span>
               <Link href="/meetings" className="pill">الجدول</Link>
             </div>
             {nextMeetings.length === 0 ? (
@@ -142,11 +143,11 @@ export default function Home() {
 
           <div className="card">
             <div className="section-title" style={{ justifyContent: "space-between" }}>
-              <span>🚨 مهام تحتاج انتباه</span>
+              <span>مهام تحتاج انتباه</span>
               <Link href="/tasks" className="pill">الكل</Link>
             </div>
             {s.attention.length === 0 ? (
-              <div className="empty" style={{ padding: "24px 0" }}>لا مهام متعثرة 🎉</div>
+              <div className="empty" style={{ padding: "24px 0" }}>لا مهام متعثرة</div>
             ) : (
               s.attention.map((t) => (
                 <div className="mini-item" key={t.id}>
@@ -166,7 +167,7 @@ export default function Home() {
       {/* التحليلات */}
       <div className="dash-2col">
         <div className="card">
-          <div className="section-title">📊 التقدّم حسب المشروع</div>
+          <div className="section-title">التقدّم حسب المشروع</div>
           {s.byProject.map((p) => (
             <div key={p.project} style={{ marginBottom: 15 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 7 }}>
@@ -181,7 +182,7 @@ export default function Home() {
         </div>
 
         <div className="card">
-          <div className="section-title">🍩 توزيع الحالات</div>
+          <div className="section-title">توزيع الحالات</div>
           <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", justifyContent: "center" }}>
             <Donut segments={s.statusSeg} centerTop={s.total} centerBottom="مهمة" />
             <div className="legend" style={{ minWidth: 150, flex: 1 }}>
@@ -203,13 +204,13 @@ export default function Home() {
 function TimelineRow({ it }) {
   const meta =
     it.kind === "meeting"
-      ? { ico: "🗓️", tint: "#3f8e7f", bg: "#e4f0ec", type: "اجتماع" }
-      : { ico: "✓", tint: "#e05a50", bg: "#fcece9", type: "مهمة" };
+      ? { ico: "calendar", tint: "#3f8e7f", bg: "#e4f0ec", type: "اجتماع" }
+      : { ico: "check", tint: "#e05a50", bg: "#fcece9", type: "مهمة" };
   const d = new Date(it.date);
   const dateStr = d.toLocaleDateString("ar-SA", { month: "long", day: "numeric" });
   return (
     <div className="tl-item">
-      <span className="tl-ico" style={{ background: meta.bg, color: meta.tint }}>{meta.ico}</span>
+      <span className="tl-ico" style={{ background: meta.bg, color: meta.tint }}><Icon name={meta.ico} size={17} /></span>
       <div className="tl-body">
         <b>{it.title}</b>
         <small>{it.project ? it.project + " · " : ""}{dateStr}</small>
@@ -231,7 +232,7 @@ function MeetingMini({ m }) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <span className="tl-ico" style={{ background: "#e4f0ec", color: "#3f8e7f" }}>🗓️</span>
+        <span className="tl-ico" style={{ background: "#e4f0ec", color: "#3f8e7f" }}><Icon name="calendar" size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <b style={{ fontSize: 14, color: "var(--ink)", display: "block" }}>{m.title}</b>
           <small className="muted" style={{ fontSize: 12 }}>{dateStr}</small>
@@ -244,8 +245,8 @@ function MeetingMini({ m }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 14, marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--primary)" }}>
-        {m.project && <span>📁 {m.project}</span>}
-        {m.location && <span>🔗 رابط الاجتماع</span>}
+        {m.project && <span>{m.project}</span>}
+        {m.location && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="link" size={13} /> رابط الاجتماع</span>}
       </div>
     </div>
   );

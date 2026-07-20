@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { tasksStore } from "@/lib/store";
+import Icon from "@/components/Icon";
 
 const TITLES = {
   "/": { t: "الرئيسية", s: "لوحة القيادة — أهم ما يجب متابعته هذا الأسبوع" },
@@ -44,7 +45,7 @@ export default function TopBar() {
       </div>
       <div className="spacer" />
       <form className="search" onSubmit={submit}>
-        <span>🔍</span>
+        <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={17} /></span>
         <input
           placeholder="ابحث عن مهمة أو مشروع أو ملف…"
           value={q}
@@ -56,7 +57,7 @@ export default function TopBar() {
         title="مهام تحتاج انتباه"
         onClick={() => router.push("/tasks")}
       >
-        🔔
+        <Icon name="bell" size={18} />
         {alerts > 0 && <span className="cnt">{alerts}</span>}
       </div>
     </div>

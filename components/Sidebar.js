@@ -4,14 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isCloud } from "@/lib/supabase";
 import { useRole } from "@/components/RoleProvider";
+import Icon from "@/components/Icon";
 
 const ALL_LINKS = [
-  { href: "/", label: "الرئيسية", ico: "⌂", roles: ["manager", "member", "client"] },
-  { href: "/tasks", label: "المهام", ico: "✓", roles: ["manager", "member", "client"] },
-  { href: "/projects", label: "المشاريع", ico: "▤", roles: ["manager", "member"] },
-  { href: "/meetings", label: "الاجتماعات", ico: "🗓", roles: ["manager", "member", "client"] },
-  { href: "/archive", label: "الأرشيف", ico: "🗂", roles: ["manager", "member", "client"] },
-  { href: "/team", label: "الفريق", ico: "👥", roles: ["manager", "member"] },
+  { href: "/", label: "الرئيسية", ico: "home", roles: ["manager", "member", "client"] },
+  { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
+  { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member"] },
+  { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
+  { href: "/archive", label: "الأرشيف", ico: "archive", roles: ["manager", "member", "client"] },
+  { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
 ];
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
@@ -37,7 +38,7 @@ export default function Sidebar() {
           const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
             <Link key={l.href} href={l.href} className={`side-link ${active ? "active" : ""}`}>
-              <span className="ico">{l.ico}</span>
+              <span className="ico"><Icon name={l.ico} size={19} /></span>
               <span>{l.label}</span>
             </Link>
           );

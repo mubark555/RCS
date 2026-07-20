@@ -6,6 +6,7 @@ import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
 import TaskForm from "@/components/TaskForm";
 import TaskDetail from "@/components/TaskDetail";
+import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
 import {
   STATUS_META,
@@ -93,7 +94,7 @@ export default function TasksPage() {
 
       <div className="toolbar">
         <input
-          placeholder="🔍 بحث في المهام…"
+          placeholder="بحث في المهام…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={{ minWidth: 220 }}
@@ -166,9 +167,9 @@ export default function TasksPage() {
                   <td><Badge map={HEALTH_META} value={t.health} /></td>
                   <td>
                     <div className="row-actions">
-                      <button className="btn sm ghost" title="فتح التفاصيل" onClick={() => setViewing(t)}>👁</button>
-                      {!readOnly && <button className="btn sm ghost" title="تعديل" onClick={() => setEditing(t)}>✎</button>}
-                      {!readOnly && <button className="btn sm danger" title="حذف" disabled={busy} onClick={() => handleDelete(t)}>🗑</button>}
+                      <button className="btn sm ghost icon" title="فتح التفاصيل" onClick={() => setViewing(t)}><Icon name="eye" size={16} /></button>
+                      {!readOnly && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(t)}><Icon name="edit" size={16} /></button>}
+                      {!readOnly && <button className="btn sm danger icon" title="حذف" disabled={busy} onClick={() => handleDelete(t)}><Icon name="trash" size={16} /></button>}
                     </div>
                   </td>
                 </tr>

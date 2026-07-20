@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usersStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
+import Icon from "@/components/Icon";
 import { PROJECTS } from "@/lib/constants";
 
 const ROLES = [
@@ -51,7 +52,7 @@ export default function TeamPage() {
         g.list.length === 0 ? null : (
           <div key={g.v}>
             <div className="section-title">
-              {g.v === "manager" ? "👑" : g.v === "client" ? "🧑‍💼" : "👤"} {roleAr(g.v)}ون
+              {roleAr(g.v)}ون
               <span className="hint">({g.list.length})</span>
             </div>
             {g.list.map((u) => (
@@ -68,8 +69,8 @@ export default function TeamPage() {
                 <span className={`role-tag role-${u.role}`}>{roleAr(u.role)}</span>
                 {canManage && (
                   <div className="row-actions">
-                    <button className="btn sm ghost" onClick={() => setEditing(u)}>✎</button>
-                    <button className="btn sm danger" onClick={() => del(u)}>🗑</button>
+                    <button className="btn sm ghost icon" onClick={() => setEditing(u)} title="تعديل"><Icon name="edit" size={15} /></button>
+                    <button className="btn sm danger icon" onClick={() => del(u)} title="حذف"><Icon name="trash" size={15} /></button>
                   </div>
                 )}
               </div>

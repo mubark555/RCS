@@ -5,6 +5,7 @@ import { projectsStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import ProjectDetail from "@/components/ProjectDetail";
+import Icon from "@/components/Icon";
 
 export default function ProjectsPage() {
   const { canManage, clientProject, users } = useRole();
@@ -61,8 +62,8 @@ export default function ProjectsPage() {
                 </div>
                 {canManage && (
                   <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn sm ghost" onClick={() => setEditing(p)}>✎</button>
-                    <button className="btn sm danger" onClick={() => del(p)}>🗑</button>
+                    <button className="btn sm ghost icon" onClick={() => setEditing(p)} title="تعديل"><Icon name="edit" size={15} /></button>
+                    <button className="btn sm danger icon" onClick={() => del(p)} title="حذف"><Icon name="trash" size={15} /></button>
                   </div>
                 )}
               </div>

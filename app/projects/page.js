@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { projectsStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
-import ProjectDetail from "@/components/ProjectDetail";
 import ChipMulti from "@/components/ChipMulti";
 import Icon from "@/components/Icon";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
@@ -22,9 +22,9 @@ function fileToDataUrl(file) {
 
 export default function ProjectsPage() {
   const { canManage, scopeProjects, users, reloadProjects } = useRole();
+  const router = useRouter();
   const [projects, setProjects] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null);
   const [fMember, setFMember] = useState("");
 
@@ -83,7 +83,7 @@ export default function ProjectsPage() {
           const clients = projClients(p);
           const members = projMembers(p);
           return (
-            <div className="proj-card" key={p.id}>
+            <div className="proj-card" key={p.id} onClick={() => router.push(`/projects/${p.id}`)}>
               <div className="pc-top">
                 <span className="pc-badge" style={{ background: p.color || "#e05a50", padding: 0, overflow: "hidden" }}>
                   {p.logo ? <img src={p.logo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : p.name.slice(0, 1)}
@@ -92,8 +92,8 @@ export default function ProjectsPage() {
                   <h3>{p.name}</h3>
                   <div className="pc-sub">{p.status || "نشط"} · {st.total} مهمة</div>
                 </div>
-                <div className="row-actions">
-                  <button className="btn sm ghost icon" title="عرض التفاصيل" onClick={() => setViewing(p)}><Icon name="eye" size={16} /></button>
+                <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+                  <button className="btn sm ghost icon" title="عرض التفاصيل" onClick={() => router.push(`/projects/${p.id}`)}><Icon name="eye" size={16} /></button>
                   {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={15} /></button>}
                   {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={15} /></button>}
                 </div>
@@ -109,7 +109,6 @@ export default function ProjectsPage() {
         })}
       </div>
 
-      {viewing && <ProjectDetail project={viewing} onClose={() => setViewing(null)} />}
 
       {editing && (
         <Modal title={editing.id ? "تعديل المشروع" : "مشروع جديد"} onClose={() => setEditing(null)}>

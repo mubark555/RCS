@@ -20,6 +20,14 @@ const colorFor = (name) => {
 const WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const pad = (n) => String(n).padStart(2, "0");
+const WEEK = 7 * 86400000;
+// مؤرشفة: مهمة مكتملة مضى على إكمالها (أو تاريخها) أكثر من أسبوع
+function isArchived(t) {
+  if (t.status !== "Completed") return false;
+  const r = t.completed_at || t.due_date || t.created_at;
+  const d = r ? new Date(r).getTime() : NaN;
+  return !isNaN(d) && d < Date.now() - WEEK;
+}
 
 export default function TasksPage() {
   const { readOnly, scopeProjects, projects } = useRole();
@@ -33,6 +41,7 @@ export default function TasksPage() {
   const [busy, setBusy] = useState(false);
   const [dragCol, setDragCol] = useState(null);
   const [cal, setCal] = useState(null); // {y, m}
+  const [showArchive, setShowArchive] = useState(false);
   const dragId = useRef(null);
 
   async function reload() {
@@ -74,9 +83,14 @@ export default function TasksPage() {
     });
   }, [tasks, q, fProjects, fAssignee, scopeProjects]);
 
+  const active = useMemo(() => visible.filter((t) => !isArchived(t)), [visible]);
+  const archived = useMemo(() => visible.filter(isArchived), [visible]);
+
   async function handleSave(payload) {
-    if (editing && editing.id) await tasksStore.update(editing.id, payload);
-    else await tasksStore.create(payload);
+    const p = { ...payload };
+    if (p.status === "Completed" && !p.completed_at) p.completed_at = new Date().toISOString();
+    if (editing && editing.id) await tasksStore.update(editing.id, p);
+    else await tasksStore.create(p);
     setEditing(null);
     await reload();
   }
@@ -92,7 +106,9 @@ export default function TasksPage() {
     if (!id) return;
     const t = tasks.find((x) => x.id === id);
     if (!t || t.status === status) return;
-    await tasksStore.update(id, { status });
+    const patch = { status };
+    if (status === "Completed") patch.completed_at = new Date().toISOString();
+    await tasksStore.update(id, patch);
     await reload();
   }
   const toggleProj = (p) => setFProjects((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
@@ -102,13 +118,13 @@ export default function TasksPage() {
 
   // تجميع القائمة حسب المشروع
   const byProject = projectOptions
-    .map((p) => ({ project: p, items: visible.filter((t) => t.project === p) }))
+    .map((p) => ({ project: p, items: active.filter((t) => t.project === p) }))
     .filter((g) => g.items.length);
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{visible.length} من {tasks.length} مهمة</span>
+        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{active.length} مهمة نشطة</span>
         <div className="seg">
           <button className={view === "calendar" ? "on" : ""} onClick={() => setView("calendar")}>تقويم</button>
           <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>قائمة</button>
@@ -139,7 +155,7 @@ export default function TasksPage() {
       {view === "board" && (
         <div className="kanban">
           {STATUSES.map((status) => {
-            const col = visible.filter((t) => t.status === status);
+            const col = active.filter((t) => t.status === status);
             const meta = STATUS_META[status];
             return (
               <div key={status} className={`kb-col ${dragCol === status ? "drag-over" : ""}`}
@@ -195,7 +211,34 @@ export default function TasksPage() {
 
       {/* ===== تقويم ===== */}
       {view === "calendar" && cal && (
-        <CalendarView cal={cal} setCal={setCal} tasks={visible} projectColor={projectColor} onOpen={setViewing} />
+        <CalendarView cal={cal} setCal={setCal} tasks={active} projectColor={projectColor} onOpen={setViewing} />
+      )}
+
+      {/* ===== شريط المؤرشفة ===== */}
+      {archived.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <button className="arch-bar" onClick={() => setShowArchive((v) => !v)}>
+            <Icon name="archive" size={17} />
+            <span>المؤرشفة</span>
+            <span className="arch-count">{archived.length}</span>
+            <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>مهام مكتملة مضى عليها أكثر من أسبوع</span>
+            <span style={{ marginInlineStart: "auto", transition: ".2s", transform: showArchive ? "rotate(90deg)" : "none" }}>‹</span>
+          </button>
+          {showArchive && (
+            <div className="arch-list">
+              {archived.map((t) => (
+                <div className="arch-row" key={t.id} onClick={() => setViewing(t)}>
+                  <span className="lt-dot" style={{ background: "#16a34a" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <b>{t.task}</b>
+                    <small>{t.project}{t.assigned_to ? ` · ${t.assigned_to}` : ""}{t.due_date ? ` · ${t.due_date}` : ""}</small>
+                  </div>
+                  <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>مكتملة</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {viewing && (

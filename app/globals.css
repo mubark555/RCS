@@ -1290,6 +1290,76 @@ tbody tr:last-child td {
   color: #fff;
 }
 
+/* ============ شريط المؤرشفة ============ */
+.arch-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 14px;
+  color: var(--text-2);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.arch-bar:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.arch-count {
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+}
+.arch-list {
+  margin-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 8px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.arch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.arch-row:last-child {
+  border-bottom: none;
+}
+.arch-row:hover {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding-inline: 8px;
+}
+.arch-row b {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arch-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* ============ لوحة كانبان ============ */
 .kanban {
   display: grid;

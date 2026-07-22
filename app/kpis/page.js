@@ -5,6 +5,8 @@ import { kpisStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
+import ChipMulti from "@/components/ChipMulti";
+import { VISIBILITY_META, kpiAssignees, isPublicKpi } from "@/lib/constants";
 
 const CAT = { "مالي": "#16a34a", "نمو": "#2563eb", "تشغيلي": "#c88a2e", "تسويقي": "#7c5cf6", "رضا": "#e0574e" };
 const CATS = ["مالي", "نمو", "تشغيلي", "تسويقي", "رضا"];
@@ -22,7 +24,7 @@ function statusOf(pct) {
 }
 
 export default function KpisPage() {
-  const { canManage } = useRole();
+  const { canManage, projects, users } = useRole();
   const [kpis, setKpis] = useState(null);
   const [period, setPeriod] = useState("quarter");
   const [editing, setEditing] = useState(null);
@@ -91,6 +93,8 @@ export default function KpisPage() {
         {rows.map((k) => {
           const c = CAT[k.category] || "#9c968b";
           const unit = k.unit ? ` ${k.unit}` : "";
+          const vis = VISIBILITY_META[isPublicKpi(k) ? "public" : "private"];
+          const owners = kpiAssignees(k);
           return (
             <div className="kpi-item" key={k.id}>
               <div className="kpi-item-top">
@@ -102,6 +106,14 @@ export default function KpisPage() {
                 </div>
               </div>
               <div className="kpi-name">{k.name}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "8px 0 4px" }}>
+                <span className="kpi-cat" style={{ background: vis.bg, color: vis.color }} title={vis.desc}>
+                  {isPublicKpi(k) ? "◉" : "◍"} {vis.ar}
+                </span>
+                <span className="kpi-cat" style={{ background: "#eef2f7", color: "#475569" }}>
+                  {k.project ? `📁 ${k.project}` : "على مستوى الوكالة"}
+                </span>
+              </div>
               <div className="kpi-val">
                 <span className="cur">{fmt(k.current)}{unit}</span>
                 <span className="tgt">من {fmt(k.target)}{unit}</span>
@@ -115,6 +127,12 @@ export default function KpisPage() {
                   {k.up ? "▲" : "▼"} {k.trend || ""}
                 </span>
               </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line, #ece6da)" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>المسؤولون:</span>
+                {owners.length === 0
+                  ? <span className="muted" style={{ fontSize: 12 }}>غير مُسند</span>
+                  : owners.map((n) => <span key={n} className="pill" style={{ fontSize: 11.5, padding: "3px 9px" }}>{n}</span>)}
+              </div>
             </div>
           );
         })}
@@ -124,6 +142,8 @@ export default function KpisPage() {
         <Modal title={editing.id ? "تعديل المؤشر" : "إضافة مؤشر / مستهدف جديد"} onClose={() => setEditing(null)}>
           <KpiForm
             initial={editing.id ? editing : null}
+            projects={projects}
+            users={users}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await kpisStore.update(editing.id, payload);
@@ -138,11 +158,19 @@ export default function KpisPage() {
   );
 }
 
-function KpiForm({ initial, onSave, onCancel }) {
-  const [f, setF] = useState({ name: "", category: "تسويقي", unit: "", current: "", target: "", ...(initial || {}) });
+function KpiForm({ initial, projects = [], users = [], onSave, onCancel }) {
+  const [f, setF] = useState({
+    name: "", category: "تسويقي", unit: "", current: "", target: "",
+    project: "", visibility: "private",
+    ...(initial || {}),
+    assignees: kpiAssignees(initial || {}),
+  });
   const [err, setErr] = useState(false);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => { setF((s) => ({ ...s, [k]: e.target.value })); setErr(false); };
+  const setArr = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  const assigneeOptions = users.filter((u) => u.role === "member" || u.role === "manager");
 
   async function submit(e) {
     e.preventDefault();
@@ -150,7 +178,17 @@ function KpiForm({ initial, onSave, onCancel }) {
     if (!f.name.trim() || !target || target <= 0) { setErr(true); return; }
     setSaving(true);
     try {
-      await onSave({ name: f.name.trim(), category: f.category, unit: (f.unit || "").trim(), current: parseFloat(f.current) || 0, target });
+      // حمولة نظيفة بأعمدة الجدول فقط (نتجنب الحقول المحسوبة مثل pct/st)
+      await onSave({
+        name: f.name.trim(),
+        category: f.category,
+        unit: (f.unit || "").trim(),
+        current: parseFloat(f.current) || 0,
+        target,
+        project: f.project || "",
+        visibility: f.visibility === "public" ? "public" : "private",
+        assignees: Array.isArray(f.assignees) ? f.assignees : [],
+      });
     } finally { setSaving(false); }
   }
 
@@ -164,7 +202,26 @@ function KpiForm({ initial, onSave, onCancel }) {
         <label className="field"><span>الوحدة</span><input value={f.unit} onChange={set("unit")} placeholder="ريال / % / عميل" /></label>
         <label className="field"><span>القيمة الحالية</span><input type="number" value={f.current} onChange={set("current")} placeholder="0" /></label>
         <label className="field"><span>المستهدف *</span><input type="number" value={f.target} onChange={set("target")} placeholder="0" /></label>
+
+        <label className="field"><span>المشروع المرتبط</span>
+          <select value={f.project} onChange={set("project")}>
+            <option value="">عام — على مستوى الوكالة</option>
+            {projects.map((p) => <option key={p.id || p.name} value={p.name}>{p.name}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>الرؤية</span>
+          <select value={f.visibility} onChange={set("visibility")}>
+            <option value="private">خاصة — داخلية لا تظهر للعملاء</option>
+            <option value="public">عامة — تظهر للعملاء</option>
+          </select>
+        </label>
       </div>
+
+      <div className="field full" style={{ marginTop: 4 }}>
+        <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>الموظفون المسؤولون عن المستهدف</span>
+        <ChipMulti options={assigneeOptions} value={f.assignees} onChange={setArr("assignees")} empty="أضِف موظفين من قسم الفريق" />
+      </div>
+
       {err && <div style={{ background: "#fdeceb", color: "#e0574e", fontSize: 13, fontWeight: 600, padding: "10px 14px", borderRadius: 11, marginBottom: 12 }}>الرجاء إدخال اسم المؤشر وقيمة مستهدفة صحيحة.</div>}
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "…" : editing_label(initial)}</button>

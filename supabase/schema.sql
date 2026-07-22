@@ -108,6 +108,10 @@ alter table public.tasks    add column if not exists links     jsonb default '[]
 alter table public.files    add column if not exists kind text default 'file'; -- file | link
 alter table public.files    add column if not exists url  text default '';
 alter table public.files    alter column path drop not null;   -- الروابط بلا مسار تخزين
+-- ربط المستهدفات بالمشاريع + الرؤية (عامة/خاصة) + الموظفون المسؤولون
+alter table public.kpis     add column if not exists project    text  default '';            -- المشروع المرتبط ('' = عام على مستوى الوكالة)
+alter table public.kpis     add column if not exists visibility text  default 'private';     -- public (يظهر للعملاء) | private (داخلي)
+alter table public.kpis     add column if not exists assignees  jsonb default '[]'::jsonb;   -- الموظفون المسؤولون
 
 -- ===== مزامنة المخطط مع نموذج التطبيق الحالي (آمنة للتكرار) =====
 -- المهام: سلسلة الموافقات + وقت الإكمال (للأرشفة)

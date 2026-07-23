@@ -3051,3 +3051,64 @@ tbody tr:last-child td {
   transform: scaleX(-1);
 }
 .side-signout:hover { background: var(--primary-soft); color: var(--primary); }
+
+/* ===================== الإشعارات: التوست + مركز الجرس ===================== */
+.bell-wrap { position: relative; }
+
+/* لوحة الإشعارات المنسدلة */
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  inset-inline-start: 0;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  overflow: hidden;
+  animation: notifIn 0.16s ease both;
+}
+@keyframes notifIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.notif-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-bottom: 1px solid var(--border); font-size: 14.5px;
+}
+.notif-clear {
+  background: none; border: none; color: var(--primary); font-family: inherit;
+  font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 0;
+}
+.notif-list { max-height: 380px; overflow-y: auto; }
+.notif-empty { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13.5px; }
+.notif-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item.unread { background: var(--primary-soft); }
+.notif-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.5; }
+.notif-time { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+/* التوست الفوري */
+.toast-stack {
+  position: fixed; bottom: 22px; inset-inline-start: 22px;
+  display: flex; flex-direction: column; gap: 10px; z-index: 9999;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--ink); color: #fff;
+  padding: 13px 16px; border-radius: 13px;
+  box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600;
+  max-width: 360px; cursor: pointer; pointer-events: auto;
+  animation: toastIn 0.28s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.toast-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #94a3b8; }
+.toast-success .toast-dot { background: #34d399; }
+.toast-info .toast-dot { background: #60a5fa; }
+.toast-danger .toast-dot { background: #f87171; }
+.toast-msg { flex: 1; }

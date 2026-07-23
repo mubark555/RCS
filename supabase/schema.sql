@@ -86,6 +86,18 @@ create table if not exists public.kpis (
   created_at  timestamptz default now()
 );
 
+-- ------------------------- الإشعارات -------------------------
+create table if not exists public.notifications (
+  id          uuid primary key default gen_random_uuid(),
+  kind        text        default 'update',   -- create | update | delete | info
+  entity      text        default '',          -- مشروع | مهمة | مستخدم | مستهدف | اجتماع
+  title       text        not null,
+  body        text        default '',
+  read        boolean     default false,
+  created_at  timestamptz default now()
+);
+create index if not exists notifications_created_idx on public.notifications (created_at desc);
+
 -- ------------------------- المستخدمون -------------------------
 create table if not exists public.users (
   id          uuid primary key default gen_random_uuid(),
@@ -142,6 +154,7 @@ alter table public.files    enable row level security;
 alter table public.projects enable row level security;
 alter table public.users    enable row level security;
 alter table public.kpis     enable row level security;
+alter table public.notifications enable row level security;
 
 do $$
 begin
@@ -162,6 +175,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='kpis' and policyname='kpis_all') then
     create policy kpis_all on public.kpis for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='notifications' and policyname='notifications_all') then
+    create policy notifications_all on public.notifications for all using (true) with check (true);
   end if;
 end $$;
 

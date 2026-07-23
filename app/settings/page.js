@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useSettings } from "@/components/SettingsProvider";
 import { useRole } from "@/components/RoleProvider";
+import NotifSettings from "@/components/NotifSettings";
 import Icon from "@/components/Icon";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
@@ -113,6 +114,8 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
+
+      <NotifSettings />
     </div>
   );
 }

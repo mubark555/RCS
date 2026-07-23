@@ -98,6 +98,13 @@ create table if not exists public.notifications (
 );
 create index if not exists notifications_created_idx on public.notifications (created_at desc);
 
+-- ------------------------- إعدادات النظام (مفتاح/قيمة) -------------------------
+create table if not exists public.app_settings (
+  key        text primary key,
+  value      jsonb       default '{}'::jsonb,
+  updated_at timestamptz default now()
+);
+
 -- ------------------------- المستخدمون -------------------------
 create table if not exists public.users (
   id          uuid primary key default gen_random_uuid(),
@@ -155,6 +162,7 @@ alter table public.projects enable row level security;
 alter table public.users    enable row level security;
 alter table public.kpis     enable row level security;
 alter table public.notifications enable row level security;
+alter table public.app_settings enable row level security;
 
 do $$
 begin
@@ -178,6 +186,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='notifications' and policyname='notifications_all') then
     create policy notifications_all on public.notifications for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='app_settings' and policyname='app_settings_all') then
+    create policy app_settings_all on public.app_settings for all using (true) with check (true);
   end if;
 end $$;
 

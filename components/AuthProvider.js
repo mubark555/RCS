@@ -34,10 +34,15 @@ export function AuthProvider({ children }) {
     authEmail: session?.user?.email || null,
     // في الوضع المحلي التجريبي يعتبر المستخدم مسجّلاً دائماً
     authed: isCloud ? !!session : true,
+    // إرسال رمز تحقق (OTP) إلى البريد — بلا رابط، رمز مكوّن من 6 أرقام
     async signInWithEmail(email) {
       if (!isCloud) return { error: null };
-      const redirect = typeof window !== "undefined" ? window.location.origin : undefined;
-      return supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+      return supabase.auth.signInWithOtp({ email });
+    },
+    // التحقق من الرمز الذي أدخله المستخدم
+    async verifyOtp(email, token) {
+      if (!isCloud) return { error: null };
+      return supabase.auth.verifyOtp({ email, token, type: "email" });
     },
     async signOut() {
       if (isCloud) await supabase.auth.signOut();
@@ -56,6 +61,7 @@ export function useAuth() {
       authEmail: null,
       authed: true,
       signInWithEmail: async () => ({ error: null }),
+      verifyOtp: async () => ({ error: null }),
       signOut: async () => {},
     }
   );

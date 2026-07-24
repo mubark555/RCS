@@ -147,8 +147,9 @@ alter table public.projects add column if not exists managers jsonb default '[]'
 alter table public.projects add column if not exists clients  jsonb default '[]'::jsonb;
 alter table public.projects add column if not exists members  jsonb default '[]'::jsonb;
 
--- المستخدمون: رقم الجوال
-alter table public.users    add column if not exists phone text default '';
+-- المستخدمون: رقم الجوال + المشاريع المرتبطة (تعدّد للعميل)
+alter table public.users    add column if not exists phone    text  default '';
+alter table public.users    add column if not exists projects jsonb default '[]'::jsonb;
 
 -- =====================================================================
 --  سياسات الوصول (RLS)

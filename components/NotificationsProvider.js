@@ -14,19 +14,30 @@ const ACTION_AR = {
 
 // ربط اسم الكيان بمفتاح الحدث في الإعدادات
 const ENTITY_EVENT = { "مستخدم": "person", "مشروع": "project", "مهمة": "task", "مستهدف": "kpi", "اجتماع": "meeting" };
+const ACTION_PHRASE = { create: "تمت إضافة", update: "تم تحديث", delete: "تم حذف" };
 
 export const DEFAULT_NOTIFY = {
   emailEnabled: false,        // المفتاح الرئيسي لإشعارات البريد
-  recipients: "",             // بريد المستقبلين (يفصل بينهم فاصلة)
+  recipientUsers: [],         // أسماء المستخدمين المستقبِلين (تُحلّ إلى إيميلاتهم)
+  extraEmails: "",            // بريد إضافي خارجي (اختياري، يفصل بفاصلة)
   notifyAssignee: false,      // إرسال أيضاً للشخص المُسنَد (المهام)
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
   events: { person: true, project: true, task: true, kpi: true, meeting: true },
+  // قوالب النصوص — المتغيّرات المتاحة: {الإجراء} {النوع} {الاسم}
+  titleTemplate: "{الإجراء} {النوع}: {الاسم}",
+  bodyTemplate: "{الإجراء} {النوع}: {الاسم}\nإشعار تلقائي من نظام ڤيوليت لإدارة المشاريع.",
 };
 
-function buildTitle({ entity, action, label }) {
-  const suffix = label ? `: ${label}` : "";
-  const verbPast = action === "create" ? "تمت إضافة" : action === "delete" ? "تم حذف" : "تم تحديث";
-  return `${verbPast} ${entity}${suffix}`;
+// استبدال المتغيّرات في القالب بقيم الحدث
+export function renderTemplate(tpl, evt) {
+  const phrase = ACTION_PHRASE[evt.action] || "تحديث";
+  return String(tpl || "")
+    .split("{الإجراء}").join(phrase)
+    .split("{النوع}").join(evt.entity || "")
+    .split("{الاسم}").join(evt.label || "")
+    .replace(/:\s*(?=\n|$)/g, "")  // إزالة نقطتين معلّقتين عند غياب الاسم
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
 let _toastSeq = 0;
@@ -52,9 +63,15 @@ export function NotificationsProvider({ children }) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // تحميل إعدادات إشعارات البريد
+  // تحميل إعدادات إشعارات البريد (مع ترحيل الحقل القديم recipients)
   useEffect(() => {
-    appSettings.get("notify").then((p) => { if (p) setNotifyPrefs({ ...DEFAULT_NOTIFY, ...p, events: { ...DEFAULT_NOTIFY.events, ...(p.events || {}) } }); }).catch(() => {});
+    appSettings.get("notify").then((p) => {
+      if (!p) return;
+      const migrated = { ...DEFAULT_NOTIFY, ...p, events: { ...DEFAULT_NOTIFY.events, ...(p.events || {}) } };
+      if (p.recipients && !p.extraEmails) migrated.extraEmails = p.recipients;
+      if (!Array.isArray(migrated.recipientUsers)) migrated.recipientUsers = [];
+      setNotifyPrefs(migrated);
+    }).catch(() => {});
   }, []);
 
   const saveNotifyPrefs = useCallback(async (patch) => {
@@ -88,18 +105,26 @@ export function NotificationsProvider({ children }) {
     if (!key || !p.events[key]) return;
 
     const set = new Set();
-    (p.recipients || "").split(/[,\s;]+/).forEach((e) => { if (e && e.includes("@")) set.add(e.trim()); });
+    // إيميلات المستخدمين المختارين
+    (p.recipientUsers || []).forEach((name) => {
+      const u = usersRef.current.find((x) => x.name === name);
+      if (u?.email) set.add(u.email.trim());
+    });
+    // بريد إضافي خارجي
+    (p.extraEmails || "").split(/[,\s;]+/).forEach((e) => { if (e && e.includes("@")) set.add(e.trim()); });
+    // الشخص المُسنَد
     if (p.notifyAssignee && evt.record) {
       const name = evt.record.assigned_to || evt.record.holder;
       const u = usersRef.current.find((x) => x.name === name);
-      if (u?.email) set.add(u.email);
+      if (u?.email) set.add(u.email.trim());
     }
     const to = [...set];
     if (!to.length) return;
 
+    const bodyText = renderTemplate(p.bodyTemplate, evt);
     const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;color:#23201C">
-      <h2 style="color:#E36A62;margin:0 0 8px">${title}</h2>
-      <p style="color:#555;font-size:14px;line-height:1.8">إشعار تلقائي من نظام ڤيوليت لإدارة المشاريع.</p>
+      <h2 style="color:#E36A62;margin:0 0 10px">${title}</h2>
+      <div style="color:#555;font-size:14px;line-height:1.9;white-space:pre-line">${bodyText}</div>
     </div>`;
     try {
       await fetch("/api/notify", {
@@ -114,7 +139,7 @@ export function NotificationsProvider({ children }) {
   useEffect(() => {
     const off = onDataChange(async (evt) => {
       const tone = (ACTION_AR[evt.action] || {}).tone || "info";
-      const title = buildTitle(evt);
+      const title = renderTemplate(prefsRef.current.titleTemplate, evt) || `${ACTION_PHRASE[evt.action] || ""} ${evt.entity}`;
       pushToast(title, tone);
       try {
         const rec = await notificationsStore.create({ kind: evt.action, entity: evt.entity, title, body: "", read: false });

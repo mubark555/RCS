@@ -8,7 +8,23 @@ import TaskForm from "@/components/TaskForm";
 import TaskDetail from "@/components/TaskDetail";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, PROJECTS } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, PROJECTS, normalizeChain, chainProgress, chainHolder } from "@/lib/constants";
+
+function ChainTag({ task }) {
+  const chain = normalizeChain(task.chain);
+  const prog = chainProgress(chain);
+  if (!prog) return null;
+  const holder = chainHolder(chain);
+  const color = prog.rejected ? "#dc2626" : prog.complete ? "#16a34a" : "var(--primary)";
+  const bg = prog.rejected ? "#fdecec" : prog.complete ? "#e6f5ec" : "var(--primary-soft)";
+  return (
+    <div className="chain-tagrow" onClick={(e) => e.stopPropagation()} style={{ pointerEvents: "none" }}>
+      <span className="ct-pill"><Icon name="link" size={12} /> سلسلة موافقات</span>
+      <span className="ct-prog" style={{ color, background: bg }}>{prog.rejected ? "رفض" : prog.complete ? "مكتملة" : `${prog.done}/${prog.total}`}</span>
+      {!prog.complete && !prog.rejected && holder && <span className="ct-holder">عند: {holder}</span>}
+    </div>
+  );
+}
 
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
 const colorFor = (name) => {
@@ -30,7 +46,7 @@ function isArchived(t) {
 }
 
 export default function TasksPage() {
-  const { readOnly, scopeProjects, projects } = useRole();
+  const { readOnly, scopeProjects, projects, users } = useRole();
   const [tasks, setTasks] = useState(null);
   const [view, setView] = useState("board"); // board | list | calendar
   const [q, setQ] = useState("");
@@ -173,6 +189,7 @@ export default function TasksPage() {
                     <div className="kb-title">{t.task}</div>
                     <div className="kb-meta"><span>{t.project}</span>{t.assigned_to && <span>· {t.assigned_to}</span>}</div>
                     {t.due_date && <div className="kb-meta" style={{ marginTop: 3 }}>⏱ {t.due_date}</div>}
+                    <ChainTag task={t} />
                   </div>
                 ))}
                 {col.length === 0 && <div className="kb-empty">—</div>}
@@ -198,6 +215,7 @@ export default function TasksPage() {
                 <div className="lt-main">
                   <b>{t.task}</b>
                   <small>{t.activity}{t.assigned_to ? ` · ${t.assigned_to}` : ""}</small>
+                  <ChainTag task={t} />
                 </div>
                 <Badge map={PRIORITY_META} value={t.priority} />
                 <Badge map={STATUS_META} value={t.status} />
@@ -248,8 +266,8 @@ export default function TasksPage() {
           onDelete={async (t) => { setViewing(null); await handleDelete(t); }} />
       )}
       {editing && (
-        <Modal title={editing.id ? "تعديل المهمة" : "مهمة جديدة"} onClose={() => setEditing(null)}>
-          <TaskForm initial={editing.id ? editing : null} onSave={handleSave} onCancel={() => setEditing(null)} />
+        <Modal wide title={editing.id ? "تعديل المهمة" : "مهمة جديدة"} onClose={() => setEditing(null)}>
+          <TaskForm initial={editing.id ? editing : null} users={users} onSave={handleSave} onCancel={() => setEditing(null)} />
         </Modal>
       )}
     </div>

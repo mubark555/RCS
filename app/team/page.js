@@ -5,7 +5,8 @@ import { usersStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
-import { PROJECTS, projManagers, projClients, projMembers } from "@/lib/constants";
+import ChipMulti from "@/components/ChipMulti";
+import { PROJECTS, projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
 
 const ROLES = [
   { v: "manager", ar: "مدير" },
@@ -248,6 +249,7 @@ export default function TeamPage() {
         <Modal title={editing.id ? "تعديل مستخدم" : "إضافة مستخدم"} onClose={() => setEditing(null)}>
           <UserForm
             initial={editing.id ? editing : null}
+            projectNames={(projects || []).map((p) => p.name)}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await usersStore.update(editing.id, payload);
@@ -345,17 +347,25 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
   );
 }
 
-function UserForm({ initial, onSave, onCancel }) {
-  const [f, setF] = useState({ name: "", role: "member", title: "", project: "", email: "", phone: "", ...(initial || {}) });
+function UserForm({ initial, projectNames = [], onSave, onCancel }) {
+  const [f, setF] = useState({
+    name: "", role: "member", title: "", email: "", phone: "",
+    ...(initial || {}),
+    projects: userProjects(initial || {}),
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  const options = projectNames.length ? projectNames : PROJECTS;
 
   async function submit(e) {
     e.preventDefault();
     if (!f.name.trim()) return;
     setSaving(true);
     try {
-      await onSave({ ...f, project: f.role === "client" ? f.project : "" });
+      const isClient = f.role === "client";
+      const projects = isClient ? f.projects : [];
+      await onSave({ ...f, projects, project: isClient ? (projects[0] || "") : "" });
     } finally {
       setSaving(false);
     }
@@ -387,13 +397,17 @@ function UserForm({ initial, onSave, onCancel }) {
           <input value={f.phone} onChange={set("phone")} placeholder="05xxxxxxxx" />
         </label>
         {f.role === "client" && (
-          <label className="field full">
-            <span>المشروع المرتبط (يرى العميل هذا المشروع فقط)</span>
-            <select value={f.project} onChange={set("project")}>
-              <option value="">— اختر مشروعاً —</option>
-              {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </label>
+          <div className="field full">
+            <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>
+              المشاريع المرتبطة (يرى العميل هذه المشاريع فقط — يمكن اختيار أكثر من مشروع)
+            </span>
+            <ChipMulti
+              options={options}
+              value={f.projects}
+              onChange={(v) => setF((s) => ({ ...s, projects: v }))}
+              empty="أضِف مشاريع أولاً"
+            />
+          </div>
         )}
       </div>
       <div className="modal-actions">

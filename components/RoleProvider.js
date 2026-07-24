@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { usersStore, projectsStore } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
-import { projManagers, projClients, projMembers } from "@/lib/constants";
+import { projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
 
 const RoleCtx = createContext(null);
 
@@ -91,8 +91,10 @@ export function RoleProvider({ children }) {
   let scopeProjects = null;
   if (viewer) {
     if (role === "client") {
-      const mine = projects.filter((p) => projClients(p).includes(viewer.name)).map((p) => p.name);
-      scopeProjects = mine.length ? mine : (viewer.project ? [viewer.project] : []);
+      // مشاريع العميل = ما هو مُدرَج فيها كعميل + المشاريع المُسندة في سجلّه (تدعم التعدد)
+      const fromProjects = projects.filter((p) => projClients(p).includes(viewer.name)).map((p) => p.name);
+      const fromUser = userProjects(viewer);
+      scopeProjects = [...new Set([...fromProjects, ...fromUser])];
     } else if (role === "member") {
       const mine = projects
         .filter((p) => projMembers(p).includes(viewer.name) || projManagers(p).includes(viewer.name))

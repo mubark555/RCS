@@ -3,10 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { usersStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
+import { useNotifications, getNotif } from "@/components/NotificationsProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import ChipMulti from "@/components/ChipMulti";
 import { PROJECTS, projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
+
+// حالة إشعار البريد المتوقّعة عند إضافة مستخدم (حسب الإعدادات)
+function addEmailStatus(prefs, users) {
+  if (!prefs?.emailEnabled) return { ok: false, text: "إشعارات البريد متوقفة (المفتاح الرئيسي)" };
+  const n = getNotif(prefs, "person", "create");
+  if (!n.on) return { ok: false, text: "إشعار «إضافة مستخدم» متوقف حالياً" };
+  const set = new Set();
+  (prefs.recipientUsers || []).forEach((name) => {
+    const u = users.find((x) => x.name === name);
+    if (u?.email) set.add(u.email.trim());
+  });
+  (prefs.extraEmails || "").split(/[,\s;]+/).forEach((e) => { if (e && e.includes("@")) set.add(e.trim()); });
+  const to = [...set];
+  if (!to.length) return { ok: false, text: "لا يوجد مستقبِلون محدّدون للإشعار" };
+  return { ok: true, text: `تم إرسال إشعار بريد إلى ${to.length} مستقبِل` };
+}
 
 const ROLES = [
   { v: "manager", ar: "مدير" },
@@ -75,10 +92,12 @@ function taskFor(t, name) {
 
 export default function TeamPage() {
   const { canManage, reloadUsers, projects } = useRole();
+  const { notifyPrefs } = useNotifications();
   const [users, setUsers] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [editing, setEditing] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [added, setAdded] = useState(null); // تأكيد بعد إضافة مستخدم
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -252,12 +271,71 @@ export default function TeamPage() {
             projectNames={(projects || []).map((p) => p.name)}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
-              if (editing.id) await usersStore.update(editing.id, payload);
-              else await usersStore.create(payload);
-              setEditing(null);
-              await reload();
+              try {
+                if (editing.id) {
+                  await usersStore.update(editing.id, payload);
+                  setEditing(null);
+                  await reload();
+                } else {
+                  const created = await usersStore.create(payload);
+                  setEditing(null);
+                  await reload();
+                  const joined = new Date(created?.created_at || Date.now())
+                    .toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+                  setAdded({
+                    name: (created || payload).name,
+                    joined,
+                    email: addEmailStatus(notifyPrefs, users || []),
+                  });
+                }
+              } catch (err) {
+                // لا نُغلق النموذج عند الفشل، ونُظهر السبب بدل الصمت
+                const msg = err?.message || String(err);
+                const missingCol = /column .* does not exist|could not find|schema cache/i.test(msg);
+                alert(
+                  "تعذّر حفظ المستخدم ❌\n\n" + msg +
+                  (missingCol
+                    ? "\n\nالسبب على الأرجح: جدول المستخدمين في قاعدة البيانات ينقصه عمود (phone / projects). شغّل ملف supabase/schema.sql مرة واحدة لإضافته."
+                    : "")
+                );
+              }
             }}
           />
+        </Modal>
+      )}
+
+      {added && (
+        <Modal title="تمت إضافة المستخدم" onClose={() => setAdded(null)}>
+          <div style={{ textAlign: "center", padding: "6px 4px 2px" }}>
+            <div style={{ width: 62, height: 62, borderRadius: "50%", background: "#e6f5ec", color: "#16a34a", display: "grid", placeItems: "center", margin: "0 auto 12px" }}>
+              <Icon name="check" size={30} />
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)" }}>{added.name}</div>
+            <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>أُضيف إلى النظام بنجاح</div>
+          </div>
+
+          <div style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="clock" size={18} /></span>
+              <div>
+                <div className="muted" style={{ fontSize: 11.5 }}>تاريخ الانضمام</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{added.joined}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
+              <span style={{ color: added.email.ok ? "#16a34a" : "var(--muted)", display: "inline-flex" }}>
+                <Icon name={added.email.ok ? "check" : "mail"} size={18} />
+              </span>
+              <div>
+                <div className="muted" style={{ fontSize: 11.5 }}>إشعار البريد</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: added.email.ok ? "#16a34a" : "var(--text-2)" }}>{added.email.text}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: 18 }}>
+            <button className="btn primary" onClick={() => setAdded(null)}>تم</button>
+          </div>
         </Modal>
       )}
     </div>

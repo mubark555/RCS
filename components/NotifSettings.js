@@ -137,6 +137,10 @@ export default function NotifSettings() {
       </label>
 
       <div style={{ ...row }}>
+        <div><b style={{ fontSize: 13.5 }}>إرسال للمستخدم الجديد نفسه</b><div className="muted" style={{ fontSize: 12 }}>عند إضافة/تعديل مستخدم، تصله رسالة الترحيب على بريده هو (وليس المستقبِلين فقط).</div></div>
+        <Toggle on={!!p.sendToNewUser} onChange={(v) => saveNotifyPrefs({ sendToNewUser: v })} disabled={dis} />
+      </div>
+      <div style={{ ...row }}>
         <div><b style={{ fontSize: 13.5 }}>إرسال أيضاً للشخص المُسنَد إليه</b><div className="muted" style={{ fontSize: 12 }}>يُرسل لبريد الموظف المسؤول عن المهمة.</div></div>
         <Toggle on={!!p.notifyAssignee} onChange={(v) => saveNotifyPrefs({ notifyAssignee: v })} disabled={dis} />
       </div>

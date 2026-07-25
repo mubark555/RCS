@@ -10,7 +10,7 @@ import ChipMulti from "@/components/ChipMulti";
 import { PROJECTS, projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
 
 // حالة إشعار البريد المتوقّعة عند إضافة مستخدم (حسب الإعدادات)
-function addEmailStatus(prefs, users) {
+function addEmailStatus(prefs, users, newUserEmail) {
   if (!prefs?.emailEnabled) return { ok: false, text: "إشعارات البريد متوقفة (المفتاح الرئيسي)" };
   const n = getNotif(prefs, "person", "create");
   if (!n.on) return { ok: false, text: "إشعار «إضافة مستخدم» متوقف حالياً" };
@@ -20,9 +20,13 @@ function addEmailStatus(prefs, users) {
     if (u?.email) set.add(u.email.trim());
   });
   (prefs.extraEmails || "").split(/[,\s;]+/).forEach((e) => { if (e && e.includes("@")) set.add(e.trim()); });
+  // بريد المستخدم الجديد نفسه (رسالة ترحيب)
+  const selfSent = prefs.sendToNewUser && newUserEmail && String(newUserEmail).includes("@");
+  if (selfSent) set.add(String(newUserEmail).trim());
   const to = [...set];
   if (!to.length) return { ok: false, text: "لا يوجد مستقبِلون محدّدون للإشعار" };
-  return { ok: true, text: `تم إرسال إشعار بريد إلى ${to.length} مستقبِل` };
+  const selfNote = selfSent ? " (منهم المستخدم الجديد نفسه)" : "";
+  return { ok: true, text: `تم إرسال إشعار بريد إلى ${to.length} مستقبِل${selfNote}` };
 }
 
 const ROLES = [
@@ -285,7 +289,7 @@ export default function TeamPage() {
                   setAdded({
                     name: (created || payload).name,
                     joined,
-                    email: addEmailStatus(notifyPrefs, users || []),
+                    email: addEmailStatus(notifyPrefs, users || [], (created || payload).email),
                   });
                 }
               } catch (err) {

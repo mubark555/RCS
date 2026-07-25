@@ -23,6 +23,7 @@ export const DEFAULT_NOTIFY = {
   senderName: "",             // اسم المُرسِل الظاهر في البريد (فارغ = الافتراضي)
   recipientUsers: [],         // أسماء المستخدمين المستقبِلين (تُحلّ إلى إيميلاتهم)
   extraEmails: "",            // بريد إضافي خارجي (اختياري، يفصل بفاصلة)
+  sendToNewUser: true,        // إرسال إشعار «المستخدم» إلى بريد المستخدم نفسه (ترحيب)
   notifyAssignee: false,      // إرسال أيضاً للشخص المُسنَد (المهام)
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
   events: { person: true, project: true, task: true, kpi: true, meeting: true },
@@ -172,6 +173,10 @@ export function NotificationsProvider({ children }) {
     });
     // بريد إضافي خارجي
     (p.extraEmails || "").split(/[,\s;]+/).forEach((e) => { if (e && e.includes("@")) set.add(e.trim()); });
+    // بريد المستخدم نفسه (رسالة ترحيب تصل للمستخدم الجديد على بريده)
+    if (p.sendToNewUser && evt.entity === "مستخدم" && evt.record?.email && String(evt.record.email).includes("@")) {
+      set.add(String(evt.record.email).trim());
+    }
     // الشخص المُسنَد
     if (p.notifyAssignee && evt.record) {
       const name = evt.record.assigned_to || evt.record.holder;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  useNotifications, renderTemplate, getNotif,
+  useNotifications, renderTemplate, getNotif, buildEmailHtml, systemUrlFrom,
   NOTIF_CATALOG, NOTIF_ACTIONS, notifKey,
 } from "@/components/NotificationsProvider";
 import { useRole } from "@/components/RoleProvider";
@@ -81,7 +81,7 @@ export default function NotifSettings() {
         body: JSON.stringify({
           to,
           subject: "اختبار إشعار ڤيوليت",
-          html: "<div dir='rtl'>هذه رسالة اختبار من نظام ڤيوليت. الإعدادات تعمل بنجاح ✅</div>",
+          html: buildEmailHtml("اختبار إشعار ڤيوليت", "هذه رسالة اختبار من نظام ڤيوليت. الإعدادات تعمل بنجاح ✅", systemUrlFrom(p)),
           fromName: (p.senderName || "").trim() || undefined,
         }),
       });
@@ -145,11 +145,15 @@ export default function NotifSettings() {
         <Toggle on={!!p.notifyAssignee} onChange={(v) => saveNotifyPrefs({ notifyAssignee: v })} disabled={dis} />
       </div>
 
-      {/* اسم المُرسِل */}
-      <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>اسم المُرسِل</div>
+      {/* اسم المُرسِل ورابط النظام */}
+      <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>اسم المُرسِل ورابط النظام</div>
       <label className="field">
         <span>الاسم الظاهر في خانة «من» بالبريد (اتركه فارغاً للاسم الافتراضي)</span>
         <input value={p.senderName || ""} onChange={(e) => saveNotifyPrefs({ senderName: e.target.value })} placeholder="ڤيوليت" disabled={dis} />
+      </label>
+      <label className="field">
+        <span>رابط النظام (يظهر كزر «فتح النظام» في كل رسالة — اتركه فارغاً لاستخدام رابط الموقع الحالي تلقائياً)</span>
+        <input dir="ltr" value={p.systemUrl || ""} onChange={(e) => saveNotifyPrefs({ systemUrl: e.target.value })} placeholder={systemUrlFrom({}) || "https://your-system.com"} disabled={dis} />
       </label>
 
       {/* الرسالة الافتراضية */}

@@ -23,6 +23,7 @@ export const DEFAULT_NOTIFY = {
   senderName: "",             // اسم المُرسِل الظاهر في البريد (فارغ = الافتراضي)
   recipientUsers: [],         // أسماء المستخدمين المستقبِلين (تُحلّ إلى إيميلاتهم)
   extraEmails: "",            // بريد إضافي خارجي (اختياري، يفصل بفاصلة)
+  systemUrl: "",              // رابط النظام الظاهر في كل بريد (فارغ = رابط الموقع الحالي تلقائياً)
   sendToNewUser: true,        // إرسال إشعار «المستخدم» إلى بريد المستخدم نفسه (ترحيب)
   notifyAssignee: false,      // إرسال أيضاً للشخص المُسنَد (المهام)
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
@@ -50,6 +51,29 @@ export function renderTemplate(tpl, evt) {
     .replace(/:\s*(?=\n|$)/g, "")  // إزالة نقطتين معلّقتين عند غياب القيمة
     .replace(/[ \t]+/g, " ")
     .trim();
+}
+
+// رابط النظام: المضبوط في الإعدادات، وإلا رابط الموقع الحالي تلقائياً
+export function systemUrlFrom(prefs) {
+  const u = (prefs?.systemUrl || "").trim();
+  if (u) return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
+}
+
+// يبني بريد HTML موحّداً: العنوان + النص + زر «فتح النظام» في الأسفل
+export function buildEmailHtml(subject, bodyText, appUrl) {
+  const link = appUrl
+    ? `<div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
+        <a href="${appUrl}" style="display:inline-block;background:#E36A62;color:#fff;text-decoration:none;padding:11px 28px;border-radius:10px;font-weight:700;font-size:14px">فتح النظام</a>
+        <div style="margin-top:10px;font-size:12px;color:#9a9a9a"><a href="${appUrl}" style="color:#9a9a9a;text-decoration:none">${appUrl}</a></div>
+      </div>`
+    : "";
+  return `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;color:#23201C;max-width:520px;margin:auto">
+      <h2 style="color:#E36A62;margin:0 0 10px">${subject}</h2>
+      <div style="color:#555;font-size:14px;line-height:1.9;white-space:pre-line">${bodyText}</div>
+      ${link}
+    </div>`;
 }
 
 // يختار قالب العنوان/النص لحدثٍ ما: تخصيص النوع إن وُجد، وإلا الافتراضي
@@ -189,10 +213,7 @@ export function NotificationsProvider({ children }) {
     // العنوان والنص حسب تخصيص هذا الإشعار (أو الافتراضي)
     const subject = renderTemplate(nx.subject, evt) || title;
     const bodyText = renderTemplate(nx.body, evt);
-    const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;color:#23201C">
-      <h2 style="color:#E36A62;margin:0 0 10px">${subject}</h2>
-      <div style="color:#555;font-size:14px;line-height:1.9;white-space:pre-line">${bodyText}</div>
-    </div>`;
+    const html = buildEmailHtml(subject, bodyText, systemUrlFrom(p));
     try {
       await fetch("/api/notify", {
         method: "POST",

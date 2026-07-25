@@ -142,8 +142,8 @@ export default function LoginScreen() {
             <div style={{ fontSize: 23, fontWeight: 800, color: C.primary, lineHeight: 1 }}>{settings.appName}</div>
             <div style={{ fontSize: 10, letterSpacing: "2.5px", color: C.muted, fontWeight: 700, marginTop: 4 }}>{settings.tagline}</div>
           </div>
-          <div style={{ width: 58, height: 58, borderRadius: 17, background: settings.logoUrl ? "#fff" : C.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, flex: "none", overflow: "hidden", boxShadow: "0 12px 26px rgba(227,106,98,.35)", animation: "lg_logoPop .7s .15s cubic-bezier(.34,1.56,.64,1) both" }}>
-            {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
+          <div style={{ width: 72, height: 72, borderRadius: 19, background: settings.logoUrl ? "#fff" : C.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, fontWeight: 800, flex: "none", overflow: "hidden", boxShadow: "0 12px 26px rgba(227,106,98,.35)", animation: "lg_logoPop .7s .15s cubic-bezier(.34,1.56,.64,1) both" }}>
+            {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
           </div>
         </div>
 

@@ -101,14 +101,14 @@ a {
   padding: 4px 8px 22px;
 }
 .sidebar .brand .logo {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
   background: var(--primary);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 800;
   box-shadow: 0 6px 16px rgba(224, 90, 80, 0.4);
 }

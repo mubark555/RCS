@@ -144,8 +144,8 @@ export default function SettingsPage() {
         <div className="card">
           <div className="section-title">معاينة</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-            <span style={{ width: 48, height: 48, borderRadius: 14, background: f.logoUrl ? "#fff" : f.primaryColor, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22, overflow: "hidden", border: f.logoUrl ? "1px solid var(--border)" : "none" }}>
-              {f.logoUrl ? <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} /> : (f.logoText || (f.appName || "؟").trim().charAt(0) || "؟")}
+            <span style={{ width: 60, height: 60, borderRadius: 16, background: f.logoUrl ? "#fff" : f.primaryColor, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 28, overflow: "hidden", border: f.logoUrl ? "1px solid var(--border)" : "none" }}>
+              {f.logoUrl ? <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} /> : (f.logoText || (f.appName || "؟").trim().charAt(0) || "؟")}
             </span>
             <div>
               <div style={{ fontWeight: 800, fontSize: 18, color: "var(--ink)" }}>{f.appName || "اسم النظام"}</div>

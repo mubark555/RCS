@@ -16,7 +16,7 @@ export async function POST(req) {
     return Response.json({ error: "طلب غير صالح." }, { status: 400 });
   }
 
-  const { to, subject, html } = payload || {};
+  const { to, subject, html, fromName } = payload || {};
   const recipients = (Array.isArray(to) ? to : [to])
     .map((x) => String(x || "").trim())
     .filter((x) => x && x.includes("@"));
@@ -25,7 +25,16 @@ export async function POST(req) {
     return Response.json({ error: "الحقول المطلوبة ناقصة (المستقبلون / العنوان)." }, { status: 400 });
   }
 
-  const from = process.env.NOTIFY_FROM || "ڤيوليت <no-reply@vuletmedia.com>";
+  const baseFrom = process.env.NOTIFY_FROM || "ڤيوليت <no-reply@vuletmedia.com>";
+  // اسم مُرسِل مخصّص من الإعدادات: نستبدل الاسم الظاهر مع الإبقاء على عنوان
+  // البريد الموثّق (الجزء داخل < >) كما هو، حفاظاً على صحة الإرسال.
+  let from = baseFrom;
+  const name = String(fromName || "").trim().replace(/[<>"]/g, "");
+  if (name) {
+    const m = baseFrom.match(/<([^>]+)>/);
+    const addr = m ? m[1] : baseFrom;
+    from = `${name} <${addr}>`;
+  }
 
   try {
     const r = await fetch("https://api.resend.com/emails", {

@@ -31,7 +31,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="brand">
         <span className="logo" style={{ overflow: "hidden", padding: 0, background: settings.logoUrl ? "#fff" : undefined }}>
-          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} /> : settings.logoText}
+          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
         </span>
         <span>
           <b>{settings.appName}</b>

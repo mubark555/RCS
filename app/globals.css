@@ -3059,7 +3059,7 @@ tbody tr:last-child td {
 .notif-panel {
   position: absolute;
   top: calc(100% + 10px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   width: 340px;
   max-width: calc(100vw - 32px);
   background: var(--surface);

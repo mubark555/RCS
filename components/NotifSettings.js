@@ -1,16 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useNotifications, renderTemplate, pickTemplates } from "@/components/NotificationsProvider";
+import {
+  useNotifications, renderTemplate, getNotif,
+  NOTIF_CATALOG, NOTIF_ACTIONS, notifKey,
+} from "@/components/NotificationsProvider";
 import { useRole } from "@/components/RoleProvider";
-
-const EVENTS = [
-  { key: "person", label: "المستخدمون والمستفيدون والعملاء" },
-  { key: "project", label: "المشاريع" },
-  { key: "task", label: "المهام" },
-  { key: "kpi", label: "المستهدفات" },
-  { key: "meeting", label: "الاجتماعات" },
-];
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
@@ -45,20 +40,7 @@ export default function NotifSettings() {
   const { users } = useRole();
   const p = notifyPrefs;
   const [testing, setTesting] = useState(false);
-  const [selEvent, setSelEvent] = useState("person");
-
-  // تحديث نص مخصّص لنوع حدث معيّن (subject/body)
-  function setPerEvent(key, field, value) {
-    const cur = p.perEvent || {};
-    saveNotifyPrefs({ perEvent: { ...cur, [key]: { ...(cur[key] || {}), [field]: value } } });
-  }
-
-  // معاينة حيّة لرسالة النوع المختار
-  const sampleEvt = { action: "create", ...(EVENT_SAMPLE[selEvent] || EVENT_SAMPLE.person) };
-  const selTpl = pickTemplates(p, selEvent);
-  const previewSubject = renderTemplate(selTpl.subject, sampleEvt) || "(بدون عنوان)";
-  const previewBody = renderTemplate(selTpl.body, sampleEvt);
-  const perEv = (p.perEvent || {})[selEvent] || {};
+  const [openKey, setOpenKey] = useState(null); // مفتاح الإشعار المفتوح للتعديل
 
   const withEmail = users.filter((u) => (u.email || "").includes("@"));
   const withoutEmail = users.filter((u) => !(u.email || "").includes("@"));
@@ -67,6 +49,18 @@ export default function NotifSettings() {
   function toggleUser(name) {
     const next = selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name];
     saveNotifyPrefs({ recipientUsers: next });
+  }
+
+  // تحديث إشعار محدّد (on/subject/body)
+  function setNotif(key, patch) {
+    const cur = p.notifs || {};
+    saveNotifyPrefs({ notifs: { ...cur, [key]: { ...(cur[key] || {}), ...patch } } });
+  }
+  function resetNotif(key) {
+    const cur = { ...(p.notifs || {}) };
+    const on = cur[key]?.on;
+    cur[key] = { on: !!on }; // نُبقي حالة التشغيل ونمسح النصوص
+    saveNotifyPrefs({ notifs: cur });
   }
 
   function resolveEmails() {
@@ -146,19 +140,6 @@ export default function NotifSettings() {
         <div><b style={{ fontSize: 13.5 }}>إرسال أيضاً للشخص المُسنَد إليه</b><div className="muted" style={{ fontSize: 12 }}>يُرسل لبريد الموظف المسؤول عن المهمة.</div></div>
         <Toggle on={!!p.notifyAssignee} onChange={(v) => saveNotifyPrefs({ notifyAssignee: v })} disabled={dis} />
       </div>
-      <div style={{ ...row }}>
-        <div><b style={{ fontSize: 13.5 }}>الإرسال عند الإضافة فقط</b><div className="muted" style={{ fontSize: 12 }}>يُرسل عند إنشاء عنصر جديد فقط (لتقليل الرسائل).</div></div>
-        <Toggle on={!!p.onCreateOnly} onChange={(v) => saveNotifyPrefs({ onCreateOnly: v })} disabled={dis} />
-      </div>
-
-      {/* الأحداث */}
-      <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>الأحداث التي تُرسل بريداً</div>
-      {EVENTS.map((ev) => (
-        <div key={ev.key} style={row}>
-          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{ev.label}</span>
-          <Toggle on={!!p.events?.[ev.key]} onChange={(v) => saveNotifyPrefs({ events: { [ev.key]: v } })} disabled={dis} />
-        </div>
-      ))}
 
       {/* اسم المُرسِل */}
       <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>اسم المُرسِل</div>
@@ -170,13 +151,13 @@ export default function NotifSettings() {
       {/* الرسالة الافتراضية */}
       <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>الرسالة الافتراضية</div>
       <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-        تُستخدم لأي نوع لم تخصّص له رسالة خاصة. المتغيّرات المتاحة:
+        تُستخدم لأي إشعار لم تخصّص له نصاً خاصاً. المتغيّرات المتاحة:
         <span dir="rtl" style={{ display: "block", marginTop: 4 }}>
           <code>{"{الإجراء}"}</code> <code>{"{النوع}"}</code> <code>{"{الاسم}"}</code> <code>{"{الدور}"}</code> <code>{"{المسمى}"}</code> <code>{"{البريد}"}</code> <code>{"{المشروع}"}</code>
         </span>
       </p>
       <label className="field">
-        <span>عنوان الرسالة (يظهر في التوست والجرس والبريد)</span>
+        <span>عنوان الرسالة</span>
         <input value={p.titleTemplate || ""} onChange={(e) => saveNotifyPrefs({ titleTemplate: e.target.value })} placeholder="{الإجراء} {النوع}: {الاسم}" disabled={dis} />
       </label>
       <label className="field">
@@ -184,51 +165,76 @@ export default function NotifSettings() {
         <textarea rows={3} value={p.bodyTemplate || ""} onChange={(e) => saveNotifyPrefs({ bodyTemplate: e.target.value })} placeholder="{الإجراء} {النوع}: {الاسم}" disabled={dis} />
       </label>
 
-      {/* تخصيص رسالة لكل نوع */}
-      <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>تخصيص رسالة لكل نوع</div>
-      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 8 }}>
-        اختر نوعاً واكتب له رسالة خاصة. اترك الحقول فارغة ليستخدم النوع «الرسالة الافتراضية» أعلاه.
+      {/* قائمة الإشعارات المحدّدة */}
+      <div className="section-title" style={{ marginTop: 20, fontSize: 14 }}>الإشعارات التي تُرسل بريداً</div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>
+        فعّل أو أوقف كل إشعار على حدة، واضغط <b>«تعديل»</b> لتخصيص عنوانه ونصّه. الحقول الفارغة ترث «الرسالة الافتراضية».
       </p>
-      <label className="field">
-        <span>النوع</span>
-        <select value={selEvent} onChange={(e) => setSelEvent(e.target.value)} disabled={dis}>
-          {EVENTS.map((ev) => {
-            const has = (p.perEvent || {})[ev.key];
-            const custom = has && ((has.subject || "").trim() || (has.body || "").trim());
-            return <option key={ev.key} value={ev.key}>{ev.label}{custom ? " ✳︎ (مخصّصة)" : ""}</option>;
+
+      {NOTIF_CATALOG.map((cat) => (
+        <div key={cat.entityKey} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--primary)", margin: "12px 0 2px" }}>{cat.group}</div>
+          {NOTIF_ACTIONS.map((action) => {
+            const key = notifKey(cat.entityKey, action);
+            const nx = getNotif(p, cat.entityKey, action);
+            const raw = (p.notifs || {})[key] || {};
+            const isCustom = (raw.subject || "").trim() || (raw.body || "").trim();
+            const expanded = openKey === key;
+
+            // معاينة حيّة لهذا الإشعار
+            const sampleEvt = { action, ...(EVENT_SAMPLE[cat.entityKey] || {}) };
+            const previewSubject = renderTemplate(nx.subject, sampleEvt) || "(بدون عنوان)";
+            const previewBody = renderTemplate(nx.body, sampleEvt);
+
+            return (
+              <div key={key} style={{ borderBottom: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0" }}>
+                  <Toggle on={nx.on} onChange={(v) => setNotif(key, { on: v })} disabled={dis} />
+                  <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1 }}>
+                    {cat.labels[action]}
+                    {isCustom && <span className="muted" style={{ fontSize: 11, fontWeight: 700, marginInlineStart: 6 }}>✳︎ مخصّص</span>}
+                  </span>
+                  <button type="button" className={`btn sm ${expanded ? "" : "ghost"}`} onClick={() => setOpenKey(expanded ? null : key)} disabled={dis}>
+                    {expanded ? "إغلاق" : "تعديل"}
+                  </button>
+                </div>
+
+                {expanded && (
+                  <div style={{ padding: "4px 0 14px", paddingInlineStart: 56 }}>
+                    <label className="field">
+                      <span>عنوان الرسالة</span>
+                      <input value={raw.subject || ""} onChange={(e) => setNotif(key, { subject: e.target.value })} placeholder={`الافتراضي: ${p.titleTemplate || ""}`} disabled={dis} />
+                    </label>
+                    <label className="field">
+                      <span>نص الرسالة</span>
+                      <textarea rows={3} value={raw.body || ""} onChange={(e) => setNotif(key, { body: e.target.value })} placeholder={`الافتراضي: ${p.bodyTemplate || ""}`} disabled={dis} />
+                    </label>
+
+                    {/* معاينة */}
+                    <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "var(--surface)", marginTop: 4 }}>
+                      <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
+                        <div className="muted" style={{ fontSize: 10.5 }}>من: {(p.senderName || "").trim() || "ڤيوليت"}</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>{previewSubject}</div>
+                      </div>
+                      <div style={{ padding: "10px 12px", fontSize: 12.5, lineHeight: 1.85, whiteSpace: "pre-line", color: "var(--text-2)" }}>
+                        {previewBody || <span className="muted">(النص فارغ)</span>}
+                      </div>
+                    </div>
+
+                    {isCustom && (
+                      <button type="button" className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => resetNotif(key)} disabled={dis}>
+                        العودة للرسالة الافتراضية
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
           })}
-        </select>
-      </label>
-      <label className="field">
-        <span>عنوان الرسالة لهذا النوع</span>
-        <input value={perEv.subject || ""} onChange={(e) => setPerEvent(selEvent, "subject", e.target.value)} placeholder={`الافتراضي: ${p.titleTemplate || ""}`} disabled={dis} />
-      </label>
-      <label className="field">
-        <span>نص الرسالة لهذا النوع</span>
-        <textarea rows={3} value={perEv.body || ""} onChange={(e) => setPerEvent(selEvent, "body", e.target.value)} placeholder={`الافتراضي: ${p.bodyTemplate || ""}`} disabled={dis} />
-      </label>
-      {((perEv.subject || "").trim() || (perEv.body || "").trim()) && (
-        <button type="button" className="btn sm ghost" style={{ marginTop: 2 }} onClick={() => saveNotifyPrefs({ perEvent: { ...(p.perEvent || {}), [selEvent]: {} } })} disabled={dis}>
-          مسح تخصيص هذا النوع (العودة للافتراضي)
-        </button>
-      )}
-
-      {/* معاينة حيّة */}
-      <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>معاينة الرسالة</div>
-      <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface)" }}>
-        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-          <div className="muted" style={{ fontSize: 11 }}>من: {(p.senderName || "").trim() || "ڤيوليت"}</div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{previewSubject}</div>
         </div>
-        <div style={{ padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, whiteSpace: "pre-line", color: "var(--text-2)" }}>
-          {previewBody || <span className="muted">(النص فارغ)</span>}
-        </div>
-      </div>
-      <p className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-        المعاينة تستخدم بيانات مثال للتوضيح. القيم الحقيقية تُملأ تلقائياً عند الإرسال.
-      </p>
+      ))}
 
-      <div className="modal-actions" style={{ marginTop: 14 }}>
+      <div className="modal-actions" style={{ marginTop: 16 }}>
         <button className="btn" onClick={sendTest} disabled={testing || dis}>{testing ? "جاري الإرسال…" : "إرسال رسالة اختبار"}</button>
       </div>
     </div>

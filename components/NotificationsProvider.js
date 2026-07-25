@@ -60,6 +60,45 @@ export function pickTemplates(prefs, entityKey) {
   };
 }
 
+// ======= كتالوج الإشعارات المحدّدة (نوع × إجراء) =======
+export const NOTIF_ACTIONS = ["create", "update", "delete"];
+
+// لكل نوع: اسم عربي للحدث، ونصوص عناوين واضحة لكل إجراء
+export const NOTIF_CATALOG = [
+  { entityKey: "person",  entity: "مستخدم", group: "المستخدمون والعملاء",
+    labels: { create: "إضافة مستخدم / عميل جديد", update: "تعديل بيانات مستخدم", delete: "حذف مستخدم" } },
+  { entityKey: "project", entity: "مشروع", group: "المشاريع",
+    labels: { create: "إضافة مشروع جديد", update: "تعديل مشروع", delete: "حذف مشروع" } },
+  { entityKey: "task",    entity: "مهمة", group: "المهام",
+    labels: { create: "إضافة مهمة جديدة", update: "تعديل مهمة", delete: "حذف مهمة" } },
+  { entityKey: "kpi",     entity: "مستهدف", group: "المستهدفات",
+    labels: { create: "إضافة مستهدف جديد", update: "تعديل مستهدف", delete: "حذف مستهدف" } },
+  { entityKey: "meeting", entity: "اجتماع", group: "الاجتماعات",
+    labels: { create: "إضافة اجتماع جديد", update: "تعديل اجتماع", delete: "حذف اجتماع" } },
+];
+
+export const notifKey = (entityKey, action) => `${entityKey}_${action}`;
+
+// يرجّع حالة إشعار محدّد (تشغيل + عنوان + نص)، مع توافق خلفي للإعدادات القديمة
+export function getNotif(prefs, entityKey, action) {
+  const n = (prefs.notifs || {})[notifKey(entityKey, action)];
+  if (n) {
+    return {
+      on: !!n.on,
+      subject: (n.subject && n.subject.trim()) ? n.subject : prefs.titleTemplate,
+      body: (n.body && n.body.trim()) ? n.body : prefs.bodyTemplate,
+    };
+  }
+  // توافق مع الإعدادات القديمة (events + onCreateOnly + perEvent)
+  const legacyOn = !!(prefs.events || {})[entityKey] && (action === "create" || !prefs.onCreateOnly);
+  const pe = (prefs.perEvent || {})[entityKey] || {};
+  return {
+    on: legacyOn,
+    subject: (pe.subject && pe.subject.trim()) ? pe.subject : prefs.titleTemplate,
+    body: (pe.body && pe.body.trim()) ? pe.body : prefs.bodyTemplate,
+  };
+}
+
 let _toastSeq = 0;
 
 export function NotificationsProvider({ children }) {
@@ -120,9 +159,10 @@ export function NotificationsProvider({ children }) {
   const maybeSendEmail = useCallback(async (evt, title) => {
     const p = prefsRef.current;
     if (!p.emailEnabled) return;
-    if (p.onCreateOnly && evt.action !== "create") return;
     const key = ENTITY_EVENT[evt.entity];
-    if (!key || !p.events[key]) return;
+    if (!key) return;
+    const nx = getNotif(p, key, evt.action);
+    if (!nx.on) return;
 
     const set = new Set();
     // إيميلات المستخدمين المختارين
@@ -141,10 +181,9 @@ export function NotificationsProvider({ children }) {
     const to = [...set];
     if (!to.length) return;
 
-    // العنوان والنص حسب تخصيص النوع (أو الافتراضي)
-    const tpl = pickTemplates(p, key);
-    const subject = renderTemplate(tpl.subject, evt) || title;
-    const bodyText = renderTemplate(tpl.body, evt);
+    // العنوان والنص حسب تخصيص هذا الإشعار (أو الافتراضي)
+    const subject = renderTemplate(nx.subject, evt) || title;
+    const bodyText = renderTemplate(nx.body, evt);
     const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;color:#23201C">
       <h2 style="color:#E36A62;margin:0 0 10px">${subject}</h2>
       <div style="color:#555;font-size:14px;line-height:1.9;white-space:pre-line">${bodyText}</div>

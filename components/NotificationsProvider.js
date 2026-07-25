@@ -16,28 +16,48 @@ const ACTION_AR = {
 const ENTITY_EVENT = { "مستخدم": "person", "مشروع": "project", "مهمة": "task", "مستهدف": "kpi", "اجتماع": "meeting" };
 const ACTION_PHRASE = { create: "تمت إضافة", update: "تم تحديث", delete: "تم حذف" };
 
+const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
+
 export const DEFAULT_NOTIFY = {
   emailEnabled: false,        // المفتاح الرئيسي لإشعارات البريد
+  senderName: "",             // اسم المُرسِل الظاهر في البريد (فارغ = الافتراضي)
   recipientUsers: [],         // أسماء المستخدمين المستقبِلين (تُحلّ إلى إيميلاتهم)
   extraEmails: "",            // بريد إضافي خارجي (اختياري، يفصل بفاصلة)
   notifyAssignee: false,      // إرسال أيضاً للشخص المُسنَد (المهام)
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
   events: { person: true, project: true, task: true, kpi: true, meeting: true },
-  // قوالب النصوص — المتغيّرات المتاحة: {الإجراء} {النوع} {الاسم}
+  // القالب الافتراضي — المتغيّرات: {الإجراء} {النوع} {الاسم} {الدور} {المسمى} {البريد} {المشروع}
   titleTemplate: "{الإجراء} {النوع}: {الاسم}",
   bodyTemplate: "{الإجراء} {النوع}: {الاسم}\nإشعار تلقائي من نظام ڤيوليت لإدارة المشاريع.",
+  // تخصيص رسالة لكل نوع حدث — لكل مفتاح { subject, body }.
+  // الحقل الفارغ يرث القالب الافتراضي أعلاه.
+  perEvent: {},
 };
 
 // استبدال المتغيّرات في القالب بقيم الحدث
 export function renderTemplate(tpl, evt) {
   const phrase = ACTION_PHRASE[evt.action] || "تحديث";
+  const rec = evt.record || {};
   return String(tpl || "")
     .split("{الإجراء}").join(phrase)
     .split("{النوع}").join(evt.entity || "")
     .split("{الاسم}").join(evt.label || "")
-    .replace(/:\s*(?=\n|$)/g, "")  // إزالة نقطتين معلّقتين عند غياب الاسم
+    .split("{الدور}").join(ROLE_AR[rec.role] || rec.role || "")
+    .split("{المسمى}").join(rec.title || "")
+    .split("{البريد}").join(rec.email || "")
+    .split("{المشروع}").join(rec.project || (Array.isArray(rec.projects) ? rec.projects.join("، ") : "") || "")
+    .replace(/:\s*(?=\n|$)/g, "")  // إزالة نقطتين معلّقتين عند غياب القيمة
     .replace(/[ \t]+/g, " ")
     .trim();
+}
+
+// يختار قالب العنوان/النص لحدثٍ ما: تخصيص النوع إن وُجد، وإلا الافتراضي
+export function pickTemplates(prefs, entityKey) {
+  const pe = (prefs.perEvent || {})[entityKey] || {};
+  return {
+    subject: (pe.subject && pe.subject.trim()) ? pe.subject : prefs.titleTemplate,
+    body: (pe.body && pe.body.trim()) ? pe.body : prefs.bodyTemplate,
+  };
 }
 
 let _toastSeq = 0;
@@ -121,16 +141,19 @@ export function NotificationsProvider({ children }) {
     const to = [...set];
     if (!to.length) return;
 
-    const bodyText = renderTemplate(p.bodyTemplate, evt);
+    // العنوان والنص حسب تخصيص النوع (أو الافتراضي)
+    const tpl = pickTemplates(p, key);
+    const subject = renderTemplate(tpl.subject, evt) || title;
+    const bodyText = renderTemplate(tpl.body, evt);
     const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;color:#23201C">
-      <h2 style="color:#E36A62;margin:0 0 10px">${title}</h2>
+      <h2 style="color:#E36A62;margin:0 0 10px">${subject}</h2>
       <div style="color:#555;font-size:14px;line-height:1.9;white-space:pre-line">${bodyText}</div>
     </div>`;
     try {
       await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject: title, html }),
+        body: JSON.stringify({ to, subject, html, fromName: (p.senderName || "").trim() || undefined }),
       });
     } catch {}
   }, []);

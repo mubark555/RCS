@@ -80,9 +80,9 @@ export default function Dashboard() {
     <div>
       {/* الهيرو */}
       <div className="dash-hero">
-        <span className="hav">{(viewer?.name || "ف").slice(0, 1)}</span>
+        <span className="hav">{(viewer?.name || "س").slice(0, 1)}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2>مرحباً {viewer?.name || "بفريق ڤيوليت"} 👋</h2>
+          <h2>مرحباً {viewer?.name || "بفريق سيم برايم"} 👋</h2>
           <p>
             {clientProject ? `متابعة مشروع ${clientProject} — ` : "لديك "}
             <b>{s.weekCount} استحقاقات</b> تحتاج المتابعة و<b>{s.delayed} مهام متعثرة</b> هذا الأسبوع

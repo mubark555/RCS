@@ -47,7 +47,7 @@ export default function SettingsPage() {
   function restore() {
     if (!confirm("استعادة الإعدادات الافتراضية؟")) return;
     reset();
-    setF({ appName: "ڤيوليت", tagline: "DIGITAL MARKETING", logoText: "ڤ", logoUrl: "", primaryColor: "#e05a50" });
+    setF({ appName: "سيم برايم", tagline: "DIGITAL MARKETING", logoText: "س", logoUrl: "", primaryColor: "#e05a50" });
     setSaved(false);
   }
 

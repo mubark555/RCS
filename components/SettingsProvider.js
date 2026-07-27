@@ -3,9 +3,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 
 export const DEFAULT_SETTINGS = {
-  appName: "ڤيوليت",
+  appName: "سيم برايم",
   tagline: "DIGITAL MARKETING",
-  logoText: "ڤ",
+  logoText: "س",
   logoUrl: "",
   primaryColor: "#e05a50",
 };

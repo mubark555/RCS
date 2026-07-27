@@ -75,9 +75,9 @@ export default function Sidebar() {
         )}
 
         <div className="side-user">
-          <span className="av">{(viewer?.name || "ف").slice(0, 1)}</span>
+          <span className="av">{(viewer?.name || "س").slice(0, 1)}</span>
           <span>
-            <b>{viewer?.name || "فريق ڤيوليت"}</b>
+            <b>{viewer?.name || "فريق سيم برايم"}</b>
             <small>{viewer?.title || authEmail || "إدارة مشاريع سيم برايم"}</small>
           </span>
           {isCloud && (

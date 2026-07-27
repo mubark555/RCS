@@ -155,7 +155,7 @@ export default function LoginScreen() {
               <label style={{ display: "block", fontSize: 14, fontWeight: 700, marginBottom: 9 }}>البريد الإلكتروني</label>
               <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.boxBg, border: `1.5px solid ${emailError ? C.primary : "transparent"}`, borderRadius: 14, padding: "0 14px", height: 54 }}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9BFAD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="3" /><path d="m3 6 9 6 9-6" /></svg>
-                <input value={email} onChange={(e) => { setEmail(e.target.value); setEmailError(""); }} type="email" dir="ltr" placeholder="name@violet.sa" required autoFocus style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 15.5, color: C.ink, textAlign: "left" }} />
+                <input value={email} onChange={(e) => { setEmail(e.target.value); setEmailError(""); }} type="email" dir="ltr" placeholder="name@seemprime.sa" required autoFocus style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: 15.5, color: C.ink, textAlign: "left" }} />
               </div>
               {emailError && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, color: C.primary, fontSize: 13, fontWeight: 600, marginTop: 10 }}>

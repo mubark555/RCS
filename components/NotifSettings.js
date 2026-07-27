@@ -80,8 +80,8 @@ export default function NotifSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to,
-          subject: "اختبار إشعار ڤيوليت",
-          html: buildEmailHtml("اختبار إشعار ڤيوليت", "هذه رسالة اختبار من نظام ڤيوليت. الإعدادات تعمل بنجاح ✅", systemUrlFrom(p)),
+          subject: "اختبار إشعار سيم برايم",
+          html: buildEmailHtml("اختبار إشعار سيم برايم", "هذه رسالة اختبار من نظام سيم برايم. الإعدادات تعمل بنجاح ✅", systemUrlFrom(p)),
           fromName: (p.senderName || "").trim() || undefined,
         }),
       });
@@ -149,7 +149,7 @@ export default function NotifSettings() {
       <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>اسم المُرسِل ورابط النظام</div>
       <label className="field">
         <span>الاسم الظاهر في خانة «من» بالبريد (اتركه فارغاً للاسم الافتراضي)</span>
-        <input value={p.senderName || ""} onChange={(e) => saveNotifyPrefs({ senderName: e.target.value })} placeholder="ڤيوليت" disabled={dis} />
+        <input value={p.senderName || ""} onChange={(e) => saveNotifyPrefs({ senderName: e.target.value })} placeholder="سيم برايم" disabled={dis} />
       </label>
       <label className="field">
         <span>رابط النظام (يظهر كزر «فتح النظام» في كل رسالة — اتركه فارغاً لاستخدام رابط الموقع الحالي تلقائياً)</span>
@@ -221,7 +221,7 @@ export default function NotifSettings() {
                     {/* معاينة */}
                     <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", background: "var(--surface)", marginTop: 4 }}>
                       <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-                        <div className="muted" style={{ fontSize: 10.5 }}>من: {(p.senderName || "").trim() || "ڤيوليت"}</div>
+                        <div className="muted" style={{ fontSize: 10.5 }}>من: {(p.senderName || "").trim() || "سيم برايم"}</div>
                         <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>{previewSubject}</div>
                       </div>
                       <div style={{ padding: "10px 12px", fontSize: 12.5, lineHeight: 1.85, whiteSpace: "pre-line", color: "var(--text-2)" }}>

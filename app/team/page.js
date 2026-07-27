@@ -472,7 +472,7 @@ function UserForm({ initial, projectNames = [], onSave, onCancel }) {
         </label>
         <label className="field">
           <span>البريد الإلكتروني</span>
-          <input value={f.email} onChange={set("email")} placeholder="name@violet.sa" />
+          <input value={f.email} onChange={set("email")} placeholder="name@seemprime.sa" />
         </label>
         <label className="field">
           <span>الجوال</span>

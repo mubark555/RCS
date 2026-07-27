@@ -56,7 +56,7 @@ export default function TaskForm({ initial, users = [], onSave, onCancel }) {
 
   const userNames = useMemo(() => {
     const names = users.map((u) => u.name).filter(Boolean);
-    return names.length ? names : ["VULET", "SEEM", "IT TEAM", "CONTENT"];
+    return names.length ? names : ["سيم برايم", "IT TEAM", "CONTENT"];
   }, [users]);
 
   const chainOn = f.chain.length > 0 || f._chainOn;

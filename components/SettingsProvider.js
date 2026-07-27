@@ -3,9 +3,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 
 export const DEFAULT_SETTINGS = {
-  appName: "ڤيوليت",
+  appName: "سيم برايم",
   tagline: "DIGITAL MARKETING",
-  logoText: "ڤ",
+  logoText: "س",
   logoUrl: "",
   primaryColor: "#e05a50",
 };
@@ -57,7 +57,7 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     applyTheme(settings.primaryColor);
     try {
-      document.title = `${settings.appName || "ڤيوليت"} - إدارة المشاريع`;
+      document.title = `${settings.appName || "سيم برايم"} - إدارة المشاريع`;
     } catch {}
     // أيقونة التبويب (favicon): شعار النظام المرفوع إن وُجد
     try {

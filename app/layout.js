@@ -11,9 +11,9 @@ import { NotificationsProvider } from "@/components/NotificationsProvider";
 import AppShell from "@/components/AppShell";
 
 export const metadata = {
-  title: "ڤيوليت - إدارة المشاريع",
+  title: "سيم برايم - إدارة المشاريع",
   description:
-    "نظام إلكتروني متكامل لإدارة مشاريع ومهام المتعاقدين مع الشريك التشغيلي ڤيوليت",
+    "نظام إلكتروني متكامل لإدارة مشاريع ومهام المتعاقدين مع الشريك التشغيلي سيم برايم",
 };
 
 export default function RootLayout({ children }) {

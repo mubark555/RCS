@@ -179,7 +179,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
                   <select value={handTo} onChange={(e) => setHandTo(e.target.value)}>
                     <option value="">تحويل إلى…</option>
                     {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-                    {["VULET", "SEEM", "IT TEAM", "CONTENT"].map((x) => <option key={x} value={x}>{x}</option>)}
+                    {["سيم برايم", "IT TEAM", "CONTENT"].map((x) => <option key={x} value={x}>{x}</option>)}
                   </select>
                   <input placeholder="ملاحظة (اختياري)" value={handNote} onChange={(e) => setHandNote(e.target.value)} />
                   <button className="btn primary" type="button" onClick={doHandoff} disabled={!handTo}>تحويل</button>

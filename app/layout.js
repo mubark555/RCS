@@ -10,7 +10,7 @@ import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 
 export const metadata = {
-  title: "نظام إدارة سيم برايم | Seem Prime",
+  title: "نظام إدارة سيم برايم",
   description:
     "نظام إلكتروني متكامل لإدارة مشاريع ومهام المتعاقدين مع الشريك التشغيلي سيم برايم",
 };

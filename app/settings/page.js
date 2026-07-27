@@ -164,7 +164,74 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <FinanceAccessCard />
+
       <NotifSettings />
+    </div>
+  );
+}
+
+// إدارة صلاحية الوصول لقسم المالية — يعيّنها مالك النظام (المدير)
+function FinanceAccessCard() {
+  const { users, financeUsers, saveFinanceUsers } = useRole();
+  const [sel, setSel] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const current = sel ?? (Array.isArray(financeUsers) ? financeUsers : []);
+  // المدراء لهم صلاحية دائمة؛ الباقون يُمنحون يدوياً
+  const managers = users.filter((u) => u.role === "manager");
+  const others = users.filter((u) => u.role !== "manager");
+
+  function toggle(id) {
+    setSaved(false);
+    setSel((prev) => {
+      const base = prev ?? current;
+      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+    });
+  }
+  async function apply() {
+    await saveFinanceUsers(current);
+    setSaved(true);
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="section-title"><span>صلاحية قسم المالية</span></div>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+        قسم المالية (فواتير فيوليت ← سيم برايم والمدفوعات) حسّاس ويظهر فقط للحسابات التي تعيّنها هنا.
+        <b> المدراء لهم صلاحية دائمة.</b>
+      </p>
+
+      {managers.length > 0 && (
+        <div className="fa-list">
+          {managers.map((u) => (
+            <div className="fa-row" key={u.id}>
+              <div><b>{u.name}</b> <span className="pill" style={{ fontSize: 11 }}>مدير</span></div>
+              <span className="pill" style={{ background: "#eaf6ef", color: "#16a34a" }}>صلاحية دائمة</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="fa-list" style={{ marginTop: 6 }}>
+        {others.length === 0 ? (
+          <div className="muted" style={{ fontSize: 13 }}>لا يوجد أعضاء آخرون لإضافتهم. أضِف المستخدمين من قسم «الفريق».</div>
+        ) : others.map((u) => {
+          const on = current.includes(u.id);
+          return (
+            <label className="fa-row" key={u.id} style={{ cursor: "pointer" }}>
+              <div><b>{u.name}</b> {u.title ? <span className="muted" style={{ fontSize: 12 }}>· {u.title}</span> : null}</div>
+              <button type="button" className={`fa-toggle ${on ? "on" : ""}`} onClick={() => toggle(u.id)} aria-pressed={on}>
+                <span />
+              </button>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="modal-actions" style={{ marginTop: 16 }}>
+        <button className="btn primary" onClick={apply}>{saved ? "✓ تم الحفظ" : "حفظ الصلاحيات"}</button>
+      </div>
     </div>
   );
 }

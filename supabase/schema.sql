@@ -105,6 +105,49 @@ create table if not exists public.app_settings (
   updated_at timestamptz default now()
 );
 
+-- ------------------------- الفواتير (فيوليت ← سيم برايم) -------------------------
+create table if not exists public.invoices (
+  id          uuid primary key default gen_random_uuid(),
+  order_index int         default 0,
+  number      text        default '',          -- رقم الفاتورة
+  provider    text        default 'فيوليت',     -- مُصدِر الفاتورة
+  payer       text        default 'سيم برايم',   -- الجهة الدافعة
+  project     text        default '',           -- المشروع المرتبط (اختياري)
+  kpi_id      text        default '',           -- مؤشر الأداء المرتبط (اختياري)
+  amount      numeric     default 0,
+  currency    text        default 'ريال',
+  issue_date  date,
+  due_date    date,
+  status      text        default 'مسودة',      -- مسودة | مُرسلة | مدفوعة | ملغاة
+  note        text        default '',
+  created_at  timestamptz default now()
+);
+create index if not exists invoices_project_idx on public.invoices (project);
+create index if not exists invoices_due_idx     on public.invoices (due_date);
+
+-- ------------------------- المدفوعات (سداد الفواتير) -------------------------
+create table if not exists public.payments (
+  id          uuid primary key default gen_random_uuid(),
+  invoice_id  uuid        references public.invoices(id) on delete cascade,
+  amount      numeric     default 0,
+  date        date,
+  method      text        default 'تحويل بنكي', -- تحويل بنكي | شيك | نقدي | أخرى
+  note        text        default '',
+  created_at  timestamptz default now()
+);
+create index if not exists payments_invoice_idx on public.payments (invoice_id);
+
+-- ------------------------- سجل الأنشطة -------------------------
+create table if not exists public.activity (
+  id          uuid primary key default gen_random_uuid(),
+  actor       text        default '',           -- من نفّذ الإجراء
+  action      text        default 'update',      -- create | update | delete
+  entity      text        default '',            -- مهمة | مشروع | فاتورة …
+  label       text        default '',            -- اسم/عنوان العنصر المتأثر
+  created_at  timestamptz default now()
+);
+create index if not exists activity_created_idx on public.activity (created_at desc);
+
 -- ------------------------- المستخدمون -------------------------
 create table if not exists public.users (
   id          uuid primary key default gen_random_uuid(),
@@ -164,9 +207,21 @@ alter table public.users    enable row level security;
 alter table public.kpis     enable row level security;
 alter table public.notifications enable row level security;
 alter table public.app_settings enable row level security;
+alter table public.invoices enable row level security;
+alter table public.payments enable row level security;
+alter table public.activity enable row level security;
 
 do $$
 begin
+  if not exists (select 1 from pg_policies where tablename='invoices' and policyname='invoices_all') then
+    create policy invoices_all on public.invoices for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='payments' and policyname='payments_all') then
+    create policy payments_all on public.payments for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='activity' and policyname='activity_all') then
+    create policy activity_all on public.activity for all using (true) with check (true);
+  end if;
   if not exists (select 1 from pg_policies where tablename='tasks' and policyname='tasks_all') then
     create policy tasks_all on public.tasks for all using (true) with check (true);
   end if;

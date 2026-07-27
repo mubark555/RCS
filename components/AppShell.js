@@ -7,6 +7,7 @@ import LoginScreen from "@/components/LoginScreen";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
+import DeadlineAlerts from "@/components/DeadlineAlerts";
 import { ensureCloudSeeded } from "@/lib/store";
 
 export default function AppShell({ children }) {
@@ -50,6 +51,7 @@ export default function AppShell({ children }) {
 
   return (
     <div className="app">
+      <DeadlineAlerts />
       <Sidebar />
       <div className="main">
         <TopBar />

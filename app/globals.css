@@ -3126,3 +3126,228 @@ tbody tr:last-child td {
   margin: 2px 2px 0 0;
   direction: rtl;
 }
+
+/* ============ المالية والتقارير (بطاقات + رسوم) ============ */
+.fin-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.fin-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+.fin-card .fin-ic {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.fin-card .v {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.fin-card .v small {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.fin-card .k {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 3px;
+}
+.fin-charts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.fin-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.fin-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fin-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.fin-tbl {
+  min-width: 760px;
+}
+
+/* صحّة المشاريع (صفوف تقدّم) */
+.health-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 6px 0;
+}
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.health-row .hl-lbl {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  width: 88px;
+  flex: none;
+}
+.health-row .hl-v {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  width: 26px;
+  text-align: left;
+}
+
+/* ============ سجل الأنشطة ============ */
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+}
+.act-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.act-item:last-child {
+  border-bottom: none;
+}
+.act-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.act-body {
+  flex: 1;
+  min-width: 0;
+}
+.act-txt {
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.act-txt b {
+  color: var(--ink);
+  font-weight: 800;
+}
+.act-label {
+  color: var(--primary-2);
+  font-weight: 700;
+}
+.act-time {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ============ صلاحية المالية (تبديل) ============ */
+.fa-list {
+  display: flex;
+  flex-direction: column;
+}
+.fa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.fa-row:last-child {
+  border-bottom: none;
+}
+.fa-toggle {
+  width: 44px;
+  height: 25px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  border: none;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.16s;
+  flex: none;
+  padding: 0;
+}
+.fa-toggle span {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.16s;
+}
+.fa-toggle.on {
+  background: var(--teal);
+}
+.fa-toggle.on span {
+  transform: translateX(-19px);
+}
+
+/* ============ الطباعة (تقارير/فواتير → PDF) ============ */
+@media print {
+  .sidebar,
+  .topbar,
+  .bell-wrap,
+  .toast-stack,
+  .btn {
+    display: none !important;
+  }
+  .app,
+  .main,
+  .content {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  .card,
+  .fin-card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
+
+/* ============ استجابة الجوال للمالية/التقارير ============ */
+@media (max-width: 900px) {
+  .fin-charts {
+    grid-template-columns: 1fr;
+  }
+  .fin-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

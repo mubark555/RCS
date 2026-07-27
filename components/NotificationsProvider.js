@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { onDataChange, notificationsStore, appSettings } from "@/lib/store";
+import { onDataChange, notificationsStore, activityStore, appSettings } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 
 const NotifCtx = createContext(null);
@@ -127,7 +127,8 @@ export function getNotif(prefs, entityKey, action) {
 let _toastSeq = 0;
 
 export function NotificationsProvider({ children }) {
-  const { users } = useRole();
+  const { users, viewer } = useRole();
+  const viewerRef = useRef(null);
   const [items, setItems] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [open, setOpen] = useState(false);
@@ -138,6 +139,7 @@ export function NotificationsProvider({ children }) {
 
   useEffect(() => { prefsRef.current = notifyPrefs; }, [notifyPrefs]);
   useEffect(() => { usersRef.current = users; }, [users]);
+  useEffect(() => { viewerRef.current = viewer; }, [viewer]);
 
   const reload = useCallback(async () => {
     const list = await notificationsStore.list().catch(() => []);
@@ -232,6 +234,10 @@ export function NotificationsProvider({ children }) {
       try {
         const rec = await notificationsStore.create({ kind: evt.action, entity: evt.entity, title, body: "", read: false });
         if (rec) setItems((prev) => [rec, ...prev].slice(0, 50));
+      } catch {}
+      // توثيق دائم في سجل الأنشطة مع اسم المنفِّذ
+      try {
+        activityStore.log({ actor: viewerRef.current?.name || "", action: evt.action, entity: evt.entity, label: evt.label });
       } catch {}
       maybeSendEmail(evt, title);
     });

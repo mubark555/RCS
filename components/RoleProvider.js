@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { usersStore, projectsStore } from "@/lib/store";
+import { usersStore, projectsStore, appSettings } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
 import { projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
 
@@ -14,6 +14,8 @@ export function RoleProvider({ children }) {
   const [viewerId, setViewerId] = useState(null);
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
+  // قائمة الحسابات المخوّلة بقسم المالية (معرّفات مستخدمين) — يعيّنها مالك النظام
+  const [financeUsers, setFinanceUsers] = useState([]);
   const boundRef = useRef(false);
 
   const reloadUsers = useCallback(async () => {
@@ -73,6 +75,20 @@ export function RoleProvider({ children }) {
     })();
   }, [reloadUsers, reloadProjects, isCloud, authed, authEmail, resolveCloudViewer]);
 
+  // تحميل قائمة صلاحية المالية (مشتركة سحابياً عبر app_settings)
+  useEffect(() => {
+    appSettings.get("finance_access").then((v) => {
+      const arr = Array.isArray(v?.users) ? v.users : [];
+      setFinanceUsers(arr);
+    }).catch(() => {});
+  }, [authEmail, ready]);
+
+  const saveFinanceUsers = useCallback(async (ids) => {
+    const arr = Array.isArray(ids) ? ids : [];
+    setFinanceUsers(arr);
+    try { await appSettings.set("finance_access", { users: arr }); } catch {}
+  }, []);
+
   // في الوضع السحابي: منع التبديل اليدوي إلا للمدير (لأغراض الدعم)
   const allowSwitch = !isCloud;
 
@@ -106,10 +122,12 @@ export function RoleProvider({ children }) {
   const clientProject = role === "client" ? (scopeProjects && scopeProjects[0]) || viewer?.project || null : null;
   const readOnly = role === "client";
   const canManage = role === "manager";
+  // صلاحية المالية: المدير دائماً + أي حساب عيّنه المالك في القائمة
+  const canFinance = canManage || (viewerId != null && financeUsers.includes(viewerId));
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, ready, allowSwitch, noAccess }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, financeUsers, saveFinanceUsers, ready, allowSwitch, noAccess }}
     >
       {children}
     </RoleCtx.Provider>
@@ -119,7 +137,7 @@ export function RoleProvider({ children }) {
 export function useRole() {
   return useContext(RoleCtx) || {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
-    readOnly: false, canManage: true, ready: false, allowSwitch: true, noAccess: false,
-    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [],
+    readOnly: false, canManage: true, canFinance: true, financeUsers: [], ready: false, allowSwitch: true, noAccess: false,
+    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
 }

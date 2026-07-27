@@ -5,12 +5,13 @@ import "@fontsource/cairo/700.css";
 import "@fontsource/cairo/800.css";
 import "./globals.css";
 import { SettingsProvider } from "@/components/SettingsProvider";
+import { AuthProvider } from "@/components/AuthProvider";
 import { RoleProvider } from "@/components/RoleProvider";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
+import { NotificationsProvider } from "@/components/NotificationsProvider";
+import AppShell from "@/components/AppShell";
 
 export const metadata = {
-  title: "نظام إدارة سيم برايم",
+  title: "سيم برايم - إدارة المشاريع",
   description:
     "نظام إلكتروني متكامل لإدارة مشاريع ومهام المتعاقدين مع الشريك التشغيلي سيم برايم",
 };
@@ -20,15 +21,13 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl">
       <body>
         <SettingsProvider>
-          <RoleProvider>
-            <div className="app">
-              <Sidebar />
-              <div className="main">
-                <TopBar />
-                <div className="content">{children}</div>
-              </div>
-            </div>
-          </RoleProvider>
+          <AuthProvider>
+            <RoleProvider>
+              <NotificationsProvider>
+                <AppShell>{children}</AppShell>
+              </NotificationsProvider>
+            </RoleProvider>
+          </AuthProvider>
         </SettingsProvider>
       </body>
     </html>

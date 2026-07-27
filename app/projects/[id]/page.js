@@ -3,22 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { projectsStore, tasksStore, meetingsStore, filesStore, usersStore } from "@/lib/store";
+import { projectsStore, tasksStore, meetingsStore, filesStore, usersStore, kpisStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskDetail from "@/components/TaskDetail";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
-import { STATUS_META, HEALTH_META, PRIORITY_META, projManagers, projClients, projMembers } from "@/lib/constants";
+import { STATUS_META, HEALTH_META, PRIORITY_META, VISIBILITY_META, projManagers, projClients, projMembers, kpiAssignees, isPublicKpi } from "@/lib/constants";
 
 export default function ProjectPage() {
   const { id } = useParams();
-  const { readOnly } = useRole();
+  const { readOnly, role } = useRole();
   const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [files, setFiles] = useState([]);
   const [users, setUsers] = useState([]);
+  const [kpis, setKpis] = useState([]);
   const [viewingTask, setViewingTask] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
   const [lnk, setLnk] = useState({ label: "", url: "" });
@@ -29,20 +30,25 @@ export default function ProjectPage() {
     const p = projs.find((x) => x.id === id) || null;
     setProject(p);
     if (!p) return;
-    const [ts, ms, fs, us] = await Promise.all([
+    const [ts, ms, fs, us, ks] = await Promise.all([
       tasksStore.list().catch(() => []),
       meetingsStore.list().catch(() => []),
       filesStore.list().catch(() => []),
       usersStore.list().catch(() => []),
+      kpisStore.list().catch(() => []),
     ]);
     setTasks(ts.filter((t) => t.project === p.name));
     setMeetings(ms.filter((m) => m.project === p.name));
     setFiles(fs.filter((f) => f.project === p.name));
     setUsers(us);
+    // مستهدفات هذا المشروع — العميل يرى العامة فقط، الفريق يرى الكل
+    const mine = ks.filter((k) => k.project === p.name);
+    setKpis(role === "client" ? mine.filter(isPublicKpi) : mine);
   }
   useEffect(() => {
     loadAll();
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, role]);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -114,6 +120,51 @@ export default function ProjectPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="card pd-card">
+            <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span>المستهدفات ({kpis.length})</span>
+              {role === "client" && kpis.length > 0 && (
+                <span className="pill" style={{ fontSize: 11, background: "#eaf6ef", color: "#16a34a" }}>المستهدفات العامة</span>
+              )}
+            </div>
+            {kpis.length === 0 ? (
+              <div className="muted" style={{ fontSize: 13 }}>
+                {role === "client" ? "لا توجد مستهدفات عامة لهذا المشروع." : "لا مستهدفات مرتبطة بهذا المشروع بعد."}
+              </div>
+            ) : kpis.map((k) => {
+              const pct = k.target ? Math.min(999, Math.round((k.current / k.target) * 100)) : 0;
+              const barPct = Math.min(100, pct);
+              const barColor = pct >= 85 ? "#16a34a" : pct >= 60 ? "#c88a2e" : "#e0574e";
+              const vis = VISIBILITY_META[isPublicKpi(k) ? "public" : "private"];
+              const owners = kpiAssignees(k);
+              const unit = k.unit ? ` ${k.unit}` : "";
+              return (
+                <div key={k.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--line, #ece6da)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <b style={{ fontSize: 14 }}>{k.name}</b>
+                    {role !== "client" && (
+                      <span className="pill" style={{ fontSize: 11, background: vis.bg, color: vis.color }} title={vis.desc}>
+                        {isPublicKpi(k) ? "◉" : "◍"} {vis.ar}
+                      </span>
+                    )}
+                    <span style={{ marginInlineStart: "auto", fontSize: 13, fontWeight: 800, color: barColor }}>{pct}%</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--muted)", margin: "6px 0" }}>
+                    <span>{k.category}</span>
+                    <span><b style={{ color: "var(--ink)" }}>{k.current}{unit}</b> من {k.target}{unit}</span>
+                  </div>
+                  <div className="progress" style={{ height: 8 }}><span style={{ width: `${barPct}%`, background: barColor }} /></div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                    <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>المسؤولون:</span>
+                    {owners.length === 0
+                      ? <span className="muted" style={{ fontSize: 12 }}>غير مُسند</span>
+                      : owners.map((n) => <span key={n} className="pill" style={{ fontSize: 11.5, padding: "3px 9px" }}>{n}</span>)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="card pd-card">

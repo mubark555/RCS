@@ -57,9 +57,22 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     applyTheme(settings.primaryColor);
     try {
-      document.title = `${settings.appName} | نظام إدارة المشاريع`;
+      document.title = `${settings.appName || "سيم برايم"} - إدارة المشاريع`;
     } catch {}
-  }, [settings.primaryColor, settings.appName]);
+    // أيقونة التبويب (favicon): شعار النظام المرفوع إن وُجد
+    try {
+      if (settings.logoUrl) {
+        let link = document.querySelector("link#app-favicon");
+        if (!link) {
+          link = document.createElement("link");
+          link.id = "app-favicon";
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.href = settings.logoUrl;
+      }
+    } catch {}
+  }, [settings.primaryColor, settings.appName, settings.logoUrl]);
 
   const save = useCallback((patch) => {
     setSettings((prev) => {

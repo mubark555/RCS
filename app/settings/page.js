@@ -3,17 +3,53 @@
 import { useRef, useState } from "react";
 import { useSettings } from "@/components/SettingsProvider";
 import { useRole } from "@/components/RoleProvider";
+import NotifSettings from "@/components/NotifSettings";
 import Icon from "@/components/Icon";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
 
-function fileToDataUrl(file) {
+function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(r.result);
     r.onerror = reject;
     r.readAsDataURL(file);
   });
+}
+
+// معالجة احترافية للشعار: SVG يبقى متجهاً (أعلى جودة)، والصور النقطية
+// تُحجَّم بجودة عالية إلى حدٍّ أقصى مع الحفاظ على الشفافية والنسبة.
+async function processLogo(file, maxSize = 512) {
+  // SVG متجه — نبقيه كما هو للحصول على حدّة مثالية بأي حجم
+  if (file.type === "image/svg+xml") return readAsDataUrl(file);
+
+  const dataUrl = await readAsDataUrl(file);
+  const img = await new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = dataUrl;
+  });
+
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return dataUrl;
+
+  // نُصغّر فقط (لا نُكبّر حتى لا تتشوّه الصورة الصغيرة)
+  const scale = Math.min(1, maxSize / Math.max(w, h));
+  const tw = Math.max(1, Math.round(w * scale));
+  const th = Math.max(1, Math.round(h * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, tw, th);
+
+  // PNG يحافظ على الشفافية وحدّة الشعارات
+  return canvas.toDataURL("image/png");
 }
 
 export default function SettingsPage() {
@@ -34,10 +70,16 @@ export default function SettingsPage() {
   async function onLogo(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await fileToDataUrl(file);
-    setF((s) => ({ ...s, logoUrl: url }));
-    setSaved(false);
-    if (logoRef.current) logoRef.current.value = "";
+    try {
+      const url = await processLogo(file);
+      setF((s) => ({ ...s, logoUrl: url }));
+      save({ logoUrl: url }); // حفظ فوري ليظهر مباشرة في كل النظام
+      setSaved(false);
+    } catch {
+      alert("تعذّرت معالجة الصورة. جرّب صورة أخرى (PNG أو SVG مفضّلة).");
+    } finally {
+      if (logoRef.current) logoRef.current.value = "";
+    }
   }
 
   function apply() {
@@ -65,11 +107,19 @@ export default function SettingsPage() {
           <div className="field">
             <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>شعار النظام (صورة)</span>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input ref={logoRef} type="file" accept="image/*" hidden onChange={onLogo} />
+              <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden onChange={onLogo} />
+              {f.logoUrl && (
+                <span style={{ width: 44, height: 44, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", display: "grid", placeItems: "center", overflow: "hidden", flex: "none" }}>
+                  <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
+                </span>
+              )}
               <button type="button" className="btn" onClick={() => logoRef.current?.click()}><Icon name="upload" size={16} /> رفع صورة</button>
               <input value={f.logoUrl?.startsWith("data:") ? "" : (f.logoUrl || "")} onChange={set("logoUrl")} placeholder="أو الصق رابط صورة…" />
-              {f.logoUrl && <button type="button" className="btn sm ghost" onClick={() => setF((s) => ({ ...s, logoUrl: "" }))}>إزالة</button>}
+              {f.logoUrl && <button type="button" className="btn sm ghost" onClick={() => { setF((s) => ({ ...s, logoUrl: "" })); save({ logoUrl: "" }); }}>إزالة</button>}
             </div>
+            <p className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+              للحصول على أفضل جودة استخدم صورة مربّعة وواضحة بصيغة <b dir="ltr">PNG</b> بخلفية شفافة، أو <b dir="ltr">SVG</b> (الأفضل — حدّة مثالية بأي حجم). تُحجَّم الصورة تلقائياً بجودة عالية.
+            </p>
           </div>
 
           <div className="section-title" style={{ marginTop: 20 }}>اللون الأساسي</div>
@@ -94,8 +144,8 @@ export default function SettingsPage() {
         <div className="card">
           <div className="section-title">معاينة</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-            <span style={{ width: 48, height: 48, borderRadius: 14, background: f.primaryColor, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22, overflow: "hidden" }}>
-              {f.logoUrl ? <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (f.logoText || "؟")}
+            <span style={{ width: 60, height: 60, borderRadius: 16, background: f.logoUrl ? "#fff" : f.primaryColor, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 28, overflow: "hidden", border: f.logoUrl ? "1px solid var(--border)" : "none" }}>
+              {f.logoUrl ? <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} /> : (f.logoText || (f.appName || "؟").trim().charAt(0) || "؟")}
             </span>
             <div>
               <div style={{ fontWeight: 800, fontSize: 18, color: "var(--ink)" }}>{f.appName || "اسم النظام"}</div>
@@ -113,6 +163,8 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
+
+      <NotifSettings />
     </div>
   );
 }

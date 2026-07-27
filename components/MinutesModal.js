@@ -62,7 +62,7 @@ export function exportMinutes(m) {
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
   <header>
-    <div class="brand">ڤيوليت<small>DIGITAL MARKETING</small></div>
+    <div class="brand">سيم برايم<small>DIGITAL MARKETING</small></div>
     <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
   </header>
 
@@ -86,7 +86,7 @@ export function exportMinutes(m) {
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>ڤيوليت — نظام إدارة مشاريع سيم برايم</span><span>${esc(m.title)}</span></footer>
+  <footer><span>سيم برايم — نظام إدارة المشاريع</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)

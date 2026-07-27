@@ -5,8 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { tasksStore, meetingsStore } from "@/lib/store";
 import Icon from "@/components/Icon";
+import Donut from "@/components/Donut";
+import ActivityFeed from "@/components/ActivityFeed";
 import { useRole } from "@/components/RoleProvider";
-import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
+import { PRIORITY_META, HEALTH_META, STATUS_META } from "@/lib/constants";
+
+const STATUS_COLORS = { "Not Started": "#64748b", "In Progress": "#2563eb", "On Hold": "#d97706", Completed: "#16a34a" };
 
 const DAY = 86400000;
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -56,7 +60,12 @@ export default function Dashboard() {
     }).length;
 
     const attention = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").slice(0, 4);
-    return { total, completed, pct, delayed, attentionN, deadlines, weekCount, attention };
+
+    const byStatus = {};
+    tasks.forEach((t) => { const k = t.status || "Not Started"; byStatus[k] = (byStatus[k] || 0) + 1; });
+    const statusSegs = Object.entries(byStatus).map(([k, v]) => ({ label: STATUS_META[k]?.ar || k, value: v, color: STATUS_COLORS[k] || "#94a3b8" }));
+
+    return { total, completed, pct, delayed, attentionN, deadlines, weekCount, attention, statusSegs };
   }, [tasks]);
 
   const nextMeetings = useMemo(() => {
@@ -80,9 +89,9 @@ export default function Dashboard() {
     <div>
       {/* الهيرو */}
       <div className="dash-hero">
-        <span className="hav">{(viewer?.name || "ف").slice(0, 1)}</span>
+        <span className="hav">{(viewer?.name || "س").slice(0, 1)}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2>مرحباً {viewer?.name || "بفريق ڤيوليت"} 👋</h2>
+          <h2>مرحباً {viewer?.name || "بفريق سيم برايم"} 👋</h2>
           <p>
             {clientProject ? `متابعة مشروع ${clientProject} — ` : "لديك "}
             <b>{s.weekCount} استحقاقات</b> تحتاج المتابعة و<b>{s.delayed} مهام متعثرة</b> هذا الأسبوع
@@ -139,6 +148,18 @@ export default function Dashboard() {
 
         {/* العمود الجانبي */}
         <div className="dash-side">
+          {s.total > 0 && (
+            <div className="card" style={{ borderRadius: 24 }}>
+              <div className="section-title"><span>توزيع المهام حسب الحالة</span></div>
+              <div style={{ display: "grid", placeItems: "center", padding: "6px 0 2px" }}>
+                <Donut size={168} thickness={22} centerTop={s.total} centerBottom="مهمة" segments={s.statusSegs} />
+              </div>
+              <div className="fin-legend">
+                {s.statusSegs.map((seg) => <span key={seg.label}><i style={{ background: seg.color }} /> {seg.label} ({seg.value})</span>)}
+              </div>
+            </div>
+          )}
+
           <div className="card" style={{ borderRadius: 24 }}>
             <div className="section-title" style={{ justifyContent: "space-between" }}>
               <span>مهام تحتاج انتباه</span>
@@ -176,6 +197,14 @@ export default function Dashboard() {
                   </div>
                 );
               })}
+          </div>
+
+          <div className="card" style={{ borderRadius: 24 }}>
+            <div className="section-title" style={{ justifyContent: "space-between" }}>
+              <span>آخر الأنشطة</span>
+              <Link href="/activity" style={{ color: "var(--primary)", fontWeight: 700, fontSize: 13 }}>الكل</Link>
+            </div>
+            <ActivityFeed limit={6} />
           </div>
         </div>
       </div>

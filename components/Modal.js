@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-export default function Modal({ title, onClose, children }) {
+export default function Modal({ title, onClose, children, wide }) {
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape") onClose();
@@ -13,7 +13,7 @@ export default function Modal({ title, onClose, children }) {
 
   return (
     <div className="overlay" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`modal${wide ? " wide" : ""}`} onMouseDown={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         {children}
       </div>

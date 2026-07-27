@@ -26,6 +26,8 @@ const P = {
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   settings: "M4 6h9M17 6h3M4 12h3M11 12h9M4 18h7M15 18h5M13 4v4M7 10v4M11 16v4",
   palette: "M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2 0-1.5 1-2 2-2h1a3 3 0 0 0 3-3c0-5-4-9-8-9zM7.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM10.5 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
+  mail: "M3 6h18v12H3zM3 7.5l9 6 9-6",
+  phone: "M5 4h4l1.5 5-2.2 1.2a12 12 0 0 0 5.5 5.5L20 15v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z",
 };
 
 export default function Icon({ name, size = 18, stroke = 1.8, style, className }) {

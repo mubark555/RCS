@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isCloud } from "@/lib/supabase";
 import { useRole } from "@/components/RoleProvider";
+import { useAuth } from "@/components/AuthProvider";
 import { useSettings } from "@/components/SettingsProvider";
 import Icon from "@/components/Icon";
 
@@ -12,7 +13,10 @@ const ALL_LINKS = [
   { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
   { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
   { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
+  { href: "/reports", label: "التقارير", ico: "file", roles: ["manager", "member"] },
+  { href: "/finance", label: "المالية", ico: "briefcase", roles: ["manager", "member", "client"], finance: true },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
+  { href: "/activity", label: "سجل الأنشطة", ico: "clock", roles: ["manager", "member"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
   { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
 ];
@@ -21,15 +25,17 @@ const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
 export default function Sidebar() {
   const path = usePathname();
-  const { users, viewer, viewerId, setViewer, role } = useRole();
+  const { users, viewer, viewerId, setViewer, role, allowSwitch, canFinance } = useRole();
+  const { authEmail, signOut } = useAuth();
   const { settings } = useSettings();
-  const links = ALL_LINKS.filter((l) => l.roles.includes(role));
+  // قسم المالية يظهر فقط للحسابات المخوّلة (يعيّنها مالك النظام)
+  const links = ALL_LINKS.filter((l) => l.roles.includes(role) && (!l.finance || canFinance));
 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="logo" style={{ overflow: "hidden", padding: 0 }}>
-          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : settings.logoText}
+        <span className="logo" style={{ overflow: "hidden", padding: 0, background: settings.logoUrl ? "#fff" : undefined }}>
+          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
         </span>
         <span>
           <b>{settings.appName}</b>
@@ -51,31 +57,38 @@ export default function Sidebar() {
       </nav>
 
       <div className="side-foot">
-        {/* تبديل الدور (وضع تجريبي) */}
-        <div className="role-switch">
-          <div className="rs-label">عرض النظام كـ</div>
-          <select value={viewerId || ""} onChange={(e) => setViewer(e.target.value)}>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} — {ROLE_AR[u.role] || u.role}
-                {u.project ? ` (${u.project})` : ""}
-              </option>
-            ))}
-          </select>
-          {viewer && (
-            <div className="rs-active">
-              الدور الفعّال: <b>{ROLE_AR[role]}</b>
-              {viewer.project ? ` · ${viewer.project}` : ""}
-            </div>
-          )}
-        </div>
+        {/* تبديل الدور — متاح في الوضع التجريبي فقط */}
+        {allowSwitch && (
+          <div className="role-switch">
+            <div className="rs-label">عرض النظام كـ</div>
+            <select value={viewerId || ""} onChange={(e) => setViewer(e.target.value)}>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} — {ROLE_AR[u.role] || u.role}
+                  {u.project ? ` (${u.project})` : ""}
+                </option>
+              ))}
+            </select>
+            {viewer && (
+              <div className="rs-active">
+                الدور الفعّال: <b>{ROLE_AR[role]}</b>
+                {viewer.project ? ` · ${viewer.project}` : ""}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="side-user">
-          <span className="av">{(viewer?.name || "ف").slice(0, 1)}</span>
+          <span className="av">{(viewer?.name || "س").slice(0, 1)}</span>
           <span>
-            <b>{viewer?.name || "فريق ڤيوليت"}</b>
-            <small>{viewer?.title || "إدارة مشاريع سيم برايم"}</small>
+            <b>{viewer?.name || "فريق سيم برايم"}</b>
+            <small>{viewer?.title || authEmail || "إدارة مشاريع سيم برايم"}</small>
           </span>
+          {isCloud && (
+            <button className="side-signout" onClick={signOut} title="تسجيل الخروج">
+              <Icon name="arrow" size={16} />
+            </button>
+          )}
         </div>
         <div className="side-mode">
           <span className="d" style={{ background: isCloud ? "#3f8e7f" : "#e0a23a" }} />

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { useSettings } from "@/components/SettingsProvider";
+import { useSettings, brandTitle } from "@/components/SettingsProvider";
+import { BrandLogos } from "@/components/BrandMark";
 
 const C = {
   primary: "#E36A62",
@@ -21,6 +22,14 @@ const KEYFRAMES = `
 @keyframes lg_floatBlob2{0%,100%{transform:translate(0,0)}50%{transform:translate(-16px,18px)}}
 @keyframes lg_logoPop{0%{opacity:0;transform:scale(.6) rotate(-12deg)}60%{transform:scale(1.12) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
 `;
+
+// أخطاء الشبكة تظهر بالعربية بدل «Failed to fetch»
+const NET_ERR = "تعذّر الاتصال بالخادم. تحقق من الإنترنت، أو تواصل مع مدير النظام (قد تكون قاعدة البيانات متوقفة مؤقتاً).";
+function friendly(msg, fallback) {
+  const m = String(msg || "");
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(m)) return NET_ERR;
+  return m || fallback;
+}
 
 export default function LoginScreen() {
   const { signInWithEmail, verifyOtp } = useAuth();
@@ -49,13 +58,13 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithEmail(addr);
       if (error) {
-        setEmailError(error.message || "تعذّر الإرسال، تأكد من البريد وحاول مجدداً.");
+        setEmailError(friendly(error.message, "تعذّر الإرسال، تأكد من البريد وحاول مجدداً."));
         return false;
       }
       setResendIn(45);
       return true;
     } catch (e) {
-      setEmailError(e?.message || "حدث خطأ غير متوقع.");
+      setEmailError(friendly(e?.message, "حدث خطأ غير متوقع."));
       return false;
     } finally {
       setLoading(false);
@@ -81,12 +90,12 @@ export default function LoginScreen() {
       const { error } = await verifyOtp(email.trim(), code);
       // عند النجاح تتغيّر الجلسة تلقائياً وتُستبدل الواجهة بالنظام
       if (error) {
-        setOtpError(error.message || "الرمز غير صحيح أو منتهي الصلاحية.");
+        setOtpError(friendly(error.message, "الرمز غير صحيح أو منتهي الصلاحية."));
         setDigits(["", "", "", "", "", ""]);
         setTimeout(() => inputs.current[0]?.focus(), 40);
       }
     } catch (e) {
-      setOtpError(e?.message || "حدث خطأ غير متوقع.");
+      setOtpError(friendly(e?.message, "حدث خطأ غير متوقع."));
     } finally {
       setLoading(false);
     }
@@ -136,14 +145,14 @@ export default function LoginScreen() {
       <div style={{ position: "absolute", bottom: -160, insetInlineStart: -120, width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#F6DCC9,transparent 70%)", animation: "lg_floatBlob2 17s ease-in-out infinite", pointerEvents: "none" }} />
 
       <div style={{ width: "100%", maxWidth: 452, background: "#fff", borderRadius: 30, padding: "42px 40px 36px", boxShadow: "0 30px 70px rgba(60,50,40,.12)", position: "relative", zIndex: 1, animation: "lg_cardIn .5s ease both" }}>
-        {/* رأس العلامة */}
+        {/* رأس العلامة: ڤيوليت × سيم برايم */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 13, marginBottom: 32 }}>
-          <div style={{ textAlign: "start" }}>
-            <div style={{ fontSize: 23, fontWeight: 800, color: C.primary, lineHeight: 1 }}>{settings.appName}</div>
-            <div style={{ fontSize: 10, letterSpacing: "2.5px", color: C.muted, fontWeight: 700, marginTop: 4 }}>{settings.tagline}</div>
+          <div style={{ textAlign: "start", minWidth: 0 }}>
+            <div style={{ fontSize: 21, fontWeight: 800, color: C.primary, lineHeight: 1.3 }}>{brandTitle(settings)}</div>
+            <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginTop: 4 }}>{settings.tagline}</div>
           </div>
-          <div style={{ width: 72, height: 72, borderRadius: 19, background: settings.logoUrl ? "#fff" : C.primary, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, fontWeight: 800, flex: "none", overflow: "hidden", boxShadow: "0 12px 26px rgba(227,106,98,.35)", animation: "lg_logoPop .7s .15s cubic-bezier(.34,1.56,.64,1) both" }}>
-            {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
+          <div style={{ animation: "lg_logoPop .7s .15s cubic-bezier(.34,1.56,.64,1) both" }}>
+            <BrandLogos settings={settings} size={58} gap={8} />
           </div>
         </div>
 

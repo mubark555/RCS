@@ -7,10 +7,12 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import ChipMulti from "@/components/ChipMulti";
 import { VISIBILITY_META, kpiAssignees, isPublicKpi } from "@/lib/constants";
+import { kpiPct, kpiAchievement } from "@/lib/metrics";
 
 const CAT = { "مالي": "#16a34a", "نمو": "#2563eb", "تشغيلي": "#c88a2e", "تسويقي": "#7c5cf6", "رضا": "#e0574e" };
 const CATS = ["مالي", "نمو", "تشغيلي", "تسويقي", "رضا"];
-const PERIODS = { month: "هذا الشهر", quarter: "هذا الربع", year: "هذا العام" };
+// نوع فترة القياس لكل مؤشر
+const PERIOD_TYPES = { month: "شهري", quarter: "ربع سنوي", year: "سنوي" };
 
 function fmt(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + "M";
@@ -26,7 +28,8 @@ function statusOf(pct) {
 export default function KpisPage() {
   const { canManage, projects, users } = useRole();
   const [kpis, setKpis] = useState(null);
-  const [period, setPeriod] = useState("quarter");
+  const [period, setPeriod] = useState(""); // "" = الكل
+  const [fProject, setFProject] = useState("");
   const [editing, setEditing] = useState(null);
 
   async function reload() {
@@ -36,16 +39,25 @@ export default function KpisPage() {
 
   const computed = useMemo(() => {
     if (!kpis) return null;
-    const rows = kpis.map((k) => {
-      const pct = k.target ? Math.min(999, Math.round((k.current / k.target) * 100)) : 0;
-      return { ...k, pct, st: statusOf(pct) };
-    });
+    const rows = kpis
+      .filter((k) => !period || (k.period_type || "quarter") === period)
+      .filter((k) => !fProject || (fProject === "_agency" ? !k.project : k.project === fProject))
+      .map((k) => {
+        const pct = kpiPct(k);
+        return { ...k, pct, st: statusOf(pct) };
+      });
     const total = rows.length;
     const behind = rows.filter((k) => k.pct < 60).length;
     const onTrack = total - behind;
     const overall = total ? Math.round(rows.reduce((s, k) => s + Math.min(100, k.pct), 0) / total) : 0;
-    return { rows, total, behind, onTrack, overall };
-  }, [kpis]);
+    // نسبة التحقق لكل مشروع (كل المؤشرات المرتبطة به ضمن الفترة المختارة)
+    const byProject = {};
+    rows.forEach((k) => { const key = k.project || ""; (byProject[key] = byProject[key] || []).push(k); });
+    const perProject = Object.entries(byProject)
+      .map(([name, list]) => ({ name, label: name || "على مستوى الوكالة", pct: kpiAchievement(list), count: list.length }))
+      .sort((a, b) => b.pct - a.pct);
+    return { rows, total, behind, onTrack, overall, perProject };
+  }, [kpis, period, fProject]);
 
   async function del(k) {
     if (!confirm(`حذف المؤشر؟\n\n${k.name}`)) return;
@@ -54,18 +66,22 @@ export default function KpisPage() {
   }
 
   if (!computed) return <div className="empty">جاري التحميل…</div>;
-  const { rows, total, behind, onTrack, overall } = computed;
+  const { rows, total, behind, onTrack, overall, perProject } = computed;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
         <div className="seg">
-          {Object.keys(PERIODS).map((p) => (
-            <button key={p} className={period === p ? "on" : ""} onClick={() => setPeriod(p)}>
-              {p === "month" ? "شهري" : p === "quarter" ? "ربعي" : "سنوي"}
-            </button>
+          <button className={period === "" ? "on" : ""} onClick={() => setPeriod("")}>الكل</button>
+          {Object.entries(PERIOD_TYPES).map(([p, l]) => (
+            <button key={p} className={period === p ? "on" : ""} onClick={() => setPeriod(p)}>{l}</button>
           ))}
         </div>
+        <select value={fProject} onChange={(e) => setFProject(e.target.value)} style={{ width: "auto" }}>
+          <option value="">كل المشاريع</option>
+          <option value="_agency">على مستوى الوكالة</option>
+          {(projects || []).map((p) => <option key={p.id || p.name} value={p.name}>{p.name}</option>)}
+        </select>
         <div style={{ marginInlineStart: "auto" }} />
         {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ مؤشر جديد</button>}
       </div>
@@ -78,7 +94,7 @@ export default function KpisPage() {
           </span>
           <div>
             <div className="muted" style={{ fontSize: 14 }}>متوسط تحقيق المستهدفات</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2, color: "var(--ink)" }}>أداء {PERIODS[period]}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2, color: "var(--ink)" }}>{{ month: "المؤشرات الشهرية", quarter: "المؤشرات الربع سنوية", year: "المؤشرات السنوية" }[period] || "كل المؤشرات"}{fProject && fProject !== "_agency" ? ` — ${fProject}` : ""}</div>
           </div>
         </div>
         <div className="kpi-sum-stats">
@@ -87,6 +103,25 @@ export default function KpisPage() {
           <div className="ks-box" style={{ background: "#fdeceb" }}><div className="k" style={{ color: "#e0574e" }}>تحتاج تدخّل</div><div className="v" style={{ color: "#e0574e" }}>{behind}</div></div>
         </div>
       </div>
+
+      {/* نسبة التحقق لكل مشروع */}
+      {perProject.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="section-title"><span>نسبة التحقق لكل مشروع</span></div>
+          <div className="kp-proj">
+            {perProject.map((p) => {
+              const st = statusOf(p.pct);
+              return (
+                <div className="kp-proj-row" key={p.label} onClick={() => setFProject(p.name || "_agency")} title="عرض مؤشرات هذا المشروع">
+                  <span className="kp-proj-name">{p.label} <small className="muted">({p.count})</small></span>
+                  <div className="progress" style={{ height: 9, flex: 1 }}><span style={{ width: `${p.pct}%`, background: st.color }} /></div>
+                  <b style={{ color: st.color, minWidth: 44, textAlign: "end" }}>{p.pct}%</b>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* بطاقات المؤشرات */}
       <div className="kpi-cards">
@@ -113,6 +148,9 @@ export default function KpisPage() {
                 <span className="kpi-cat" style={{ background: "#eef2f7", color: "#475569" }}>
                   {k.project ? `📁 ${k.project}` : "على مستوى الوكالة"}
                 </span>
+                <span className="kpi-cat" style={{ background: "#f1ebfd", color: "#6d28d9" }}>
+                  🗓 {PERIOD_TYPES[k.period_type || "quarter"]}{k.period ? ` · ${k.period}` : ""}
+                </span>
               </div>
               <div className="kpi-val">
                 <span className="cur">{fmt(k.current)}{unit}</span>
@@ -132,6 +170,9 @@ export default function KpisPage() {
                 {owners.length === 0
                   ? <span className="muted" style={{ fontSize: 12 }}>غير مُسند</span>
                   : owners.map((n) => <span key={n} className="pill" style={{ fontSize: 11.5, padding: "3px 9px" }}>{n}</span>)}
+              </div>
+              <div style={{ fontSize: 12, marginTop: 8, color: "var(--muted)" }}>
+                <b style={{ fontWeight: 700 }}>مصدر القياس:</b> {k.source || "غير محدد"}
               </div>
             </div>
           );
@@ -161,7 +202,7 @@ export default function KpisPage() {
 function KpiForm({ initial, projects = [], users = [], onSave, onCancel }) {
   const [f, setF] = useState({
     name: "", category: "تسويقي", unit: "", current: "", target: "",
-    project: "", visibility: "private",
+    project: "", visibility: "private", period_type: "quarter", period: "", source: "",
     ...(initial || {}),
     assignees: kpiAssignees(initial || {}),
   });
@@ -188,6 +229,9 @@ function KpiForm({ initial, projects = [], users = [], onSave, onCancel }) {
         project: f.project || "",
         visibility: f.visibility === "public" ? "public" : "private",
         assignees: Array.isArray(f.assignees) ? f.assignees : [],
+        period_type: PERIOD_TYPES[f.period_type] ? f.period_type : "quarter",
+        period: (f.period || "").trim(),
+        source: (f.source || "").trim(),
       });
     } finally { setSaving(false); }
   }
@@ -200,7 +244,7 @@ function KpiForm({ initial, projects = [], users = [], onSave, onCancel }) {
           <select value={f.category} onChange={set("category")}>{CATS.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         </label>
         <label className="field"><span>الوحدة</span><input value={f.unit} onChange={set("unit")} placeholder="ريال / % / عميل" /></label>
-        <label className="field"><span>القيمة الحالية</span><input type="number" value={f.current} onChange={set("current")} placeholder="0" /></label>
+        <label className="field"><span>النتيجة الفعلية</span><input type="number" value={f.current} onChange={set("current")} placeholder="0" /></label>
         <label className="field"><span>المستهدف *</span><input type="number" value={f.target} onChange={set("target")} placeholder="0" /></label>
 
         <label className="field"><span>المشروع المرتبط</span>
@@ -209,6 +253,13 @@ function KpiForm({ initial, projects = [], users = [], onSave, onCancel }) {
             {projects.map((p) => <option key={p.id || p.name} value={p.name}>{p.name}</option>)}
           </select>
         </label>
+        <label className="field"><span>الفترة</span>
+          <select value={f.period_type} onChange={set("period_type")}>
+            {Object.entries(PERIOD_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>تسمية الفترة</span><input value={f.period} onChange={set("period")} placeholder="مثال: الربع الثالث 2026" /></label>
+        <label className="field full"><span>مصدر القياس</span><input value={f.source} onChange={set("source")} placeholder="مثال: Google Analytics / تقرير المبيعات / استبيان العملاء" /></label>
         <label className="field"><span>الرؤية</span>
           <select value={f.visibility} onChange={set("visibility")}>
             <option value="private">خاصة — داخلية لا تظهر للعملاء</option>

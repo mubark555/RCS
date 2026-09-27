@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { meetingsStore } from "@/lib/store";
-import { useRole } from "@/components/RoleProvider";
+import { useRole, useProjectNames } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
-import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
@@ -188,6 +187,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
 }
 
 function MeetingForm({ initial, users, onSave, onCancel }) {
+  const projectNames = useProjectNames();
   const [f, setF] = useState({
     ...EMPTY,
     ...(initial || {}),
@@ -205,7 +205,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
   const rmLink = (i) => setF((s) => ({ ...s, links: s.links.filter((_, j) => j !== i) }));
 
   const ai = Array.isArray(f.action_items) ? f.action_items : [];
-  const addAI = () => setF((s) => ({ ...s, action_items: [...ai, { text: "", assignee: "", due: "" }] }));
+  const addAI = (kind = "action") => setF((s) => ({ ...s, action_items: [...ai, { kind, text: "", assignee: "", due: "" }] }));
   const setAI = (i, k, v) => setF((s) => ({ ...s, action_items: ai.map((a, j) => (j === i ? { ...a, [k]: v } : a)) }));
   const rmAI = (i) => setF((s) => ({ ...s, action_items: ai.filter((_, j) => j !== i) }));
 
@@ -233,7 +233,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
             <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>الحالة</span>
@@ -277,12 +277,20 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
 
         <div className="field full">
           <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>
-            القرارات والمهام الناتجة (Action Items — تتحول لمهام)
-            <button type="button" className="btn sm ghost" style={{ marginInlineStart: "auto" }} onClick={addAI}>+ إضافة قرار</button>
+            القرارات وإجراءات المتابعة
+            <span style={{ marginInlineStart: "auto", display: "flex", gap: 6 }}>
+              <button type="button" className="btn sm ghost" onClick={() => addAI("decision")}>+ قرار</button>
+              <button type="button" className="btn sm ghost" onClick={() => addAI("action")}>+ إجراء متابعة</button>
+            </span>
           </span>
+          <p className="muted" style={{ fontSize: 11.5, margin: "0 0 8px" }}>القرار يُوثَّق في المحضر، وإجراء المتابعة يتحوّل إلى مهمة مرتبطة بالمحضر (بمسؤول وموعد).</p>
           {ai.map((a, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input placeholder="القرار / المهمة" value={a.text} onChange={(e) => setAI(i, "text", e.target.value)} style={{ flex: 2 }} />
+            <div key={i} className="ai-row">
+              <div className="cs-toggle" style={{ flex: "none" }}>
+                <button type="button" className={(a.kind || "action") === "decision" ? "on" : ""} onClick={() => setAI(i, "kind", "decision")}>قرار</button>
+                <button type="button" className={(a.kind || "action") === "action" ? "on" : ""} onClick={() => setAI(i, "kind", "action")}>إجراء</button>
+              </div>
+              <input placeholder={(a.kind || "action") === "decision" ? "نص القرار" : "إجراء المتابعة"} value={a.text} onChange={(e) => setAI(i, "text", e.target.value)} style={{ flex: 2, minWidth: 160 }} />
               <select value={a.assignee} onChange={(e) => setAI(i, "assignee", e.target.value)} style={{ flex: 1, minWidth: 110 }}>
                 <option value="">المسؤول…</option>
                 {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}

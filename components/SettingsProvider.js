@@ -1,14 +1,31 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { appSettings } from "@/lib/store";
 
+// الهوية المشتركة: شعارا ڤيوليت (الشريك التشغيلي) وسيم برايم
 export const DEFAULT_SETTINGS = {
-  appName: "سيم برايم",
-  tagline: "DIGITAL MARKETING",
+  appName: "سيم برايم",       // اسم سيم
   logoText: "س",
-  logoUrl: "",
+  logoUrl: "",                // شعار سيم
+  partnerName: "ڤيوليت",      // اسم ڤيوليت
+  partnerLogoText: "ڤ",
+  partnerLogoUrl: "",         // شعار ڤيوليت
+  tagline: "مركز القيادة الموحد",
   primaryColor: "#e05a50",
 };
+
+// إعدادات محفوظة قبل تحديث الهوية: الوصف القديم يُستبدل بالجديد تلقائياً
+function migrate(s) {
+  const out = { ...DEFAULT_SETTINGS, ...(s || {}) };
+  if (!out.tagline || out.tagline.trim().toUpperCase() === "DIGITAL MARKETING") out.tagline = DEFAULT_SETTINGS.tagline;
+  return out;
+}
+
+// الاسم الكامل للعرض: «ڤيوليت × سيم برايم»
+export function brandTitle(s) {
+  return [s?.partnerName, s?.appName].filter((x) => x && String(x).trim()).join(" × ");
+}
 
 const Ctx = createContext(null);
 
@@ -50,14 +67,24 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     try {
       const s = JSON.parse(window.localStorage.getItem("sp_settings"));
-      if (s) setSettings({ ...DEFAULT_SETTINGS, ...s });
+      if (s) setSettings(migrate(s));
     } catch {}
+    // الهوية مشتركة للفريق كامل عبر السحابة (تظهر أيضاً في صفحة الدخول)
+    appSettings.get("branding").then((cloud) => {
+      if (cloud && typeof cloud === "object") {
+        setSettings((prev) => {
+          const next = migrate({ ...prev, ...cloud });
+          try { window.localStorage.setItem("sp_settings", JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
     applyTheme(settings.primaryColor);
     try {
-      document.title = `${settings.appName || "سيم برايم"} - إدارة المشاريع`;
+      document.title = `${brandTitle(settings) || "سيم برايم"} | ${settings.tagline || "مركز القيادة الموحد"}`;
     } catch {}
     // أيقونة التبويب (favicon): شعار النظام المرفوع إن وُجد
     try {
@@ -72,7 +99,7 @@ export function SettingsProvider({ children }) {
         link.href = settings.logoUrl;
       }
     } catch {}
-  }, [settings.primaryColor, settings.appName, settings.logoUrl]);
+  }, [settings.primaryColor, settings.appName, settings.partnerName, settings.tagline, settings.logoUrl]);
 
   const save = useCallback((patch) => {
     setSettings((prev) => {
@@ -80,6 +107,7 @@ export function SettingsProvider({ children }) {
       try {
         window.localStorage.setItem("sp_settings", JSON.stringify(next));
       } catch {}
+      appSettings.set("branding", next).catch(() => {});
       return next;
     });
   }, []);
@@ -89,6 +117,7 @@ export function SettingsProvider({ children }) {
     try {
       window.localStorage.removeItem("sp_settings");
     } catch {}
+    appSettings.set("branding", DEFAULT_SETTINGS).catch(() => {});
   }, []);
 
   return <Ctx.Provider value={{ settings, save, reset }}>{children}</Ctx.Provider>;

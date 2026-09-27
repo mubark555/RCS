@@ -194,6 +194,30 @@ alter table public.projects add column if not exists members  jsonb default '[]'
 alter table public.users    add column if not exists phone    text  default '';
 alter table public.users    add column if not exists projects jsonb default '[]'::jsonb;
 
+-- الدفعة 1: دورة العمل والاعتماد + المخرجات + المرفقات (انظر supabase/migrations/2026-09-batch1.sql)
+alter table public.tasks    add column if not exists deliverable  text        default '';
+alter table public.tasks    add column if not exists progress     int         default 0;
+alter table public.tasks    add column if not exists on_hold      boolean     default false;
+alter table public.tasks    add column if not exists resolve_date date;
+alter table public.tasks    add column if not exists ready_at     timestamptz;
+alter table public.tasks    add column if not exists ready_by     text        default '';
+alter table public.tasks    add column if not exists reviewed_at  timestamptz;
+alter table public.tasks    add column if not exists reviewed_by  text        default '';
+alter table public.tasks    add column if not exists review_note  text        default '';
+alter table public.tasks    add column if not exists reviews      jsonb       default '[]'::jsonb;
+alter table public.projects add column if not exists deliverables jsonb       default '[]'::jsonb;
+alter table public.files    add column if not exists task_id      text        default '';
+
+-- الدفعة 2: نطاق العمل + فترة/مصدر المؤشرات + مرفقات المالية (انظر supabase/migrations/2026-09-batch2.sql)
+alter table public.projects add column if not exists scope       text default '';
+alter table public.kpis     add column if not exists period_type text default 'quarter';
+alter table public.kpis     add column if not exists period      text default '';
+alter table public.kpis     add column if not exists source      text default '';
+alter table public.files    add column if not exists ref         text default '';
+
+-- الدفعة 3: ربط المهمة بمحضر الاجتماع (انظر supabase/migrations/2026-09-batch3.sql)
+alter table public.tasks    add column if not exists meeting_id  text default '';
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

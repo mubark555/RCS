@@ -144,6 +144,10 @@ export default function NotifSettings() {
         <div><b style={{ fontSize: 13.5 }}>إرسال أيضاً للشخص المُسنَد إليه</b><div className="muted" style={{ fontSize: 12 }}>يُرسل لبريد الموظف المسؤول عن المهمة.</div></div>
         <Toggle on={!!p.notifyAssignee} onChange={(v) => saveNotifyPrefs({ notifyAssignee: v })} disabled={dis} />
       </div>
+      <div style={{ ...row }}>
+        <div><b style={{ fontSize: 13.5 }}>بريد دورة الاعتماد</b><div className="muted" style={{ fontSize: 12 }}>طلب المراجعة يصل لبريد ممثل سيم في المشروع، وقرار الاعتماد أو طلب التعديل يصل لبريد المسؤول من ڤيوليت.</div></div>
+        <Toggle on={p.approvalEmails !== false} onChange={(v) => saveNotifyPrefs({ approvalEmails: v })} disabled={dis} />
+      </div>
 
       {/* اسم المُرسِل ورابط النظام */}
       <div className="section-title" style={{ marginTop: 18, fontSize: 14 }}>اسم المُرسِل ورابط النظام</div>

@@ -8,7 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
 import DeadlineAlerts from "@/components/DeadlineAlerts";
-import { ensureCloudSeeded } from "@/lib/store";
+import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
 
 export default function AppShell({ children }) {
   const { loading, authed, isCloud, authEmail, signOut } = useAuth();
@@ -16,7 +16,7 @@ export default function AppShell({ children }) {
 
   // عند الدخول في الوضع السحابي: عبّئ البيانات الأولية إن كانت القاعدة فارغة
   useEffect(() => {
-    if (isCloud && authed) ensureCloudSeeded();
+    if (isCloud && authed) ensureCloudSeeded().then(ensureQunaif);
   }, [isCloud, authed]);
 
   if (loading || (isCloud && authed && !ready)) {

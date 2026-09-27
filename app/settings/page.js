@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useSettings } from "@/components/SettingsProvider";
+import { useSettings, DEFAULT_SETTINGS } from "@/components/SettingsProvider";
+import BrandMark from "@/components/BrandMark";
 import { useRole } from "@/components/RoleProvider";
 import NotifSettings from "@/components/NotifSettings";
 import Icon from "@/components/Icon";
@@ -58,6 +59,7 @@ export default function SettingsPage() {
   const [f, setF] = useState(settings);
   const [saved, setSaved] = useState(false);
   const logoRef = useRef(null);
+  const partnerRef = useRef(null);
   const set = (k) => (e) => { setF((s) => ({ ...s, [k]: e.target.value })); setSaved(false); };
 
   // معاينة حيّة للّون تُطبّق فوراً
@@ -67,18 +69,19 @@ export default function SettingsPage() {
     setSaved(false);
   }
 
-  async function onLogo(e) {
+  // key: logoUrl (شعار سيم) | partnerLogoUrl (شعار ڤيوليت)
+  async function onLogo(e, key, ref) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const url = await processLogo(file);
-      setF((s) => ({ ...s, logoUrl: url }));
-      save({ logoUrl: url }); // حفظ فوري ليظهر مباشرة في كل النظام
+      setF((s) => ({ ...s, [key]: url }));
+      save({ [key]: url }); // حفظ فوري ليظهر مباشرة في كل النظام
       setSaved(false);
     } catch {
       alert("تعذّرت معالجة الصورة. جرّب صورة أخرى (PNG أو SVG مفضّلة).");
     } finally {
-      if (logoRef.current) logoRef.current.value = "";
+      if (ref.current) ref.current.value = "";
     }
   }
 
@@ -89,7 +92,7 @@ export default function SettingsPage() {
   function restore() {
     if (!confirm("استعادة الإعدادات الافتراضية؟")) return;
     reset();
-    setF({ appName: "سيم برايم", tagline: "DIGITAL MARKETING", logoText: "س", logoUrl: "", primaryColor: "#e05a50" });
+    setF(DEFAULT_SETTINGS);
     setSaved(false);
   }
 
@@ -100,27 +103,29 @@ export default function SettingsPage() {
       <div className="dash-2col" style={{ marginTop: 0 }}>
         <div className="card">
           <div className="section-title">هوية النظام</div>
-          <label className="field"><span>اسم النظام</span><input value={f.appName} onChange={set("appName")} /></label>
-          <label className="field"><span>الوصف / الشعار النصي</span><input value={f.tagline} onChange={set("tagline")} /></label>
-          <label className="field"><span>حرف الشعار (يظهر إن لم توجد صورة)</span><input value={f.logoText} onChange={set("logoText")} maxLength={2} /></label>
+          <label className="field"><span>الوصف (يظهر تحت الاسم)</span><input value={f.tagline} onChange={set("tagline")} placeholder="مركز القيادة الموحد" /></label>
 
-          <div className="field">
-            <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>شعار النظام (صورة)</span>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden onChange={onLogo} />
-              {f.logoUrl && (
-                <span style={{ width: 44, height: 44, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", display: "grid", placeItems: "center", overflow: "hidden", flex: "none" }}>
-                  <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
-                </span>
-              )}
-              <button type="button" className="btn" onClick={() => logoRef.current?.click()}><Icon name="upload" size={16} /> رفع صورة</button>
-              <input value={f.logoUrl?.startsWith("data:") ? "" : (f.logoUrl || "")} onChange={set("logoUrl")} placeholder="أو الصق رابط صورة…" />
-              {f.logoUrl && <button type="button" className="btn sm ghost" onClick={() => { setF((s) => ({ ...s, logoUrl: "" })); save({ logoUrl: "" }); }}>إزالة</button>}
-            </div>
-            <p className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-              للحصول على أفضل جودة استخدم صورة مربّعة وواضحة بصيغة <b dir="ltr">PNG</b> بخلفية شفافة، أو <b dir="ltr">SVG</b> (الأفضل — حدّة مثالية بأي حجم). تُحجَّم الصورة تلقائياً بجودة عالية.
-            </p>
-          </div>
+          <LogoField
+            title="ڤيوليت (الشريك التشغيلي)"
+            name={f.partnerName} onName={set("partnerName")}
+            letter={f.partnerLogoText} onLetter={set("partnerLogoText")}
+            url={f.partnerLogoUrl} inputRef={partnerRef}
+            onFile={(e) => onLogo(e, "partnerLogoUrl", partnerRef)}
+            onUrl={set("partnerLogoUrl")}
+            onRemove={() => { setF((s) => ({ ...s, partnerLogoUrl: "" })); save({ partnerLogoUrl: "" }); }}
+          />
+          <LogoField
+            title="سيم برايم"
+            name={f.appName} onName={set("appName")}
+            letter={f.logoText} onLetter={set("logoText")}
+            url={f.logoUrl} inputRef={logoRef}
+            onFile={(e) => onLogo(e, "logoUrl", logoRef)}
+            onUrl={set("logoUrl")}
+            onRemove={() => { setF((s) => ({ ...s, logoUrl: "" })); save({ logoUrl: "" }); }}
+          />
+          <p className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+            للحصول على أفضل جودة استخدم صورة مربّعة وواضحة بصيغة <b dir="ltr">PNG</b> بخلفية شفافة، أو <b dir="ltr">SVG</b>. الهوية تُحفظ للفريق كامل وتظهر في صفحة الدخول.
+          </p>
 
           <div className="section-title" style={{ marginTop: 20 }}>اللون الأساسي</div>
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
@@ -143,14 +148,8 @@ export default function SettingsPage() {
         {/* معاينة حيّة */}
         <div className="card">
           <div className="section-title">معاينة</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
-            <span style={{ width: 60, height: 60, borderRadius: 16, background: f.logoUrl ? "#fff" : f.primaryColor, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 28, overflow: "hidden", border: f.logoUrl ? "1px solid var(--border)" : "none" }}>
-              {f.logoUrl ? <img src={f.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} /> : (f.logoText || (f.appName || "؟").trim().charAt(0) || "؟")}
-            </span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 18, color: "var(--ink)" }}>{f.appName || "اسم النظام"}</div>
-              <div style={{ fontSize: 11, letterSpacing: 2, color: "var(--muted)", fontWeight: 700 }}>{f.tagline}</div>
-            </div>
+          <div style={{ padding: "14px 0", borderBottom: "1px solid var(--border)", color: "var(--ink)" }}>
+            <BrandMark settings={f} size={52} titleSize={18} taglineSize={12.5} />
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <button className="btn primary" style={{ background: f.primaryColor }}>زر أساسي</button>
@@ -159,7 +158,7 @@ export default function SettingsPage() {
           </div>
           <div className="progress" style={{ marginTop: 16 }}><span style={{ width: "65%", background: f.primaryColor }} /></div>
           <p className="muted" style={{ fontSize: 12.5, marginTop: 16 }}>
-            يُطبّق اللون فوراً على الأزرار والشارات والعناصر النشطة في كل النظام. اسم النظام وشعاره يظهران في الشريط الجانبي.
+            يُطبّق اللون فوراً على الأزرار والشارات والعناصر النشطة في كل النظام. الاسمان والشعاران يظهران في الشريط الجانبي وصفحة الدخول.
           </p>
         </div>
       </div>
@@ -167,6 +166,29 @@ export default function SettingsPage() {
       <FinanceAccessCard />
 
       <NotifSettings />
+    </div>
+  );
+}
+
+function LogoField({ title, name, onName, letter, onLetter, url, inputRef, onFile, onUrl, onRemove }) {
+  return (
+    <div className="logo-field">
+      <div className="lf-title">{title}</div>
+      <div className="tf-grid2">
+        <label className="field"><span>الاسم</span><input value={name || ""} onChange={onName} /></label>
+        <label className="field"><span>حرف الشعار (إن لم توجد صورة)</span><input value={letter || ""} onChange={onLetter} maxLength={2} /></label>
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden onChange={onFile} />
+        {url && (
+          <span style={{ width: 44, height: 44, borderRadius: 10, background: "#fff", border: "1px solid var(--border)", display: "grid", placeItems: "center", overflow: "hidden", flex: "none" }}>
+            <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
+          </span>
+        )}
+        <button type="button" className="btn" onClick={() => inputRef.current?.click()}><Icon name="upload" size={16} /> رفع الشعار</button>
+        <input value={url?.startsWith("data:") ? "" : (url || "")} onChange={onUrl} placeholder="أو الصق رابط صورة…" style={{ flex: 1, minWidth: 140 }} />
+        {url && <button type="button" className="btn sm ghost" onClick={onRemove}>إزالة</button>}
+      </div>
     </div>
   );
 }
@@ -198,7 +220,7 @@ function FinanceAccessCard() {
     <div className="card" style={{ marginTop: 18 }}>
       <div className="section-title"><span>صلاحية قسم المالية</span></div>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        قسم المالية (فواتير فيوليت ← سيم برايم والمدفوعات) حسّاس ويظهر فقط للحسابات التي تعيّنها هنا.
+        قسم المالية (فواتير ڤيوليت ← سيم برايم والمدفوعات) حسّاس ويظهر فقط للحسابات التي تعيّنها هنا.
         <b> المدراء لهم صلاحية دائمة.</b>
       </p>
 

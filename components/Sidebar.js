@@ -5,13 +5,15 @@ import { usePathname } from "next/navigation";
 import { isCloud } from "@/lib/supabase";
 import { useRole } from "@/components/RoleProvider";
 import { useAuth } from "@/components/AuthProvider";
-import { useSettings } from "@/components/SettingsProvider";
+import { useSettings, brandTitle } from "@/components/SettingsProvider";
+import { BrandLogos } from "@/components/BrandMark";
 import Icon from "@/components/Icon";
 
 const ALL_LINKS = [
   { href: "/", label: "الرئيسية", ico: "home", roles: ["manager", "member", "client"] },
   { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
   { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
+  { href: "/approvals", label: "الاعتمادات", ico: "check", roles: ["manager", "member", "client"] },
   { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
   { href: "/reports", label: "التقارير", ico: "file", roles: ["manager", "member"] },
   { href: "/finance", label: "المالية", ico: "briefcase", roles: ["manager", "member", "client"], finance: true },
@@ -33,12 +35,10 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="brand">
-        <span className="logo" style={{ overflow: "hidden", padding: 0, background: settings.logoUrl ? "#fff" : undefined }}>
-          {settings.logoUrl ? <img src={settings.logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 2 }} /> : (settings.logoText || (settings.appName || "؟").trim().charAt(0) || "؟")}
-        </span>
+      <div className="brand brand-duo">
+        <BrandLogos settings={settings} size={46} gap={8} />
         <span>
-          <b>{settings.appName}</b>
+          <b>{brandTitle(settings)}</b>
           <small>{settings.tagline}</small>
         </span>
       </div>
@@ -81,8 +81,8 @@ export default function Sidebar() {
         <div className="side-user">
           <span className="av">{(viewer?.name || "س").slice(0, 1)}</span>
           <span>
-            <b>{viewer?.name || "فريق سيم برايم"}</b>
-            <small>{viewer?.title || authEmail || "إدارة مشاريع سيم برايم"}</small>
+            <b>{viewer?.name || "فريق العمل"}</b>
+            <small>{viewer?.title || authEmail || settings.tagline}</small>
           </span>
           {isCloud && (
             <button className="side-signout" onClick={signOut} title="تسجيل الخروج">

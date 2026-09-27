@@ -10,11 +10,14 @@ const ACTION_AR = {
   create: { verb: "إضافة", tone: "success" },
   update: { verb: "تحديث", tone: "info" },
   delete: { verb: "حذف", tone: "danger" },
+  approve: { verb: "اعتماد", tone: "success" },
+  revision: { verb: "طلب تعديل", tone: "danger" },
+  submit: { verb: "إرسال للمراجعة", tone: "info" },
 };
 
 // ربط اسم الكيان بمفتاح الحدث في الإعدادات
-const ENTITY_EVENT = { "مستخدم": "person", "مشروع": "project", "مهمة": "task", "مستهدف": "kpi", "اجتماع": "meeting" };
-const ACTION_PHRASE = { create: "تمت إضافة", update: "تم تحديث", delete: "تم حذف" };
+const ENTITY_EVENT = { "مستخدم": "person", "مشروع": "project", "مهمة": "task", "تسليم": "task", "مستهدف": "kpi", "اجتماع": "meeting" };
+const ACTION_PHRASE = { create: "تمت إضافة", update: "تم تحديث", delete: "تم حذف", approve: "اعتماد", revision: "طلب تعديل على", submit: "طلب مراجعة سيم لـ" };
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 

@@ -4,25 +4,29 @@ import { useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import {
   PRIORITIES,
-  STATUSES,
   HEALTHS,
-  APPROVALS,
   WAITING_ON,
   PROJECTS,
   ACTIVITIES,
   STATUS_META,
   PRIORITY_META,
   HEALTH_META,
-  APPROVAL_META,
   CHAIN_TYPE_META,
   CHAIN_ACTIONS,
   normalizeChain,
   metaOf,
 } from "@/lib/constants";
 
+// الحالات القابلة للاختيار يدوياً؛ الإرسال للمراجعة والاعتماد يتمّان عبر أزرار دورة العمل
+const EDITABLE_STATUSES = ["Not Started", "In Progress"];
+
 const EMPTY = {
   activity: "",
-  project: PROJECTS[0],
+  project: "",
+  deliverable: "",
+  progress: 0,
+  on_hold: false,
+  resolve_date: "",
   task: "",
   priority: "High",
   status: "Not Started",
@@ -30,7 +34,6 @@ const EMPTY = {
   due_date: "",
   waiting_on: "",
   blocker: "",
-  approval_status: "",
   notes: "",
   health: "On Track",
   chain: [],
@@ -44,13 +47,26 @@ const colorFor = (name) => {
   return AV_COLORS[h];
 };
 
-export default function TaskForm({ initial, users = [], onSave, onCancel }) {
-  const [f, setF] = useState({
+export default function TaskForm({ initial, users = [], projects = [], defaultProject = "", onSave, onCancel }) {
+  const projectNames = useMemo(() => {
+    const names = projects.map((p) => p.name).filter(Boolean);
+    return names.length ? names : PROJECTS;
+  }, [projects]);
+  const [f, setF] = useState(() => ({
     ...EMPTY,
+    project: defaultProject || projectNames[0] || "",
     ...(initial || {}),
     due_date: initial?.due_date || "",
+    resolve_date: initial?.resolve_date || "",
+    progress: initial?.progress ?? 0,
+    on_hold: !!initial?.on_hold,
     chain: normalizeChain(initial?.chain),
-  });
+  }));
+  const deliverables = useMemo(() => {
+    const p = projects.find((x) => x.name === f.project);
+    return Array.isArray(p?.deliverables) ? p.deliverables : [];
+  }, [projects, f.project]);
+  const statusOptions = EDITABLE_STATUSES.includes(f.status) ? EDITABLE_STATUSES : [...EDITABLE_STATUSES, f.status];
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
 
@@ -100,7 +116,8 @@ export default function TaskForm({ initial, users = [], onSave, onCancel }) {
       note: st.note || "",
     }));
     const { _chainOn, ...rest } = f;
-    const payload = { ...rest, due_date: f.due_date || null, chain };
+    const progress = Math.max(0, Math.min(100, Number(f.progress) || 0));
+    const payload = { ...rest, due_date: f.due_date || null, resolve_date: f.resolve_date || null, progress, deliverable: (f.deliverable || "").trim(), chain };
     try {
       await onSave(payload);
     } finally {
@@ -118,26 +135,24 @@ export default function TaskForm({ initial, users = [], onSave, onCancel }) {
 
         <div className="tf-grid2">
           <label className="field">
-            <span>المشروع</span>
-            <input list="projects" value={f.project} onChange={set("project")} />
-            <datalist id="projects">{PROJECTS.map((p) => <option key={p} value={p} />)}</datalist>
+            <span>المشروع *</span>
+            <select value={f.project} onChange={set("project")} required>
+              {!projectNames.includes(f.project) && <option value={f.project}>{f.project || "— اختر —"}</option>}
+              {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
           </label>
           <label className="field">
-            <span>النشاط</span>
-            <input list="activities" value={f.activity} onChange={set("activity")} placeholder="مثال: التصميم" />
-            <datalist id="activities">{ACTIVITIES.map((a) => <option key={a} value={a} />)}</datalist>
+            <span>المخرج / التسليم</span>
+            <input list="deliverables" value={f.deliverable} onChange={set("deliverable")} placeholder="مثال: الهوية البصرية" />
+            <datalist id="deliverables">{deliverables.map((d) => <option key={d} value={d} />)}</datalist>
           </label>
-        </div>
-
-        <div className="tf-grid2">
-          <SelectField label="الأولوية" value={f.priority} onChange={set("priority")} options={PRIORITIES} meta={PRIORITY_META} />
-          <SelectField label="الحالة" value={f.status} onChange={set("status")} options={STATUSES} meta={STATUS_META} />
         </div>
 
         <div className="tf-grid2">
           <label className="field">
             <span>المسؤول</span>
-            <input value={f.assigned_to} onChange={set("assigned_to")} placeholder="مثال: عهود (IT)" />
+            <input list="assignees" value={f.assigned_to} onChange={set("assigned_to")} placeholder="اختر من الفريق" />
+            <datalist id="assignees">{userNames.map((u) => <option key={u} value={u} />)}</datalist>
           </label>
           <label className="field">
             <span>تاريخ الاستحقاق</span>
@@ -146,20 +161,48 @@ export default function TaskForm({ initial, users = [], onSave, onCancel }) {
         </div>
 
         <div className="tf-grid2">
-          <label className="field">
-            <span>بانتظار</span>
-            <input list="waiting" value={f.waiting_on} onChange={set("waiting_on")} placeholder="على من تعتمد المهمة؟" />
-            <datalist id="waiting">{WAITING_ON.map((w) => <option key={w} value={w} />)}</datalist>
-          </label>
-          <SelectField label="الصحة" value={f.health} onChange={set("health")} options={HEALTHS} meta={HEALTH_META} />
+          <SelectField label="الأولوية" value={f.priority} onChange={set("priority")} options={PRIORITIES} meta={PRIORITY_META} />
+          <SelectField label="الحالة" value={f.status} onChange={set("status")} options={statusOptions} meta={STATUS_META} />
         </div>
+        <p className="muted" style={{ fontSize: 11.5, margin: "-4px 0 10px" }}>
+          الإرسال لمراجعة سيم والاعتماد وطلب التعديل تتم من أزرار «دورة العمل» داخل المهمة.
+        </p>
 
         <div className="tf-grid2">
-          <SelectField label="حالة الاعتماد" value={f.approval_status} onChange={set("approval_status")} options={APPROVALS} meta={APPROVAL_META} />
           <label className="field">
-            <span>العائق / الخطر</span>
-            <input value={f.blocker} onChange={set("blocker")} />
+            <span>نسبة الإنجاز: <b>{Number(f.progress) || 0}%</b></span>
+            <input type="range" min="0" max="100" step="5" value={Number(f.progress) || 0} onChange={set("progress")} style={{ padding: 0 }} />
           </label>
+          <label className="field">
+            <span>النشاط</span>
+            <input list="activities" value={f.activity} onChange={set("activity")} placeholder="مثال: التصميم" />
+            <datalist id="activities">{ACTIVITIES.map((a) => <option key={a} value={a} />)}</datalist>
+          </label>
+        </div>
+
+        {/* التعليق / التأخير */}
+        <div className="hold-box">
+          <label className="hold-check">
+            <input type="checkbox" checked={!!f.on_hold} onChange={(e) => setF((s) => ({ ...s, on_hold: e.target.checked }))} />
+            <span>المهمة معلّقة</span>
+            <small className="muted">— أو متأخرة: وضّح السبب والجهة وموعد المعالجة</small>
+          </label>
+          <label className="field full">
+            <span>سبب التعليق / التأخير</span>
+            <input value={f.blocker} onChange={set("blocker")} placeholder="مثال: بانتظار تزويدنا بالمحتوى" />
+          </label>
+          <div className="tf-grid2">
+            <label className="field">
+              <span>الجهة المطلوب منها الإجراء</span>
+              <input list="waiting" value={f.waiting_on} onChange={set("waiting_on")} placeholder="سيم برايم / ڤيوليت / …" />
+              <datalist id="waiting">{WAITING_ON.map((w) => <option key={w} value={w} />)}</datalist>
+            </label>
+            <label className="field">
+              <span>موعد المعالجة</span>
+              <input type="date" value={f.resolve_date || ""} onChange={set("resolve_date")} />
+            </label>
+          </div>
+          <SelectField label="الصحة" value={f.health} onChange={set("health")} options={HEALTHS} meta={HEALTH_META} />
         </div>
 
         <label className="field full">

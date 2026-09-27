@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
-import { filesStore } from "@/lib/store";
+import { filesStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress } from "@/lib/constants";
+import ReviewDialog from "@/components/ReviewDialog";
+import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress } from "@/lib/constants";
+
+const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
+const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
@@ -17,9 +21,12 @@ const colorFor = (name) => {
   return AV_COLORS[h];
 };
 
-export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }) {
-  const { users, readOnly } = useRole();
+export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
+  const { users, readOnly, canApprove, canDeliver } = useRole();
   const [files, setFiles] = useState([]);
+  const [taskFiles, setTaskFiles] = useState([]);
+  const [dialog, setDialog] = useState(null); // submit | approve | revision
+  const [uploading, setUploading] = useState(false);
   const [t, setT] = useState(task);
   const [handTo, setHandTo] = useState("");
   const [handNote, setHandNote] = useState("");
@@ -32,7 +39,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
-    filesStore.list().then((all) => setFiles(all.filter((f) => f.project === task.project))).catch(() => {});
+    filesStore.list().then((all) => {
+      setTaskFiles(all.filter((f) => f.task_id && f.task_id === task.id));
+      setFiles(all.filter((f) => f.project === task.project && !f.task_id));
+    }).catch(() => {});
     return () => window.removeEventListener("keydown", onKey);
   }, [task, onClose]);
 
@@ -81,6 +91,43 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
     await persist({ links: links.filter((_, j) => j !== i) });
   }
 
+  // رفع مرفق (ملف) خاص بهذه المهمة
+  async function uploadFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const rec = await filesStore.upload(file, { project: t.project, category: "مرفق مهمة", note: t.task, task_id: t.id });
+      if (rec) setTaskFiles((l) => [rec, ...l]);
+    } catch (err) {
+      alert(`تعذّر رفع الملف: ${err?.message || ""}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+  async function openFile(f) { window.open(await filesStore.getUrl(f), "_blank"); }
+  async function removeFile(f) {
+    if (!confirm(`حذف المرفق؟\n${f.name}`)) return;
+    await filesStore.remove(f);
+    setTaskFiles((l) => l.filter((x) => x.id !== f.id));
+  }
+
+  // بعد قرار (إرسال/اعتماد/تعديل): أعد تحميل المهمة والصفحة الأم
+  async function afterDecision() {
+    const fresh = (await tasksStore.list().catch(() => [])).find((x) => x.id === t.id);
+    if (fresh) setT(fresh);
+    if (onChanged) await onChanged();
+  }
+
+  const overdue = isOverdue(t);
+  const pct = taskProgress(t);
+  const reviews = Array.isArray(t.reviews) ? t.reviews : [];
+  const lastRevision = [...reviews].reverse().find((r) => r.decision === "revision");
+  const canSubmitNow = canDeliver && ["Not Started", "In Progress", "Revision Needed"].includes(t.status);
+  const canDecideNow = canApprove && t.status === "Pending Review";
+  const flowIdx = FLOW.indexOf(t.status === "Revision Needed" ? "In Progress" : t.status);
+
   return (
     <div className="drawer-wrap" onMouseDown={onClose}>
       <div className="drawer" onMouseDown={(e) => e.stopPropagation()}>
@@ -95,11 +142,94 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
             <Badge map={PRIORITY_META} value={t.priority} />
             <Badge map={STATUS_META} value={t.status} />
             <Badge map={HEALTH_META} value={t.health} />
-            {t.approval_status && <Badge map={APPROVAL_META} value={t.approval_status} />}
+            {t.on_hold && <span className="badge" style={{ background: "#fbf0de", color: "#b45309" }}><span className="dot" style={{ background: "#b45309" }} />معلّقة</span>}
+            {overdue && <span className="badge" style={{ background: "#fdeceb", color: "#e0574e" }}><span className="dot" style={{ background: "#e0574e" }} />متأخرة</span>}
           </div>
         </div>
 
         <div className="drawer-body">
+          {/* ===== دورة العمل والاعتماد ===== */}
+          <div className="d-section" style={{ marginTop: 0 }}><span className="st-ic"><Icon name="check" size={15} /></span>دورة العمل والاعتماد</div>
+          <div className="wf-steps">
+            {FLOW.map((k, i) => {
+              const m = STATUS_META[k];
+              const state = t.status === "Revision Needed" && k === "In Progress" ? "rev" : i < flowIdx ? "done" : i === flowIdx ? "cur" : "";
+              return (
+                <div key={k} className={`wf-step ${state}`}>
+                  <span className="wf-dot" style={state === "cur" ? { background: m.color, borderColor: m.color } : state === "rev" ? { background: "#d97706", borderColor: "#d97706" } : undefined}>
+                    {state === "done" ? "✓" : i + 1}
+                  </span>
+                  <span className="wf-lbl">{state === "rev" ? "مطلوب تعديل" : m.ar}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {t.status === "Revision Needed" && lastRevision && (
+            <div className="wf-alert warn">
+              <b>مطلوب تعديل</b> — {lastRevision.by || "سيم"} · {fmtAt(lastRevision.at)}
+              {lastRevision.note && <div style={{ marginTop: 4 }}>{lastRevision.note}</div>}
+            </div>
+          )}
+
+          <div className="wf-stamps">
+            <div className={`wf-stamp ${t.ready_at ? "on" : ""}`}>
+              <small>جاهزية التسليم — ڤيوليت</small>
+              <b>{t.ready_at ? `${t.ready_by || "—"} · ${fmtAt(t.ready_at)}` : "لم يُسلَّم بعد"}</b>
+            </div>
+            <div className={`wf-stamp ${t.status === "Approved" ? "on ok" : ""}`}>
+              <small>اعتماد سيم</small>
+              <b>{t.status === "Approved" ? `${t.reviewed_by || "—"} · ${fmtAt(t.reviewed_at)}` : t.status === "Pending Review" ? "بانتظار القرار" : "—"}</b>
+              {t.status === "Approved" && t.review_note ? <span className="muted" style={{ fontSize: 12 }}>{t.review_note}</span> : null}
+            </div>
+          </div>
+
+          {(canSubmitNow || canDecideNow) && (
+            <div className="wf-actions">
+              {canSubmitNow && (
+                <button className="btn primary" type="button" onClick={() => setDialog("submit")}>
+                  <Icon name="arrow" size={15} /> {t.status === "Revision Needed" ? "تم التعديل — إعادة الإرسال لسيم" : "جاهز للتسليم — إرسال لمراجعة سيم"}
+                </button>
+              )}
+              {canDecideNow && (
+                <>
+                  <button className="btn primary" type="button" onClick={() => setDialog("approve")}><Icon name="check" size={15} /> اعتماد</button>
+                  <button className="btn" type="button" style={{ color: "#b45309" }} onClick={() => setDialog("revision")}>طلب تعديل</button>
+                </>
+              )}
+            </div>
+          )}
+
+          {reviews.length > 0 && (
+            <details className="wf-history">
+              <summary>سجل التسليم والاعتماد ({reviews.length})</summary>
+              {[...reviews].reverse().map((r, i) => {
+                const m = REVIEW_META[r.decision] || REVIEW_META.submitted;
+                return (
+                  <div className="wf-h-row" key={i}>
+                    <span className="dot" style={{ background: m.color }} />
+                    <div>
+                      <b style={{ color: m.color }}>{m.past}</b> — {r.by || "—"} <small className="muted">· {fmtAt(r.at)}</small>
+                      {r.note && <div className="muted" style={{ fontSize: 12.5 }}>{r.note}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </details>
+          )}
+
+          {/* ===== التعليق / التأخير ===== */}
+          {(t.on_hold || overdue) && (
+            <div className="wf-alert danger">
+              <b>{t.on_hold ? "المهمة معلّقة" : "المهمة متأخرة عن موعدها"}</b>
+              <div className="wf-hold">
+                <span><small>السبب</small>{t.blocker || "لم يُذكر — حدّده من «تعديل»"}</span>
+                <span><small>الجهة المطلوب منها الإجراء</small>{t.waiting_on || "—"}</span>
+                <span><small>موعد المعالجة</small>{t.resolve_date || "—"}</span>
+              </div>
+            </div>
+          )}
+
           <div className="d-section"><span className="st-ic"><Icon name="arrow" size={15} /></span>سير عمل المهمة</div>
           <div className="holder-box">
             <Icon name="pin" size={17} />
@@ -190,13 +320,16 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
 
           <div className="d-section">التفاصيل الأساسية</div>
           <div className="detail-grid">
+            <Field k="المخرج" v={val(t.deliverable)} />
             <Field k="المسؤول" v={val(t.assigned_to)} />
             <Field k="تاريخ الاستحقاق" v={val(t.due_date)} />
-            <Field k="بانتظار" v={val(t.waiting_on)} />
+            <Field k="الجهة المطلوب منها الإجراء" v={val(t.waiting_on)} />
             <Field k="النشاط" v={val(t.activity)} />
+            <Field k="نسبة الإنجاز" v={`${pct}%`} />
           </div>
+          <div className="progress" style={{ marginTop: 10 }}><span style={{ width: `${pct}%`, background: pct === 100 ? "#16a34a" : "var(--primary)" }} /></div>
 
-          {t.blocker && String(t.blocker).trim() && (
+          {t.blocker && String(t.blocker).trim() && !t.on_hold && !overdue && (
             <>
               <div className="d-section"><span className="st-ic"><Icon name="alert" size={15} /></span>العائق / الخطر</div>
               <div className="detail-block warn">{t.blocker}</div>
@@ -210,8 +343,27 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
             </>
           )}
 
-          {/* الروابط والمرفقات داخل المهمة */}
-          <div className="d-section"><span className="st-ic"><Icon name="link" size={15} /></span>الروابط والمرفقات ({links.length})</div>
+          {/* المرفقات (ملفات) */}
+          <div className="d-section"><span className="st-ic"><Icon name="file" size={15} /></span>المرفقات ({taskFiles.length})</div>
+          <div className="detail-block">
+            {taskFiles.length === 0 ? <span className="muted">لا مرفقات بعد.</span> : taskFiles.map((f) => (
+              <div className="file-line" key={f.id}>
+                <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="file" size={15} /></span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                <button className="btn sm" type="button" onClick={() => openFile(f)}>فتح</button>
+                {!readOnly && <button className="btn sm ghost" type="button" onClick={() => removeFile(f)} title="حذف"><Icon name="close" size={14} /></button>}
+              </div>
+            ))}
+            {!readOnly && (
+              <label className="btn sm" style={{ marginTop: 10, cursor: "pointer", display: "inline-flex" }}>
+                <Icon name="upload" size={14} /> {uploading ? "جاري الرفع…" : "رفع ملف"}
+                <input type="file" hidden onChange={uploadFile} disabled={uploading} />
+              </label>
+            )}
+          </div>
+
+          {/* الروابط داخل المهمة */}
+          <div className="d-section"><span className="st-ic"><Icon name="link" size={15} /></span>الروابط ({links.length})</div>
           <div className="detail-block">
             {links.length === 0 ? (
               <span className="muted">لا روابط بعد.</span>
@@ -267,6 +419,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
           </div>
         )}
       </div>
+      {dialog && <ReviewDialog task={t} mode={dialog} onClose={() => setDialog(null)} onDone={afterDecision} />}
     </div>
   );
 }

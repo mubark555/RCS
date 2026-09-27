@@ -8,6 +8,9 @@ const ACTION_META = {
   create: { verb: "أضاف", color: "#16a34a", ico: "plus" },
   update: { verb: "حدّث", color: "#2563eb", ico: "edit" },
   delete: { verb: "حذف", color: "#e0574e", ico: "trash" },
+  approve: { verb: "اعتمد", color: "#16a34a", ico: "check" },
+  revision: { verb: "طلب تعديل على", color: "#d97706", ico: "alert" },
+  submit: { verb: "أرسل للمراجعة", color: "#7c3aed", ico: "arrow" },
 };
 
 function timeAgo(iso) {

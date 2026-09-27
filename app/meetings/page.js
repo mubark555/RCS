@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { meetingsStore } from "@/lib/store";
-import { useRole } from "@/components/RoleProvider";
+import { useRole, useProjectNames } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
-import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
@@ -188,6 +187,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
 }
 
 function MeetingForm({ initial, users, onSave, onCancel }) {
+  const projectNames = useProjectNames();
   const [f, setF] = useState({
     ...EMPTY,
     ...(initial || {}),
@@ -233,7 +233,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
             <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>الحالة</span>

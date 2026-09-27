@@ -3,7 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { usersStore, projectsStore, appSettings } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
-import { projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
+import { projManagers, projClients, projMembers, userProjects, PROJECTS } from "@/lib/constants";
+import { canReview, canSubmit } from "@/lib/workflow";
 
 const RoleCtx = createContext(null);
 
@@ -124,10 +125,13 @@ export function RoleProvider({ children }) {
   const canManage = role === "manager";
   // صلاحية المالية: المدير دائماً + أي حساب عيّنه المالك في القائمة
   const canFinance = canManage || (viewerId != null && financeUsers.includes(viewerId));
+  // الاعتماد لسيم (العميل) والمدير نيابةً عنها؛ التسليم لفريق ڤيوليت
+  const canApprove = canReview(role);
+  const canDeliver = canSubmit(role);
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, financeUsers, saveFinanceUsers, ready, allowSwitch, noAccess }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canApprove, canDeliver, financeUsers, saveFinanceUsers, ready, allowSwitch, noAccess }}
     >
       {children}
     </RoleCtx.Provider>
@@ -137,7 +141,15 @@ export function RoleProvider({ children }) {
 export function useRole() {
   return useContext(RoleCtx) || {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
-    readOnly: false, canManage: true, canFinance: true, financeUsers: [], ready: false, allowSwitch: true, noAccess: false,
+    readOnly: false, canManage: true, canFinance: true, canApprove: true, canDeliver: true, financeUsers: [], ready: false, allowSwitch: true, noAccess: false,
     setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
+}
+
+// أسماء المشاريع المتاحة للمستخدم الحالي — من قاعدة البيانات (مصدر واحد)
+export function useProjectNames() {
+  const { projects, scopeProjects } = useRole();
+  if (scopeProjects) return scopeProjects;
+  const names = (projects || []).map((p) => p.name).filter(Boolean);
+  return names.length ? names : PROJECTS;
 }

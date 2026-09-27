@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { tasksStore, meetingsStore, invoicesStore, paymentsStore, notificationsStore } from "@/lib/store";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { useRole } from "@/components/RoleProvider";
-import { invoiceState } from "@/lib/constants";
+import { invoiceState, isDone } from "@/lib/constants";
 
 const DAY = 86400000;
 const ALERTED_KEY = "sp_alerted_v1";
@@ -46,7 +46,7 @@ export default function DeadlineAlerts() {
       // ---- المهام ----
       try {
         const tasks = await tasksStore.list();
-        (tasks || []).filter((t) => t.status !== "Completed" && t.due_date && inScope(t.project)).forEach((t) => {
+        (tasks || []).filter((t) => !isDone(t) && t.due_date && inScope(t.project)).forEach((t) => {
           const due = startOfDay(new Date(t.due_date));
           if (isNaN(due)) return;
           if (due < today) push(`task:${t.id}:overdue`, "danger", `مهمة متأخرة: ${t.task}`);

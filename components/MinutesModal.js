@@ -37,7 +37,7 @@ export function exportMinutes(m) {
   .sheet { max-width: 780px; margin: 0 auto; }
   header { display:flex; align-items:flex-end; justify-content:space-between; border-bottom: 2.5px solid #e05a50; padding-bottom: 12px; }
   .brand { font-size: 24px; font-weight: 800; color: #e05a50; letter-spacing: -.5px; }
-  .brand small { display:block; font-size: 10px; letter-spacing: 4px; color:#9a948c; font-weight:700; margin-top:2px; }
+  .brand small { display:block; font-size: 12px; letter-spacing: 0; color:#9a948c; font-weight:700; margin-top:2px; }
   .doc-tag { text-align:left; font-size: 12px; color:#8a8078; }
   .doc-tag b { color:#2b2a32; font-size: 13px; }
   h1 { font-size: 20px; margin: 20px 0 4px; }
@@ -62,7 +62,7 @@ export function exportMinutes(m) {
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
   <header>
-    <div class="brand">سيم برايم<small>DIGITAL MARKETING</small></div>
+    <div class="brand">ڤيوليت × سيم برايم<small>مركز القيادة الموحد</small></div>
     <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
   </header>
 
@@ -86,7 +86,7 @@ export function exportMinutes(m) {
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>سيم برايم — نظام إدارة المشاريع</span><span>${esc(m.title)}</span></footer>
+  <footer><span>ڤيوليت × سيم برايم — مركز القيادة الموحد</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)

@@ -7,7 +7,7 @@ import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import ChipMulti from "@/components/ChipMulti";
 import Icon from "@/components/Icon";
-import { projManagers, projClients, projMembers } from "@/lib/constants";
+import { projManagers, projClients, projMembers, isDone } from "@/lib/constants";
 
 const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
@@ -48,7 +48,7 @@ export default function ProjectsPage() {
 
   function statOf(name) {
     const items = tasks.filter((t) => t.project === name);
-    const done = items.filter((t) => t.status === "Completed").length;
+    const done = items.filter((t) => isDone(t)).length;
     return { total: items.length, done, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
   }
 

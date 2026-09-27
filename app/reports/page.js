@@ -7,10 +7,9 @@ import Icon from "@/components/Icon";
 import Donut from "@/components/Donut";
 import Bar from "@/components/Bar";
 import TrendLine from "@/components/TrendLine";
-import { STATUS_META, HEALTH_META, CURRENCY, invoiceState } from "@/lib/constants";
+import { STATUS_META, HEALTH_META, CURRENCY, invoiceState, isDone } from "@/lib/constants";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-const STATUS_COLORS = { "Not Started": "#64748b", "In Progress": "#2563eb", "On Hold": "#d97706", Completed: "#16a34a" };
 function shortMoney(n) {
   const v = Number(n) || 0;
   if (v >= 1000000) return (v / 1000000).toFixed(v % 1000000 ? 1 : 0) + "M";
@@ -48,12 +47,12 @@ export default function ReportsPage() {
     if (!scoped) return null;
     const t = scoped.t;
     const total = t.length;
-    const completed = t.filter((x) => x.status === "Completed").length;
+    const completed = t.filter((x) => isDone(x)).length;
     const pct = total ? Math.round((completed / total) * 100) : 0;
 
     const byStatus = {};
     t.forEach((x) => { const k = x.status || "Not Started"; byStatus[k] = (byStatus[k] || 0) + 1; });
-    const statusSegs = Object.entries(byStatus).map(([k, v]) => ({ label: STATUS_META[k]?.ar || k, value: v, color: STATUS_COLORS[k] || "#94a3b8" }));
+    const statusSegs = Object.entries(byStatus).map(([k, v]) => ({ label: STATUS_META[k]?.ar || k, value: v, color: STATUS_META[k]?.color || "#94a3b8" }));
 
     const byProj = {};
     t.forEach((x) => { const k = x.project || "عام"; byProj[k] = (byProj[k] || 0) + 1; });

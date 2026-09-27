@@ -8,9 +8,8 @@ import Icon from "@/components/Icon";
 import Donut from "@/components/Donut";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useRole } from "@/components/RoleProvider";
-import { PRIORITY_META, HEALTH_META, STATUS_META } from "@/lib/constants";
-
-const STATUS_COLORS = { "Not Started": "#64748b", "In Progress": "#2563eb", "On Hold": "#d97706", Completed: "#16a34a" };
+import ReviewDialog from "@/components/ReviewDialog";
+import { PRIORITY_META, HEALTH_META, STATUS_META, isDone } from "@/lib/constants";
 
 const DAY = 86400000;
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -18,7 +17,8 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).g
 
 export default function Dashboard() {
   const router = useRouter();
-  const { viewer, clientProject, scopeProjects } = useRole();
+  const { viewer, clientProject, scopeProjects, canApprove, canDeliver } = useRole();
+  const [dialog, setDialog] = useState(null);
   const [allTasks, setAllTasks] = useState(null);
   const [allMeetings, setAllMeetings] = useState([]);
 
@@ -36,7 +36,7 @@ export default function Dashboard() {
   const s = useMemo(() => {
     if (!tasks) return null;
     const total = tasks.length;
-    const completed = tasks.filter((t) => t.status === "Completed").length;
+    const completed = tasks.filter((t) => isDone(t)).length;
     const pct = total ? Math.round((completed / total) * 100) : 0;
     const delayed = tasks.filter((t) => t.health === "Delayed").length;
     const attentionN = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").length;
@@ -44,7 +44,7 @@ export default function Dashboard() {
     const today = startOfDay(new Date());
     const horizon = today + 14 * DAY;
     const deadlines = tasks
-      .filter((t) => t.status !== "Completed" && t.due_date)
+      .filter((t) => !isDone(t) && t.due_date)
       .map((t) => ({ t, due: startOfDay(new Date(t.due_date)) }))
       .filter((x) => !isNaN(x.due) && x.due <= horizon)
       .sort((a, b) => a.due - b.due)
@@ -54,7 +54,7 @@ export default function Dashboard() {
         return { t, due, status: st };
       });
     const weekCount = tasks.filter((t) => {
-      if (t.status === "Completed" || !t.due_date) return false;
+      if (isDone(t) || !t.due_date) return false;
       const d = startOfDay(new Date(t.due_date));
       return !isNaN(d) && d >= today && d <= today + 7 * DAY;
     }).length;
@@ -63,7 +63,7 @@ export default function Dashboard() {
 
     const byStatus = {};
     tasks.forEach((t) => { const k = t.status || "Not Started"; byStatus[k] = (byStatus[k] || 0) + 1; });
-    const statusSegs = Object.entries(byStatus).map(([k, v]) => ({ label: STATUS_META[k]?.ar || k, value: v, color: STATUS_COLORS[k] || "#94a3b8" }));
+    const statusSegs = Object.entries(byStatus).map(([k, v]) => ({ label: STATUS_META[k]?.ar || k, value: v, color: STATUS_META[k]?.color || "#94a3b8" }));
 
     return { total, completed, pct, delayed, attentionN, deadlines, weekCount, attention, statusSegs };
   }, [tasks]);
@@ -76,9 +76,10 @@ export default function Dashboard() {
       .slice(0, 3);
   }, [meetings]);
 
-  async function markDone(t) {
-    await tasksStore.update(t.id, { status: "Completed" });
-    await reload();
+  // زر الإنجاز السريع يتبع دورة العمل: ڤيوليت تُرسل للمراجعة، وسيم تعتمد
+  function quickAction(t) {
+    if (t.status === "Pending Review") { if (canApprove) setDialog({ task: t, mode: "approve" }); else router.push("/approvals"); return; }
+    if (canDeliver) setDialog({ task: t, mode: "submit" });
   }
 
   if (!s) return <div className="empty">جاري التحميل…</div>;
@@ -135,7 +136,7 @@ export default function Dashboard() {
               const [bg, c] = DL_COLORS[status];
               return (
                 <div className="dl-item" key={t.id}>
-                  <button className="dl-check" title="وضع علامة مكتمل" onClick={() => markDone(t)} />
+                  <button className="dl-check" title={t.status === "Pending Review" ? "بانتظار مراجعة سيم" : "جاهز للتسليم — إرسال لمراجعة سيم"} onClick={() => quickAction(t)} style={t.status === "Pending Review" ? { borderColor: "#7c3aed", background: "#f1ebfd" } : undefined} />
                   <div className="dl-body" onClick={() => router.push("/tasks")} style={{ cursor: "pointer" }}>
                     <b>{t.task}</b>
                     <small>{t.project} · {fmtDay(due)}</small>
@@ -208,6 +209,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {dialog && <ReviewDialog task={dialog.task} mode={dialog.mode} onClose={() => setDialog(null)} onDone={reload} />}
     </div>
   );
 }

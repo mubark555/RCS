@@ -7,7 +7,7 @@ import { useNotifications, getNotif } from "@/components/NotificationsProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import ChipMulti from "@/components/ChipMulti";
-import { PROJECTS, projManagers, projClients, projMembers, userProjects } from "@/lib/constants";
+import { PROJECTS, projManagers, projClients, projMembers, userProjects, isDone } from "@/lib/constants";
 
 // حالة إشعار البريد المتوقّعة عند إضافة مستخدم (حسب الإعدادات)
 function addEmailStatus(prefs, users, newUserEmail) {
@@ -119,8 +119,8 @@ export default function TeamPage() {
     const map = {};
     (users || []).forEach((u) => {
       const mine = tasks.filter((t) => taskFor(t, u.name));
-      const open = mine.filter((t) => t.status !== "Completed").length;
-      const done = mine.filter((t) => t.status === "Completed").length;
+      const open = mine.filter((t) => !isDone(t)).length;
+      const done = mine.filter((t) => isDone(t)).length;
       const projs = (projects || [])
         .filter((p) => projManagers(p).includes(u.name) || projMembers(p).includes(u.name) || projClients(p).includes(u.name))
         .map((p) => p.name);
@@ -132,7 +132,7 @@ export default function TeamPage() {
   const totals = useMemo(() => {
     const list = users || [];
     const active = list.filter((u) => (stat[u.id]?.open || 0) > 0).length;
-    const openTasks = tasks.filter((t) => t.status !== "Completed").length;
+    const openTasks = tasks.filter((t) => !isDone(t)).length;
     const overloaded = list.filter((u) => (stat[u.id]?.open || 0) >= 6).length;
     return { total: list.length, active, openTasks, overloaded };
   }, [users, tasks, stat]);

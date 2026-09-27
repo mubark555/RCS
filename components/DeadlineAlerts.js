@@ -21,12 +21,18 @@ function writeAlerted(obj) {
 
 export default function DeadlineAlerts() {
   const { pushToast, reload: reloadNotifs } = useNotifications();
-  const { role, canFinance, scopeProjects, ready } = useRole();
+  const { role, canFinance, canApprove, scopeProjects, ready, viewer } = useRole();
   const ran = useRef(false);
+  // scopeProjects مصفوفة جديدة في كل رسم — نعتمد على مفتاح نصّي ثابت حتى لا يُعاد ضبط المؤقّت باستمرار
+  const scopeKey = scopeProjects ? scopeProjects.join("|") : "*";
+  const scopeRef = useRef(scopeProjects);
+  scopeRef.current = scopeProjects;
+  const meName = viewer?.name || "";
 
   useEffect(() => {
-    // العملاء لا يتلقّون تنبيهات تشغيلية؛ ننتظر جهوزية الأدوار
-    if (!ready || role === "client") return;
+    // ننتظر جهوزية الأدوار. ممثل سيم (العميل) يتلقّى تنبيهات الاعتماد فقط
+    if (!ready) return;
+    const isClient = role === "client";
 
     let cancelled = false;
 
@@ -36,16 +42,31 @@ export default function DeadlineAlerts() {
       const now = Date.now();
       const fresh = [];
 
-      const push = (key, tone, message) => {
+      const push = (rawKey, tone, message) => {
+        const key = `${meName}|${rawKey}`; // لكل مستخدم تنبيهاته (حتى على جهاز مشترك)
         if (alerted[key]) return;
         alerted[key] = now;
         fresh.push({ tone, message });
       };
-      const inScope = (proj) => !scopeProjects || scopeProjects.includes(proj);
+      const scope = scopeRef.current;
+      const inScope = (proj) => !scope || scope.includes(proj);
 
       // ---- المهام ----
       try {
         const tasks = await tasksStore.list();
+        const me = meName;
+        // دورة الاعتماد: طلبات المراجعة (لسيم) وقرارات الاعتماد (لڤيوليت)
+        (tasks || []).filter((t) => inScope(t.project)).forEach((t) => {
+          if (canApprove && t.status === "Pending Review") {
+            push(`review:${t.id}:${t.ready_at || ""}`, "info", `بانتظار اعتمادك: ${t.task}`);
+          }
+          if (!isClient && t.reviewed_at && (!me || t.assigned_to === me || t.ready_by === me || role === "manager")) {
+            const recent = now - new Date(t.reviewed_at).getTime() < 7 * DAY;
+            if (recent && t.status === "Revision Needed") push(`decision:${t.id}:${t.reviewed_at}`, "danger", `مطلوب تعديل: ${t.task}${t.review_note ? ` — ${t.review_note}` : ""}`);
+            if (recent && t.status === "Approved") push(`decision:${t.id}:${t.reviewed_at}`, "success", `اعتمدت سيم: ${t.task}`);
+          }
+        });
+        if (isClient) throw new Error("skip"); // لا تنبيهات تشغيلية للعميل
         (tasks || []).filter((t) => !isDone(t) && t.due_date && inScope(t.project)).forEach((t) => {
           const due = startOfDay(new Date(t.due_date));
           if (isNaN(due)) return;
@@ -55,7 +76,7 @@ export default function DeadlineAlerts() {
       } catch {}
 
       // ---- الاجتماعات (خلال 24 ساعة) ----
-      try {
+      if (!isClient) try {
         const meetings = await meetingsStore.list();
         (meetings || []).filter((m) => m.status !== "Cancelled" && m.start_at && inScope(m.project)).forEach((m) => {
           const start = new Date(m.start_at).getTime();
@@ -69,7 +90,7 @@ export default function DeadlineAlerts() {
       } catch {}
 
       // ---- الفواتير (لأصحاب صلاحية المالية فقط) ----
-      if (canFinance) {
+      if (canFinance && !isClient) {
         try {
           const [invoices, payments] = await Promise.all([invoicesStore.list(), paymentsStore.list()]);
           const paidByInv = {};
@@ -100,7 +121,7 @@ export default function DeadlineAlerts() {
     const t0 = setTimeout(() => { if (!ran.current) { ran.current = true; scan(); } }, 2500);
     const iv = setInterval(scan, 30 * 60 * 1000);
     return () => { cancelled = true; clearTimeout(t0); clearInterval(iv); };
-  }, [ready, role, canFinance, scopeProjects, pushToast, reloadNotifs]);
+  }, [ready, role, canFinance, canApprove, scopeKey, meName, pushToast, reloadNotifs]);
 
   return null;
 }

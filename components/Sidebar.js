@@ -18,6 +18,7 @@ const ALL_LINKS = [
   { href: "/reports", label: "التقارير", ico: "file", roles: ["manager", "member"] },
   { href: "/finance", label: "المالية", ico: "briefcase", roles: ["manager", "member", "client"], finance: true },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
+  { href: "/calendar", label: "الروزنامة السنوية", ico: "flag", roles: ["manager", "member", "client"] },
   { href: "/activity", label: "سجل الأنشطة", ico: "clock", roles: ["manager", "member"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
   { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },

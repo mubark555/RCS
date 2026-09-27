@@ -29,6 +29,7 @@ export const DEFAULT_NOTIFY = {
   systemUrl: "",              // رابط النظام الظاهر في كل بريد (فارغ = رابط الموقع الحالي تلقائياً)
   sendToNewUser: true,        // إرسال إشعار «المستخدم» إلى بريد المستخدم نفسه (ترحيب)
   notifyAssignee: false,      // إرسال أيضاً للشخص المُسنَد (المهام)
+  approvalEmails: true,       // بريد دورة الاعتماد: طلب المراجعة لممثل سيم، والقرار للمسؤول
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
   events: { person: true, project: true, task: true, kpi: true, meeting: true },
   // القالب الافتراضي — المتغيّرات: {الإجراء} {النوع} {الاسم} {الدور} {المسمى} {البريد} {المشروع}
@@ -130,7 +131,8 @@ export function getNotif(prefs, entityKey, action) {
 let _toastSeq = 0;
 
 export function NotificationsProvider({ children }) {
-  const { users, viewer } = useRole();
+  const { users, viewer, projects } = useRole();
+  const projectsRef = useRef([]);
   const viewerRef = useRef(null);
   const [items, setItems] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -142,6 +144,7 @@ export function NotificationsProvider({ children }) {
 
   useEffect(() => { prefsRef.current = notifyPrefs; }, [notifyPrefs]);
   useEffect(() => { usersRef.current = users; }, [users]);
+  useEffect(() => { projectsRef.current = projects || []; }, [projects]);
   useEffect(() => { viewerRef.current = viewer; }, [viewer]);
 
   const reload = useCallback(async () => {
@@ -185,10 +188,45 @@ export function NotificationsProvider({ children }) {
     if (timers.current[id]) { clearTimeout(timers.current[id]); delete timers.current[id]; }
   }, []);
 
+  // بريد دورة الاعتماد: موجّه للطرف المطلوب منه الإجراء فقط
+  const sendWorkflowEmail = useCallback(async (evt) => {
+    const p = prefsRef.current;
+    if (!p.emailEnabled || p.approvalEmails === false) return;
+    const t = evt.record || {};
+    const emailOf = (name) => (usersRef.current.find((u) => u.name === name)?.email || "").trim();
+    const set = new Set();
+    let subject = "", body = "";
+    const last = (Array.isArray(t.reviews) ? t.reviews : []).slice(-1)[0] || {};
+    if (evt.action === "submit") {
+      // ممثلو سيم في المشروع
+      const proj = projectsRef.current.find((x) => x.name === t.project);
+      const reps = proj ? (proj.clients?.length ? proj.clients : proj.client ? [proj.client] : []) : [];
+      reps.forEach((n) => { const e = emailOf(n); if (e) set.add(e); });
+      usersRef.current.filter((u) => u.role === "client" && (u.project === t.project || (u.projects || []).includes(t.project))).forEach((u) => { if (u.email) set.add(u.email.trim()); });
+      subject = `بانتظار مراجعتك: ${t.task || ""}`;
+      body = `أرسل ${last.by || "فريق ڤيوليت"} تسليماً لمراجعة سيم.\nالمشروع: ${t.project || "—"}${t.deliverable ? `\nالمخرج: ${t.deliverable}` : ""}${last.note ? `\nملاحظة: ${last.note}` : ""}\n\nافتح قسم «الاعتمادات» للاعتماد أو طلب التعديل.`;
+    } else {
+      [t.assigned_to, t.ready_by].forEach((n) => { const e = emailOf(n); if (e) set.add(e); });
+      const ok = evt.action === "approve";
+      subject = `${ok ? "تم اعتماد" : "مطلوب تعديل"}: ${t.task || ""}`;
+      body = `${ok ? "اعتمد" : "طلب تعديلاً على"} ${last.by || "سيم"} التسليم.\nالمشروع: ${t.project || "—"}${last.note ? `\n${ok ? "ملاحظات" : "المطلوب"}: ${last.note}` : ""}`;
+    }
+    const to = [...set].filter((e) => e.includes("@"));
+    if (!to.length) return;
+    try {
+      await fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to, subject, html: buildEmailHtml(subject, body, systemUrlFrom(p) + "/approvals"), fromName: (p.senderName || "").trim() || undefined }),
+      });
+    } catch {}
+  }, []);
+
   // إرسال بريد الحدث حسب الإعدادات
   const maybeSendEmail = useCallback(async (evt, title) => {
     const p = prefsRef.current;
     if (!p.emailEnabled) return;
+    if (["submit", "approve", "revision"].includes(evt.action)) { sendWorkflowEmail(evt); return; }
     const key = ENTITY_EVENT[evt.entity];
     if (!key) return;
     const nx = getNotif(p, key, evt.action);
@@ -246,6 +284,7 @@ export function NotificationsProvider({ children }) {
     });
     return off;
   }, [pushToast, maybeSendEmail]);
+
 
   const unread = items.filter((n) => !n.read).length;
 

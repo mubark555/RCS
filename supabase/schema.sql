@@ -215,6 +215,9 @@ alter table public.kpis     add column if not exists period      text default ''
 alter table public.kpis     add column if not exists source      text default '';
 alter table public.files    add column if not exists ref         text default '';
 
+-- الدفعة 3: ربط المهمة بمحضر الاجتماع (انظر supabase/migrations/2026-09-batch3.sql)
+alter table public.tasks    add column if not exists meeting_id  text default '';
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

@@ -15,6 +15,7 @@ import {
   CHAIN_ACTIONS,
   normalizeChain,
   metaOf,
+  taskProgress,
 } from "@/lib/constants";
 
 // الحالات القابلة للاختيار يدوياً؛ الإرسال للمراجعة والاعتماد يتمّان عبر أزرار دورة العمل
@@ -170,7 +171,7 @@ export default function TaskForm({ initial, users = [], projects = [], defaultPr
 
         <div className="tf-grid2">
           <label className="field">
-            <span>نسبة الإنجاز: <b>{Number(f.progress) || 0}%</b></span>
+            <span>نسبة الإنجاز: <b>{Number(f.progress) > 0 ? `${Number(f.progress)}%` : `تلقائية حسب الحالة (${taskProgress({ ...f, progress: 0 })}%)`}</b></span>
             <input type="range" min="0" max="100" step="5" value={Number(f.progress) || 0} onChange={set("progress")} style={{ padding: 0 }} />
           </label>
           <label className="field">

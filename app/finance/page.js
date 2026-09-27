@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { invoicesStore, paymentsStore, kpisStore } from "@/lib/store";
+import { invoicesStore, paymentsStore, kpisStore, filesStore } from "@/lib/store";
+import { daysUntil, relDays } from "@/lib/metrics";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
@@ -25,18 +26,28 @@ function shortMoney(n) {
 }
 
 export default function FinancePage() {
-  const { canFinance, canManage, projects, ready } = useRole();
-  const [invoices, setInvoices] = useState(null);
+  const { canFinance, canFinanceEdit: canManage, projects, ready, scopeProjects, role } = useRole();
+  const [allInvoices, setInvoices] = useState(null);
+  const [files, setFiles] = useState([]);           // مرفقات الفواتير والسداد
+  const [detail, setDetail] = useState(null);       // فاتورة معروضة بالتفصيل
   const [payments, setPayments] = useState([]);
   const [kpis, setKpis] = useState([]);
   const [editing, setEditing] = useState(null);   // فاتورة قيد التحرير/الإضافة
   const [payFor, setPayFor] = useState(null);      // فاتورة يُسجّل لها دفعة
 
   async function reload() {
-    const [inv, pay] = await Promise.all([invoicesStore.list(), paymentsStore.list()]);
+    const [inv, pay, fs] = await Promise.all([invoicesStore.list(), paymentsStore.list(), filesStore.list().catch(() => [])]);
     setInvoices(inv);
     setPayments(pay);
+    setFiles(fs.filter((f) => /^(invoice|payment):/.test(f.ref || "")));
   }
+  // ممثل سيم يرى فواتير مشاريعه فقط
+  const invoices = useMemo(() => {
+    if (!allInvoices) return null;
+    if (role === "client") return allInvoices.filter((v) => v.project && (scopeProjects || []).includes(v.project));
+    return allInvoices;
+  }, [allInvoices, scopeProjects, role]);
+  const filesOf = (ref) => files.filter((f) => f.ref === ref);
   useEffect(() => {
     reload().catch(() => { setInvoices([]); setPayments([]); });
     kpisStore.list().then(setKpis).catch(() => setKpis([]));
@@ -89,11 +100,24 @@ export default function FinancePage() {
     return { invoiced, collected, outstanding, overdueAmount, overdueCount: overdue.length, rate, projBars, monthPts, count: active.length };
   }, [rows]);
 
+  // رفع مرفق مالي (فاتورة أو إيصال سداد) — مصنّف «مالية» ومخفي عن غير المخوّلين
+  async function uploadAttachment(file, ref, project, note) {
+    try {
+      await filesStore.upload(file, { project: project || "", category: "مالية", note, ref });
+    } catch (e) {
+      alert(`تعذّر رفع المرفق: ${e?.message || ""}`);
+    }
+  }
+
   async function delInvoice(inv) {
     if (!confirm(`حذف الفاتورة ${inv.number}؟\nسيتم حذف مدفوعاتها المرتبطة أيضاً.`)) return;
     // احذف مدفوعاتها أولاً (في الوضع المحلي لا يوجد cascade)
     const related = (payments || []).filter((p) => p.invoice_id === inv.id);
-    for (const p of related) { await paymentsStore.remove(p.id).catch(() => {}); }
+    for (const p of related) {
+      for (const f of filesOf(`payment:${p.id}`)) await filesStore.remove(f).catch(() => {});
+      await paymentsStore.remove(p.id).catch(() => {});
+    }
+    for (const f of filesOf(`invoice:${inv.id}`)) await filesStore.remove(f).catch(() => {});
     await invoicesStore.remove(inv.id);
     await reload();
   }
@@ -199,12 +223,12 @@ export default function FinancePage() {
             <thead>
               <tr>
                 <th>الفاتورة</th><th>المشروع</th><th>المبلغ</th><th>المدفوع</th><th>المتبقّي</th>
-                <th>الاستحقاق</th><th>الحالة</th><th></th>
+                <th>الاستحقاق</th><th>الحالة</th><th>المرفقات</th><th></th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8} className="empty" style={{ padding: 24 }}>لا فواتير بعد.</td></tr>
+                <tr><td colSpan={9} className="empty" style={{ padding: 24 }}>لا فواتير بعد.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id}>
                   <td><b>{r.number || "—"}</b>{r.note ? <div className="muted" style={{ fontSize: 11.5 }}>{r.note}</div> : null}</td>
@@ -212,10 +236,22 @@ export default function FinancePage() {
                   <td>{money(r.amount)} {r.currency || CURRENCY}</td>
                   <td style={{ color: "#16a34a", fontWeight: 700 }}>{money(r.paid)}</td>
                   <td style={{ color: r.outstanding ? "#c88a2e" : "#8a827a", fontWeight: 700 }}>{money(r.outstanding)}</td>
-                  <td>{r.due_date || "—"}</td>
+                  <td>
+                    {r.due_date || "—"}
+                    {r.outstanding > 0 && r.status !== "ملغاة" && r.status !== "مسودة" && r.due_date && (
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: daysUntil(r.due_date) < 0 ? "#e0574e" : "#8a827a" }}>{relDays(daysUntil(r.due_date))}</div>
+                    )}
+                  </td>
                   <td><span className="pill" style={{ background: r.st.bg, color: r.st.color }}>{r.st.label}</span></td>
                   <td>
+                    {(() => {
+                      const n = filesOf(`invoice:${r.id}`).length + (payments || []).filter((p) => p.invoice_id === r.id).reduce((s, p) => s + filesOf(`payment:${p.id}`).length, 0);
+                      return <span className="muted" style={{ fontSize: 12.5 }}>{n ? `📎 ${n}` : "—"}</span>;
+                    })()}
+                  </td>
+                  <td>
                     <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                      <button className="btn sm ghost" onClick={() => setDetail(r)} title="التفاصيل والمرفقات">التفاصيل</button>
                       {canManage && r.st.key !== "paid" && r.status !== "ملغاة" && (
                         <button className="btn sm ghost" onClick={() => setPayFor(r)} title="تسجيل دفعة">+ دفعة</button>
                       )}
@@ -237,12 +273,34 @@ export default function FinancePage() {
             projects={projects}
             kpis={kpis}
             onCancel={() => setEditing(null)}
-            onSave={async (payload) => {
-              if (editing.id) await invoicesStore.update(editing.id, payload);
-              else await invoicesStore.create(payload);
+            onSave={async (payload, file) => {
+              const rec = editing.id ? await invoicesStore.update(editing.id, payload) : await invoicesStore.create(payload);
+              const id = editing.id || rec?.id;
+              if (file && id) await uploadAttachment(file, `invoice:${id}`, payload.project, `فاتورة ${payload.number}`);
               setEditing(null);
               await reload();
             }}
+          />
+        </Modal>
+      )}
+
+      {detail && (
+        <Modal wide title={`الفاتورة ${detail.number || ""}`} onClose={() => setDetail(null)}>
+          <InvoiceDetail
+            inv={(rows || []).find((r) => r.id === detail.id) || detail}
+            payments={(payments || []).filter((p) => p.invoice_id === detail.id)}
+            filesOf={filesOf}
+            canEdit={canManage}
+            onUpload={async (file, ref) => { await uploadAttachment(file, ref, detail.project, `فاتورة ${detail.number}`); await reload(); }}
+            onRemoveFile={async (f) => { if (confirm(`حذف المرفق؟\n${f.name}`)) { await filesStore.remove(f); await reload(); } }}
+            onRemovePayment={async (p) => {
+              if (!confirm("حذف هذه الدفعة؟")) return;
+              for (const f of filesOf(`payment:${p.id}`)) await filesStore.remove(f).catch(() => {});
+              await paymentsStore.remove(p.id);
+              await reload();
+            }}
+            onPay={() => { setPayFor((rows || []).find((r) => r.id === detail.id) || detail); setDetail(null); }}
+            onClose={() => setDetail(null)}
           />
         </Modal>
       )}
@@ -252,8 +310,9 @@ export default function FinancePage() {
           <PaymentForm
             invoice={payFor}
             onCancel={() => setPayFor(null)}
-            onSave={async (payload) => {
-              await paymentsStore.create({ invoice_id: payFor.id, ...payload });
+            onSave={async (payload, file) => {
+              const pay = await paymentsStore.create({ invoice_id: payFor.id, ...payload });
+              if (file && pay?.id) await uploadAttachment(file, `payment:${pay.id}`, payFor.project, `سداد ${payFor.number}`);
               // إذا اكتمل السداد، علّم الفاتورة كمدفوعة تلقائياً
               const newPaid = (paidByInv[payFor.id] || 0) + (Number(payload.amount) || 0);
               if (newPaid >= (Number(payFor.amount) || 0) && payFor.status !== "مدفوعة") {
@@ -270,6 +329,7 @@ export default function FinancePage() {
 }
 
 function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
+  const [file, setFile] = useState(null);
   const [f, setF] = useState({
     number: "", project: "", amount: "", currency: CURRENCY,
     issue_date: "", due_date: "", status: "مسودة", kpi_id: "", note: "",
@@ -298,7 +358,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
         due_date: f.due_date || null,
         status: INVOICE_STATUSES.includes(f.status) ? f.status : "مسودة",
         note: (f.note || "").trim(),
-      });
+      }, file);
     } finally { setSaving(false); }
   }
 
@@ -328,6 +388,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
         </label>
       </div>
       <label className="field full"><span>ملاحظات / وصف الخدمة</span><input value={f.note} onChange={set("note")} placeholder="وصف مختصر للمقابل المُفوتر" /></label>
+      <label className="field full"><span>مرفق الفاتورة (PDF أو صورة — اختياري)</span><input type="file" accept=".pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
       {err && <div style={{ background: "#fdeceb", color: "#e0574e", fontSize: 13, fontWeight: 600, padding: "10px 14px", borderRadius: 11, marginBottom: 12 }}>{err}</div>}
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "…" : (initial ? "حفظ" : "إضافة الفاتورة")}</button>
@@ -338,6 +399,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
 }
 
 function PaymentForm({ invoice, onSave, onCancel }) {
+  const [file, setFile] = useState(null);
   const [f, setF] = useState({ amount: "", date: "", method: PAYMENT_METHODS[0], note: "" });
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -349,7 +411,7 @@ function PaymentForm({ invoice, onSave, onCancel }) {
     if (!amount || amount <= 0) { setErr("أدخل مبلغ الدفعة."); return; }
     setSaving(true);
     try {
-      await onSave({ amount, date: f.date || null, method: f.method, note: (f.note || "").trim() });
+      await onSave({ amount, date: f.date || null, method: f.method, note: (f.note || "").trim() }, file);
     } finally { setSaving(false); }
   }
 
@@ -367,11 +429,82 @@ function PaymentForm({ invoice, onSave, onCancel }) {
         </label>
       </div>
       <label className="field full"><span>ملاحظة</span><input value={f.note} onChange={set("note")} placeholder="مثال: دفعة أولى / سداد كامل" /></label>
+      <label className="field full"><span>إيصال السداد (PDF أو صورة — اختياري)</span><input type="file" accept=".pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
       {err && <div style={{ background: "#fdeceb", color: "#e0574e", fontSize: 13, fontWeight: 600, padding: "10px 14px", borderRadius: 11, marginBottom: 12 }}>{err}</div>}
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "…" : "تسجيل الدفعة"}</button>
         <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
       </div>
     </form>
+  );
+}
+
+// تفاصيل الفاتورة: البيانات + مرفق الفاتورة + الدفعات وإيصالاتها
+function InvoiceDetail({ inv, payments, filesOf, canEdit, onUpload, onRemoveFile, onRemovePayment, onPay, onClose }) {
+  const [busy, setBusy] = useState("");
+  async function pick(e, ref) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(ref);
+    try { await onUpload(file, ref); } finally { setBusy(""); }
+  }
+  async function open(f) { window.open(await filesStore.getUrl(f), "_blank"); }
+  const FileList = ({ refKey, empty }) => {
+    const list = filesOf(refKey);
+    return (
+      <div>
+        {list.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>{empty}</span> : list.map((f) => (
+          <div className="file-line" key={f.id}>
+            <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="file" size={15} /></span>
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+            <button className="btn sm" type="button" onClick={() => open(f)}>فتح</button>
+            {canEdit && <button className="btn sm ghost icon" type="button" onClick={() => onRemoveFile(f)} title="حذف"><Icon name="close" size={13} /></button>}
+          </div>
+        ))}
+        {canEdit && (
+          <label className="btn sm" style={{ marginTop: 8, cursor: "pointer", display: "inline-flex" }}>
+            <Icon name="upload" size={13} /> {busy === refKey ? "جاري الرفع…" : "رفع مرفق"}
+            <input type="file" accept=".pdf,image/*" hidden onChange={(e) => pick(e, refKey)} disabled={!!busy} />
+          </label>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="inv-sum">
+        <div><small>المشروع</small><b>{inv.project || "عام"}</b></div>
+        <div><small>قيمة الفاتورة</small><b>{money(inv.amount)} {inv.currency || CURRENCY}</b></div>
+        <div><small>المدفوع</small><b style={{ color: "#16a34a" }}>{money(inv.paid)}</b></div>
+        <div><small>المتبقّي</small><b style={{ color: inv.outstanding ? "#c88a2e" : undefined }}>{money(inv.outstanding)}</b></div>
+        <div><small>تاريخ الاستحقاق</small><b>{inv.due_date || "—"}</b>{inv.outstanding > 0 && inv.due_date ? <span style={{ fontSize: 11.5, color: daysUntil(inv.due_date) < 0 ? "#e0574e" : "var(--muted)", fontWeight: 700 }}>{relDays(daysUntil(inv.due_date))}</span> : null}</div>
+        <div><small>الحالة</small>{inv.st ? <span className="pill" style={{ background: inv.st.bg, color: inv.st.color, width: "fit-content" }}>{inv.st.label}</span> : <b>{inv.status}</b>}</div>
+      </div>
+      {inv.note && <div className="muted" style={{ fontSize: 13, margin: "10px 0 0" }}>{inv.note}</div>}
+
+      <div className="d-section">مرفق الفاتورة</div>
+      <FileList refKey={`invoice:${inv.id}`} empty="لا يوجد مرفق للفاتورة." />
+
+      <div className="d-section" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span>الدفعات وإيصالات السداد ({payments.length})</span>
+        {canEdit && inv.outstanding > 0 && inv.status !== "ملغاة" && <button className="btn sm primary" type="button" style={{ marginInlineStart: "auto" }} onClick={onPay}>+ تسجيل دفعة</button>}
+      </div>
+      {payments.length === 0 ? <div className="muted" style={{ fontSize: 12.5 }}>لا دفعات مسجّلة.</div> : payments.map((p) => (
+        <div className="inv-pay" key={p.id}>
+          <div className="inv-pay-h">
+            <b style={{ color: "#16a34a" }}>{money(p.amount)} {inv.currency || CURRENCY}</b>
+            <span className="muted" style={{ fontSize: 12.5 }}>{p.date || "—"} · {p.method || ""}{p.note ? ` · ${p.note}` : ""}</span>
+            {canEdit && <button className="btn sm danger icon" type="button" style={{ marginInlineStart: "auto" }} onClick={() => onRemovePayment(p)} title="حذف الدفعة"><Icon name="trash" size={13} /></button>}
+          </div>
+          <FileList refKey={`payment:${p.id}`} empty="لا يوجد إيصال." />
+        </div>
+      ))}
+
+      <div className="modal-actions" style={{ marginTop: 16 }}>
+        <button type="button" className="btn ghost" onClick={onClose}>إغلاق</button>
+      </div>
+    </div>
   );
 }

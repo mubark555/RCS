@@ -6,7 +6,7 @@ import Icon from "@/components/Icon";
 import { filesStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import ReviewDialog from "@/components/ReviewDialog";
-import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile } from "@/lib/constants";
 
 const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
 const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
@@ -41,7 +41,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
     window.addEventListener("keydown", onKey);
     filesStore.list().then((all) => {
       setTaskFiles(all.filter((f) => f.task_id && f.task_id === task.id));
-      setFiles(all.filter((f) => f.project === task.project && !f.task_id));
+      setFiles(all.filter((f) => f.project === task.project && !f.task_id && !isFinanceFile(f)));
     }).catch(() => {});
     return () => window.removeEventListener("keydown", onKey);
   }, [task, onClose]);

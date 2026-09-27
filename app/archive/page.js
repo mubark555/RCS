@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filesStore, isCloud } from "@/lib/store";
 import { useRole, useProjectNames } from "@/components/RoleProvider";
+import { isFinanceFile } from "@/lib/constants";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 
@@ -10,7 +11,7 @@ const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "ف�
 
 export default function ArchivePage() {
   const projectNames = useProjectNames();
-  const { readOnly, clientProject } = useRole();
+  const { readOnly, clientProject, canFinance } = useRole();
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");
@@ -29,12 +30,13 @@ export default function ArchivePage() {
     if (!files) return [];
     return files.filter((f) => {
       if (clientProject && f.project !== clientProject) return false;
+      if (!canFinance && isFinanceFile(f)) return false;
       if (fProject && f.project !== fProject) return false;
       if (fCat && f.category !== fCat) return false;
       if (q && !`${f.name} ${f.note}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [files, fProject, fCat, q, clientProject]);
+  }, [files, fProject, fCat, q, clientProject, canFinance]);
 
   async function open(rec) {
     setBusyId(rec.id);

@@ -16,7 +16,8 @@ export function RoleProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
   // قائمة الحسابات المخوّلة بقسم المالية (معرّفات مستخدمين) — يعيّنها مالك النظام
-  const [financeUsers, setFinanceUsers] = useState([]);
+  const [financeUsers, setFinanceUsers] = useState([]);   // اطلاع
+  const [financeEditors, setFinanceEditors] = useState([]); // اطلاع وتعديل
   const boundRef = useRef(false);
 
   const reloadUsers = useCallback(async () => {
@@ -79,15 +80,18 @@ export function RoleProvider({ children }) {
   // تحميل قائمة صلاحية المالية (مشتركة سحابياً عبر app_settings)
   useEffect(() => {
     appSettings.get("finance_access").then((v) => {
-      const arr = Array.isArray(v?.users) ? v.users : [];
-      setFinanceUsers(arr);
+      setFinanceUsers(Array.isArray(v?.users) ? v.users : []);
+      setFinanceEditors(Array.isArray(v?.editors) ? v.editors : []);
     }).catch(() => {});
   }, [authEmail, ready]);
 
-  const saveFinanceUsers = useCallback(async (ids) => {
-    const arr = Array.isArray(ids) ? ids : [];
-    setFinanceUsers(arr);
-    try { await appSettings.set("finance_access", { users: arr }); } catch {}
+  // users: صلاحية اطلاع فقط — editors: اطلاع وتعديل (مستقلة عن صلاحية إدارة المشاريع)
+  const saveFinanceUsers = useCallback(async (ids, editors = []) => {
+    const view = Array.isArray(ids) ? ids : [];
+    const edit = Array.isArray(editors) ? editors : [];
+    setFinanceUsers(view);
+    setFinanceEditors(edit);
+    try { await appSettings.set("finance_access", { users: view, editors: edit }); } catch {}
   }, []);
 
   // في الوضع السحابي: منع التبديل اليدوي إلا للمدير (لأغراض الدعم)
@@ -124,14 +128,15 @@ export function RoleProvider({ children }) {
   const readOnly = role === "client";
   const canManage = role === "manager";
   // صلاحية المالية: المدير دائماً + أي حساب عيّنه المالك في القائمة
-  const canFinance = canManage || (viewerId != null && financeUsers.includes(viewerId));
+  const canFinanceEdit = canManage || (viewerId != null && financeEditors.includes(viewerId));
+  const canFinance = canFinanceEdit || (viewerId != null && financeUsers.includes(viewerId));
   // الاعتماد لسيم (العميل) والمدير نيابةً عنها؛ التسليم لفريق ڤيوليت
   const canApprove = canReview(role);
   const canDeliver = canSubmit(role);
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canApprove, canDeliver, financeUsers, saveFinanceUsers, ready, allowSwitch, noAccess }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess }}
     >
       {children}
     </RoleCtx.Provider>
@@ -141,7 +146,7 @@ export function RoleProvider({ children }) {
 export function useRole() {
   return useContext(RoleCtx) || {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
-    readOnly: false, canManage: true, canFinance: true, canApprove: true, canDeliver: true, financeUsers: [], ready: false, allowSwitch: true, noAccess: false,
+    readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false,
     setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
 }

@@ -208,6 +208,13 @@ alter table public.tasks    add column if not exists reviews      jsonb       de
 alter table public.projects add column if not exists deliverables jsonb       default '[]'::jsonb;
 alter table public.files    add column if not exists task_id      text        default '';
 
+-- الدفعة 2: نطاق العمل + فترة/مصدر المؤشرات + مرفقات المالية (انظر supabase/migrations/2026-09-batch2.sql)
+alter table public.projects add column if not exists scope       text default '';
+alter table public.kpis     add column if not exists period_type text default 'quarter';
+alter table public.kpis     add column if not exists period      text default '';
+alter table public.kpis     add column if not exists source      text default '';
+alter table public.files    add column if not exists ref         text default '';
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

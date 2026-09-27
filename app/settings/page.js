@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSettings, DEFAULT_SETTINGS } from "@/components/SettingsProvider";
 import BrandMark from "@/components/BrandMark";
 import { useRole } from "@/components/RoleProvider";
@@ -193,26 +193,36 @@ function LogoField({ title, name, onName, letter, onLetter, url, inputRef, onFil
   );
 }
 
-// إدارة صلاحية الوصول لقسم المالية — يعيّنها مالك النظام (المدير)
+// إدارة صلاحية قسم المالية — مستقلة عن صلاحية إدارة المشاريع
+// ثلاثة مستويات لكل حساب: بلا صلاحية / اطلاع فقط / اطلاع وتعديل
+const FIN_LEVELS = [
+  { key: "none", label: "بلا صلاحية" },
+  { key: "view", label: "اطلاع فقط" },
+  { key: "edit", label: "اطلاع وتعديل" },
+];
 function FinanceAccessCard() {
-  const { users, financeUsers, saveFinanceUsers } = useRole();
-  const [sel, setSel] = useState(null);
+  const { users, financeUsers, financeEditors, saveFinanceUsers } = useRole();
+  const [sel, setSel] = useState(null); // { [userId]: level }
   const [saved, setSaved] = useState(false);
 
-  const current = sel ?? (Array.isArray(financeUsers) ? financeUsers : []);
-  // المدراء لهم صلاحية دائمة؛ الباقون يُمنحون يدوياً
+  const base = useMemo(() => {
+    const m = {};
+    (financeUsers || []).forEach((id) => { m[id] = "view"; });
+    (financeEditors || []).forEach((id) => { m[id] = "edit"; });
+    return m;
+  }, [financeUsers, financeEditors]);
+  const levels = sel ?? base;
   const managers = users.filter((u) => u.role === "manager");
   const others = users.filter((u) => u.role !== "manager");
 
-  function toggle(id) {
+  function setLevel(id, lvl) {
     setSaved(false);
-    setSel((prev) => {
-      const base = prev ?? current;
-      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
-    });
+    setSel((prev) => ({ ...(prev ?? base), [id]: lvl }));
   }
   async function apply() {
-    await saveFinanceUsers(current);
+    const view = Object.keys(levels).filter((id) => levels[id] === "view");
+    const edit = Object.keys(levels).filter((id) => levels[id] === "edit");
+    await saveFinanceUsers(view, edit);
     setSaved(true);
   }
 
@@ -220,8 +230,9 @@ function FinanceAccessCard() {
     <div className="card" style={{ marginTop: 18 }}>
       <div className="section-title"><span>صلاحية قسم المالية</span></div>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        قسم المالية (فواتير ڤيوليت ← سيم برايم والمدفوعات) حسّاس ويظهر فقط للحسابات التي تعيّنها هنا.
-        <b> المدراء لهم صلاحية دائمة.</b>
+        صلاحية المالية مستقلة عن إدارة المشاريع. <b>اطلاع فقط</b>: يرى الفواتير والمدفوعات ومرفقاتها.
+        <b> اطلاع وتعديل</b>: يضيف الفواتير ويسجّل السداد. حساب ممثل سيم يرى فواتير مشاريعه فقط.
+        <b> المدراء لهم صلاحية كاملة دائماً.</b>
       </p>
 
       {managers.length > 0 && (
@@ -229,7 +240,7 @@ function FinanceAccessCard() {
           {managers.map((u) => (
             <div className="fa-row" key={u.id}>
               <div><b>{u.name}</b> <span className="pill" style={{ fontSize: 11 }}>مدير</span></div>
-              <span className="pill" style={{ background: "#eaf6ef", color: "#16a34a" }}>صلاحية دائمة</span>
+              <span className="pill" style={{ background: "#eaf6ef", color: "#16a34a" }}>صلاحية كاملة دائمة</span>
             </div>
           ))}
         </div>
@@ -239,14 +250,19 @@ function FinanceAccessCard() {
         {others.length === 0 ? (
           <div className="muted" style={{ fontSize: 13 }}>لا يوجد أعضاء آخرون لإضافتهم. أضِف المستخدمين من قسم «الفريق».</div>
         ) : others.map((u) => {
-          const on = current.includes(u.id);
+          const lvl = levels[u.id] || "none";
           return (
-            <label className="fa-row" key={u.id} style={{ cursor: "pointer" }}>
-              <div><b>{u.name}</b> {u.title ? <span className="muted" style={{ fontSize: 12 }}>· {u.title}</span> : null}</div>
-              <button type="button" className={`fa-toggle ${on ? "on" : ""}`} onClick={() => toggle(u.id)} aria-pressed={on}>
-                <span />
-              </button>
-            </label>
+            <div className="fa-row" key={u.id}>
+              <div>
+                <b>{u.name}</b> {u.title ? <span className="muted" style={{ fontSize: 12 }}>· {u.title}</span> : null}
+                {u.role === "client" && <span className="pill" style={{ fontSize: 11, marginInlineStart: 6 }}>سيم</span>}
+              </div>
+              <div className="seg sm">
+                {FIN_LEVELS.map((l) => (
+                  <button key={l.key} type="button" className={lvl === l.key ? "on" : ""} onClick={() => setLevel(u.id, l.key)}>{l.label}</button>
+                ))}
+              </div>
+            </div>
           );
         })}
       </div>

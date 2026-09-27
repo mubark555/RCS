@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filesStore, isCloud } from "@/lib/store";
-import { useRole } from "@/components/RoleProvider";
+import { useRole, useProjectNames } from "@/components/RoleProvider";
+import { isFinanceFile } from "@/lib/constants";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
-import { PROJECTS } from "@/lib/constants";
 
 const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "محاضر", "تسجيلات", "أخرى"];
 
 export default function ArchivePage() {
-  const { readOnly, clientProject } = useRole();
+  const projectNames = useProjectNames();
+  const { readOnly, clientProject, canFinance } = useRole();
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");
@@ -29,12 +30,13 @@ export default function ArchivePage() {
     if (!files) return [];
     return files.filter((f) => {
       if (clientProject && f.project !== clientProject) return false;
+      if (!canFinance && isFinanceFile(f)) return false;
       if (fProject && f.project !== fProject) return false;
       if (fCat && f.category !== fCat) return false;
       if (q && !`${f.name} ${f.note}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [files, fProject, fCat, q, clientProject]);
+  }, [files, fProject, fCat, q, clientProject, canFinance]);
 
   async function open(rec) {
     setBusyId(rec.id);
@@ -80,7 +82,7 @@ export default function ArchivePage() {
         {!clientProject && (
           <select value={fProject} onChange={(e) => setFProject(e.target.value)}>
             <option value="">كل المشاريع</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
         <select value={fCat} onChange={(e) => setFCat(e.target.value)}>
@@ -125,6 +127,7 @@ export default function ArchivePage() {
 }
 
 function UploadForm({ onDone, onCancel }) {
+  const projectNames = useProjectNames();
   const fileRef = useRef(null);
   const [meta, setMeta] = useState({ project: "", category: CATEGORIES[0], note: "" });
   const [busy, setBusy] = useState(false);
@@ -152,7 +155,7 @@ function UploadForm({ onDone, onCancel }) {
         <label className="field"><span>المشروع</span>
           <select value={meta.project} onChange={(e) => setMeta({ ...meta, project: e.target.value })}>
             <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>التصنيف</span>
@@ -172,6 +175,7 @@ function UploadForm({ onDone, onCancel }) {
 }
 
 function LinkForm({ onDone, onCancel }) {
+  const projectNames = useProjectNames();
   const [f, setF] = useState({ name: "", url: "", project: "", category: "محاضر", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -199,7 +203,7 @@ function LinkForm({ onDone, onCancel }) {
         <label className="field"><span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
             <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>التصنيف</span>

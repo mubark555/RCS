@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
+import { STATUS_META } from "@/lib/constants";
 import { tasksStore, meetingsStore } from "@/lib/store";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
@@ -22,6 +23,8 @@ export function exportMinutes(m) {
   const attendees = Array.isArray(m.attendees) ? m.attendees : (m.attendees ? String(m.attendees).split(",") : []);
   const links = Array.isArray(m.links) ? m.links : [];
   const items = Array.isArray(m.action_items) ? m.action_items : [];
+  const decs = items.filter((a) => a.kind === "decision");
+  const acts = items.filter((a) => a.kind !== "decision");
   const esc = (s) => String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const bullets = (s) => {
     const ls = toLines(s);
@@ -37,7 +40,7 @@ export function exportMinutes(m) {
   .sheet { max-width: 780px; margin: 0 auto; }
   header { display:flex; align-items:flex-end; justify-content:space-between; border-bottom: 2.5px solid #e05a50; padding-bottom: 12px; }
   .brand { font-size: 24px; font-weight: 800; color: #e05a50; letter-spacing: -.5px; }
-  .brand small { display:block; font-size: 10px; letter-spacing: 4px; color:#9a948c; font-weight:700; margin-top:2px; }
+  .brand small { display:block; font-size: 12px; letter-spacing: 0; color:#9a948c; font-weight:700; margin-top:2px; }
   .doc-tag { text-align:left; font-size: 12px; color:#8a8078; }
   .doc-tag b { color:#2b2a32; font-size: 13px; }
   h1 { font-size: 20px; margin: 20px 0 4px; }
@@ -62,7 +65,7 @@ export function exportMinutes(m) {
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
   <header>
-    <div class="brand">ڤيوليت<small>DIGITAL MARKETING</small></div>
+    <div class="brand">ڤيوليت × سيم برايم<small>مركز القيادة الموحد</small></div>
     <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
   </header>
 
@@ -79,14 +82,15 @@ export function exportMinutes(m) {
 
   <section><h2>جدول الأعمال</h2>${bullets(m.agenda)}</section>
   <section><h2>محضر الاجتماع</h2>${bullets(m.minutes)}</section>
-  ${items.length ? `<section><h2>القرارات والمهام الناتجة</h2><table><tr><th>القرار / المهمة</th><th style="width:120px">المسؤول</th><th style="width:110px">الاستحقاق</th></tr>${items.map((a) => `<tr><td>${esc(a.text)}</td><td>${esc(a.assignee || "—")}</td><td>${esc(a.due || "—")}</td></tr>`).join("")}</table></section>` : ""}
+  ${decs.length ? `<section><h2>القرارات</h2><table><tr><th>القرار</th><th style="width:120px">المسؤول</th><th style="width:110px">الموعد</th></tr>${decs.map((a) => `<tr><td>${esc(a.text)}</td><td>${esc(a.assignee || "—")}</td><td>${esc(a.due || "—")}</td></tr>`).join("")}</table></section>` : ""}
+  ${acts.length ? `<section><h2>إجراءات المتابعة</h2><table><tr><th>الإجراء</th><th style="width:120px">المسؤول</th><th style="width:110px">الموعد</th></tr>${acts.map((a) => `<tr><td>${esc(a.text)}</td><td>${esc(a.assignee || "—")}</td><td>${esc(a.due || "—")}</td></tr>`).join("")}</table></section>` : ""}
   ${links.length ? `<section><h2>المرفقات والروابط</h2><ul class="att">${links.map((l) => `<li>${esc(l.type || "رابط")}: <a href="${esc(l.url)}">${esc(l.label || l.url)}</a></li>`).join("")}</ul></section>` : ""}
 
   <div class="sign">
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>ڤيوليت — نظام إدارة مشاريع سيم برايم</span><span>${esc(m.title)}</span></footer>
+  <footer><span>ڤيوليت × سيم برايم — مركز القيادة الموحد</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)
@@ -121,12 +125,28 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
   const agenda = toLines(m.agenda);
   const minutes = toLines(m.minutes);
 
+  const isAction = (x) => (x.kind || "action") !== "decision";
+  const decisions = items.filter((x) => !isAction(x));
+  const actions = items.map((x, i) => ({ ...x, _i: i })).filter(isAction);
+
+  // حالة المهام المُنشأة من هذا المحضر (مصدر واحد: تتحدّث مع المهمة)
+  const [linked, setLinked] = useState({});
+  useEffect(() => {
+    tasksStore.list().then((all) => {
+      const map = {};
+      all.forEach((t) => { if (t.meeting_id === m.id || items.some((x) => x.taskId === t.id)) map[t.id] = t; });
+      setLinked(map);
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.id, m.action_items]);
+
   async function mkTask(it) {
     return tasksStore.create({
-      activity: "قرار اجتماع", project: m.project || "", task: it.text,
+      activity: "إجراء اجتماع", project: m.project || "", task: it.text,
       priority: "Medium", status: "Not Started", assigned_to: it.assignee || "",
       due_date: it.due || null, waiting_on: "", blocker: "", approval_status: "",
-      notes: `مهمة ناتجة عن اجتماع: ${m.title}`, health: "On Track", holder: it.assignee || "",
+      notes: `مهمة ناتجة عن محضر اجتماع: ${m.title}`, health: "On Track", holder: it.assignee || "",
+      meeting_id: m.id,
     });
   }
 
@@ -148,7 +168,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
     try {
       const next = [...items];
       for (let i = 0; i < next.length; i++) {
-        if (next[i].taskId || !next[i].text?.trim()) continue;
+        if (next[i].taskId || !next[i].text?.trim() || !isAction(next[i])) continue;
         const task = await mkTask(next[i]);
         next[i] = { ...next[i], taskId: task.id };
       }
@@ -158,7 +178,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
     } finally { setBusy(false); }
   }
 
-  const pending = items.filter((x) => !x.taskId && x.text?.trim()).length;
+  const pending = actions.filter((x) => !x.taskId && x.text?.trim()).length;
 
   return (
     <Modal title="محضر الاجتماع" onClose={onClose}>
@@ -183,27 +203,40 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
         {minutes.length ? <ul className="mlist">{minutes.map((l, i) => <li key={i}>{l}</li>)}</ul> : <span className="muted">لم يُدوّن بعد — اضغط «تعديل».</span>}
       </div>
 
+      <div className="d-section">القرارات ({decisions.length})</div>
+      <div className="detail-block">
+        {decisions.length === 0 ? <span className="muted">لا قرارات موثّقة.</span> : (
+          <ul className="mlist">{decisions.map((d, i) => <li key={i}><b>{d.text}</b>{d.assignee || d.due ? <small className="muted"> — {[d.assignee, d.due].filter(Boolean).join(" · ")}</small> : null}</li>)}</ul>
+        )}
+      </div>
+
       <div className="d-section" style={{ display: "flex", alignItems: "center" }}>
-        القرارات والمهام الناتجة ({items.length})
+        إجراءات المتابعة ({actions.length})
         {!readOnly && pending > 0 && (
           <button className="btn sm primary" style={{ marginInlineStart: "auto" }} onClick={convertAll} disabled={busy}>تحويل الكل إلى مهام ({pending})</button>
         )}
       </div>
       <div className="detail-block">
-        {items.length === 0 ? (
-          <span className="muted">لا قرارات — أضِفها من «تعديل».</span>
+        {actions.length === 0 ? (
+          <span className="muted">لا إجراءات — أضِفها من «تعديل».</span>
         ) : (
-          items.map((it, i) => (
-            <div className="file-line" key={i}>
-              <span style={{ color: it.taskId ? "#16a34a" : "var(--primary)", display: "inline-flex" }}><Icon name={it.taskId ? "check" : "tasks"} size={15} /></span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{it.text}</div>
-                <small className="muted">{it.assignee || "غير مُسند"}{it.due ? ` · ${it.due}` : ""}</small>
+          actions.map((it) => {
+            const t = it.taskId ? linked[it.taskId] : null;
+            const sm = t ? STATUS_META[t.status] : null;
+            return (
+              <div className="file-line" key={it._i}>
+                <span style={{ color: it.taskId ? "#16a34a" : "var(--primary)", display: "inline-flex" }}><Icon name={it.taskId ? "check" : "tasks"} size={15} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{it.text}</div>
+                  <small className="muted">{it.assignee || "غير مُسند"}{it.due ? ` · ${it.due}` : ""}</small>
+                </div>
+                {it.taskId ? (
+                  sm ? <span className="pill" style={{ color: sm.color, borderColor: "transparent", background: `${sm.color}1a` }}>{sm.ar}</span>
+                     : <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>مهمة مُنشأة</span>
+                ) : !readOnly ? <button className="btn sm" onClick={() => convert(it._i)} disabled={busy}>إنشاء مهمة</button> : null}
               </div>
-              {it.taskId ? <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>مهمة مُنشأة</span>
-                : !readOnly ? <button className="btn sm" onClick={() => convert(i)} disabled={busy}>إنشاء مهمة</button> : null}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

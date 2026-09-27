@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { meetingsStore } from "@/lib/store";
-import { useRole } from "@/components/RoleProvider";
+import { useRole, useProjectNames } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
-import { PROJECTS } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
@@ -27,6 +26,7 @@ export default function MeetingsPage() {
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
+  const [q, setQ] = useState("");
 
   async function reload() {
     setItems(await meetingsStore.list());
@@ -37,8 +37,17 @@ export default function MeetingsPage() {
 
   const scoped = useMemo(() => {
     if (!items) return [];
-    return scopeProjects ? items.filter((m) => scopeProjects.includes(m.project)) : items;
-  }, [items, scopeProjects]);
+    let arr = scopeProjects ? items.filter((m) => scopeProjects.includes(m.project)) : items;
+    const s = q.trim().toLowerCase();
+    if (s) {
+      arr = arr.filter((m) =>
+        [m.title, m.project, m.location, m.agenda,
+         Array.isArray(m.attendees) ? m.attendees.join(" ") : m.attendees]
+          .filter(Boolean).join(" ").toLowerCase().includes(s)
+      );
+    }
+    return arr;
+  }, [items, scopeProjects, q]);
 
   const { upcoming, past } = useMemo(() => {
     const now = new Date().toISOString();
@@ -56,23 +65,39 @@ export default function MeetingsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-        <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{scoped.length} اجتماع</span>
-        <div style={{ marginInlineStart: "auto" }} />
-        {!readOnly && <button className="btn primary" onClick={() => setEditing({})}>+ اجتماع جديد</button>}
+      <div className="mtg-head">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: "var(--ink)", margin: 0 }}>الاجتماعات</h1>
+            <span className="cnt-pill">{scoped.length} اجتماع</span>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: 14.5, marginTop: 4 }}>جدولة ومتابعة اجتماعات الفريق والعملاء</p>
+        </div>
+        {!readOnly && (
+          <button className="btn primary" onClick={() => setEditing({})} style={{ padding: "13px 22px", fontSize: 15, borderRadius: 14 }}>+ اجتماع جديد</button>
+        )}
       </div>
 
-      <div className="section-title">القادمة ({upcoming.length})</div>
+      <div className="mtg-search">
+        <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={18} /></span>
+        <input placeholder="ابحث في الاجتماعات…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+
+      <div className="mtg-sec"><span className="bar" /><h2>القادمة ({upcoming.length})</h2></div>
       {upcoming.length === 0 ? (
-        <div className="empty">لا توجد اجتماعات قادمة.</div>
+        <div className="mtg-empty">لا توجد اجتماعات قادمة.</div>
       ) : (
-        upcoming.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} />)
+        <div className="mtg-list">
+          {upcoming.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} />)}
+        </div>
       )}
 
       {past.length > 0 && (
         <>
-          <div className="section-title">السابقة / المنتهية ({past.length})</div>
-          {past.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} dim />)}
+          <div className="mtg-sec"><span className="bar" /><h2>السابقة / المنتهية ({past.length})</h2></div>
+          <div className="mtg-list">
+            {past.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} dim />)}
+          </div>
         </>
       )}
 
@@ -113,6 +138,8 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
     : "—";
   const attendees = Array.isArray(m.attendees) ? m.attendees : (m.attendees ? String(m.attendees).split(",").map((x) => x.trim()) : []);
   const links = Array.isArray(m.links) ? m.links : [];
+  const agendaPreview = (m.agenda || "").split("\n").filter(Boolean).join(" · ");
+  const metaBits = [dateStr, `${m.duration} دقيقة`, m.project, m.location].filter(Boolean);
 
   async function del() {
     if (!confirm(`حذف الاجتماع؟\n\n${m.title}`)) return;
@@ -121,55 +148,46 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
   }
 
   return (
-    <div className="list-card" style={dim ? { opacity: 0.7 } : undefined}>
-      <div className="ic" style={{ color: "var(--primary)" }}><Icon name="calendar" size={22} /></div>
-      <div className="body">
-        <h4>
-          {m.title}
-          <span className="badge" style={{ background: `${st.color}22`, color: st.color }}>{st.ar}</span>
-        </h4>
-        <div className="meta">
-          <span>{dateStr}</span>
-          <span>{m.duration} دقيقة</span>
-          {m.project && <span>{m.project}</span>}
-          {m.location && <span>{m.location}</span>}
+    <div className={`mtg-card${dim ? " dim" : ""}`}>
+      <div className="row">
+        <div className="mtg-icon"><Icon name="calendar" size={26} /></div>
+        <div className="mtg-body">
+          <div className="t">
+            <h3>{m.title}</h3>
+            <span className="st" style={{ background: `${st.color}1e`, color: st.color }}>{st.ar}</span>
+          </div>
+          <div className="mtg-meta">{metaBits.join(" · ")}</div>
+          {attendees.length > 0 && (
+            <div className="mtg-att"><b>الحضور:</b> {attendees.join("، ")}</div>
+          )}
+          {agendaPreview && <div className="mtg-agenda">{agendaPreview}</div>}
+          <div className="mtg-actions">
+            <button className="mtg-btn pri" onClick={onMinutes}>
+              <Icon name="file" size={15} /> {m.minutes ? "عرض المحضر" : "المحضر"}
+            </button>
+            <button className="mtg-btn neutral" onClick={() => exportMinutes(m)}>
+              <Icon name="upload" size={15} /> تصدير
+            </button>
+            {links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noreferrer" className="mtg-btn pri">
+                <Icon name="link" size={15} /> {l.label || l.type || "رابط"}
+              </a>
+            ))}
+          </div>
         </div>
-        {attendees.length > 0 && (
-          <div className="meta" style={{ marginTop: 6 }}>الحضور: {attendees.join("، ")}</div>
+        {!readOnly && (
+          <div className="mtg-side">
+            <button className="mtg-ib" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>
+            <button className="mtg-ib del" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>
+          </div>
         )}
-        {m.agenda && <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-2)" }}>{m.agenda}</div>}
-        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          <button className="pill" onClick={onMinutes} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: m.minutes ? "var(--primary)" : "var(--text-2)", borderColor: m.minutes ? "#f3cfc9" : "var(--border)" }}>
-            <Icon name="file" size={13} /> {m.minutes ? "عرض المحضر" : "المحضر"}
-          </button>
-          <button className="pill" onClick={() => exportMinutes(m)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Icon name="upload" size={13} /> تصدير
-          </button>
-          {links.map((l, i) => (
-            <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Icon name="link" size={13} /> {l.label || l.type || "رابط"}
-            </a>
-          ))}
-        </div>
       </div>
-      {!readOnly && (
-        <div className="row-actions">
-          <button className="btn sm ghost icon" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>
-          <button className="btn sm danger icon" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>
-        </div>
-      )}
     </div>
   );
 }
 
-function iconForLink(l) {
-  const t = (l.type || l.label || "").toString();
-  if (/تسجيل|record/i.test(t)) return "🎥";
-  if (/محضر|minute/i.test(t)) return "📝";
-  return "🔗";
-}
-
 function MeetingForm({ initial, users, onSave, onCancel }) {
+  const projectNames = useProjectNames();
   const [f, setF] = useState({
     ...EMPTY,
     ...(initial || {}),
@@ -187,7 +205,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
   const rmLink = (i) => setF((s) => ({ ...s, links: s.links.filter((_, j) => j !== i) }));
 
   const ai = Array.isArray(f.action_items) ? f.action_items : [];
-  const addAI = () => setF((s) => ({ ...s, action_items: [...ai, { text: "", assignee: "", due: "" }] }));
+  const addAI = (kind = "action") => setF((s) => ({ ...s, action_items: [...ai, { kind, text: "", assignee: "", due: "" }] }));
   const setAI = (i, k, v) => setF((s) => ({ ...s, action_items: ai.map((a, j) => (j === i ? { ...a, [k]: v } : a)) }));
   const rmAI = (i) => setF((s) => ({ ...s, action_items: ai.filter((_, j) => j !== i) }));
 
@@ -215,7 +233,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
             <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>الحالة</span>
@@ -259,12 +277,20 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
 
         <div className="field full">
           <span style={{ display: "flex", alignItems: "center", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>
-            القرارات والمهام الناتجة (Action Items — تتحول لمهام)
-            <button type="button" className="btn sm ghost" style={{ marginInlineStart: "auto" }} onClick={addAI}>+ إضافة قرار</button>
+            القرارات وإجراءات المتابعة
+            <span style={{ marginInlineStart: "auto", display: "flex", gap: 6 }}>
+              <button type="button" className="btn sm ghost" onClick={() => addAI("decision")}>+ قرار</button>
+              <button type="button" className="btn sm ghost" onClick={() => addAI("action")}>+ إجراء متابعة</button>
+            </span>
           </span>
+          <p className="muted" style={{ fontSize: 11.5, margin: "0 0 8px" }}>القرار يُوثَّق في المحضر، وإجراء المتابعة يتحوّل إلى مهمة مرتبطة بالمحضر (بمسؤول وموعد).</p>
           {ai.map((a, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input placeholder="القرار / المهمة" value={a.text} onChange={(e) => setAI(i, "text", e.target.value)} style={{ flex: 2 }} />
+            <div key={i} className="ai-row">
+              <div className="cs-toggle" style={{ flex: "none" }}>
+                <button type="button" className={(a.kind || "action") === "decision" ? "on" : ""} onClick={() => setAI(i, "kind", "decision")}>قرار</button>
+                <button type="button" className={(a.kind || "action") === "action" ? "on" : ""} onClick={() => setAI(i, "kind", "action")}>إجراء</button>
+              </div>
+              <input placeholder={(a.kind || "action") === "decision" ? "نص القرار" : "إجراء المتابعة"} value={a.text} onChange={(e) => setAI(i, "text", e.target.value)} style={{ flex: 2, minWidth: 160 }} />
               <select value={a.assignee} onChange={(e) => setAI(i, "assignee", e.target.value)} style={{ flex: 1, minWidth: 110 }}>
                 <option value="">المسؤول…</option>
                 {users.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}

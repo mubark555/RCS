@@ -132,3 +132,10 @@ th.pm-sticky { background: var(--surface-2); }
 @keyframes wg-pop { from { transform: scale(.85) translateY(20px); opacity: 0; } }
 @keyframes wg-bob { 50% { transform: translateY(-8px); } }
 @media (prefers-reduced-motion: reduce) { .wg-card, .wg-big, .wg-float { animation: none; } }
+
+/* ---------- سلسلة اعتماد المشروع ---------- */
+.pc-empty { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; padding: 12px; border: 1.5px dashed var(--border-strong); border-radius: 12px; }
+.pc-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pc-stats span { font-size: 12px; font-weight: 700; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); padding: 5px 10px; border-radius: 99px; }
+.pc-stats b { font-size: 13px; }
+.cp-nodes.compact .cp-av { width: 26px; height: 26px; font-size: 12px; }

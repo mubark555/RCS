@@ -6,6 +6,7 @@ import Icon from "@/components/Icon";
 import { filesStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import ReviewDialog from "@/components/ReviewDialog";
+import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
 import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile } from "@/lib/constants";
 
 const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
@@ -22,7 +23,8 @@ const colorFor = (name) => {
 };
 
 export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
-  const { users, readOnly, canApprove, canDeliver } = useRole();
+  const { users, readOnly, canApprove, canDeliver, projects, viewer, canManage } = useRole();
+  const { chains } = useProjectChains();
   const [files, setFiles] = useState([]);
   const [taskFiles, setTaskFiles] = useState([]);
   const [dialog, setDialog] = useState(null); // submit | approve | revision
@@ -49,7 +51,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const val = (v) => (v && String(v).trim() ? v : "—");
   const handoffs = useMemo(() => (Array.isArray(t.handoffs) ? t.handoffs : []), [t]);
   const links = useMemo(() => (Array.isArray(t.links) ? t.links : []), [t]);
-  const chain = useMemo(() => normalizeChain(t.chain), [t]);
+  // السلسلة الفعلية = سلسلة المشروع (إلزامية) + حالة خطواتها في هذه المهمة
+  const chain = useMemo(() => effectiveChain(templateFor(chains, projects, t.project), t.chain), [t, chains, projects]);
   const prog = chainProgress(chain);
   const activeIdx = chain.findIndex((s) => s.status !== "done" && s.status !== "approved" && s.status !== "rejected");
   const holder = chainHolder(chain) || t.holder || t.waiting_on || t.assigned_to || "—";
@@ -69,7 +72,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
 
   // تنفيذ إجراء على خطوة السلسلة (إنجاز عمل / اعتماد / رفض)
   async function actStep(i, decision) {
-    const next = chain.map((s, j) => (j === i ? { ...s, status: decision, at: new Date().toISOString() } : s));
+    const next = chain.map((s, j) => (j === i ? { ...s, status: decision, at: new Date().toISOString(), by: viewer?.name || "" } : s));
     const patch = { chain: next };
     const p = chainProgress(next);
     if (p && p.complete) {
@@ -268,7 +271,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                       {s.at && (done || rejected) && (
                         <small className="cv-time">{new Date(s.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
                       )}
-                      {!readOnly && isActive && !done && !rejected && (
+                      {s.by && (done || rejected) && s.by !== s.person && <small className="cv-time">بواسطة {s.by}</small>}
+                      {!readOnly && isActive && !done && !rejected && (canManage || viewer?.name === s.person) && (
                         <div className="cv-actions">
                           {s.type === "approve" ? (
                             <>

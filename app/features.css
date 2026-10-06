@@ -112,7 +112,7 @@ th.pm-sticky { background: var(--surface-2); }
 .yc-dsec p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.8; }
 
 /* ---------- نوافذ الترحيب ---------- */
-.wg-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(28, 22, 18, .55); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: wg-fade .25s ease; }
+.wg-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(28, 22, 18, .55); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: wg-fade .25s ease; }
 .wg-card { width: 100%; max-width: 440px; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.3); animation: wg-pop .45s cubic-bezier(.2,1.4,.4,1); }
 .wg-hero { position: relative; height: 190px; display: grid; place-items: center; overflow: hidden; color: #fff; }
 .wg-pattern { position: absolute; inset: 0; opacity: .14; background-image: radial-gradient(circle at 20% 20%, #fff 2px, transparent 2.5px), radial-gradient(circle at 70% 60%, #fff 1.5px, transparent 2px); background-size: 34px 34px, 26px 26px; }
@@ -347,3 +347,33 @@ th.pm-sticky { background: var(--surface-2); }
   .rep-brand-line { display: none !important; }
 }
 .rep-date { width: auto; padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+
+/* ---------- دورة حياة الاجتماع ---------- */
+.mtg-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 16px; }
+.mtg-filters button { border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 8px 14px; font-family: inherit; font-weight: 700; font-size: 13px; color: var(--text-2); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.mtg-filters button b { font-size: 11.5px; background: var(--surface-2); padding: 1px 7px; border-radius: 99px; }
+.mtg-filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.mtg-filters button.on b { background: rgba(255,255,255,.18); }
+.mtg-life { display: flex; gap: 4px; margin: 8px 0 4px; flex-wrap: wrap; }
+.mtg-life span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 3px 10px 3px 4px; border-radius: 99px; background: var(--surface-2); }
+.mtg-life span i { font-style: normal; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; background: #e6dfd3; color: #fff; }
+.mtg-life span.done { color: #16a34a; background: #eaf6ef; }
+.mtg-life span.done i { background: #16a34a; }
+.mtg-life span.cur { color: var(--ink); background: var(--primary-soft); }
+.mtg-life span.cur i { background: var(--primary); }
+.mtg-btn.go { background: #16a34a; color: #fff; border-color: #16a34a; }
+.mtg-btn.go:hover { background: #128a3e; }
+.mtg-btn.pulse { animation: mtg-pulse 2s ease-in-out infinite; }
+@keyframes mtg-pulse { 50% { box-shadow: 0 0 0 6px rgba(22,163,74,.18); } }
+.mm-banner { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; background: #fbf0de; color: #8a5a12; }
+.mm-banner.Approved { background: #eaf6ef; color: #166534; }
+.mm-banner.Cancelled { background: #fdeceb; color: #b4473f; }
+.mm-endhead { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 3px; }
+.mm-endhead b { font-size: 15px; color: var(--ink); }
+.mm-endhead small { font-size: 12.5px; color: var(--text-2); line-height: 1.7; }
+.mm-recips { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.mm-recip { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; }
+.mm-recip .av { width: 30px; height: 30px; border-radius: 9px; background: var(--ink); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
+.mm-recip b { flex: 1; font-size: 13.5px; }
+.mm-recip small { font-size: 12px; color: var(--muted); }
+.mm-done { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; }

@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Icon from "@/components/Icon";
+import { ChainPath } from "@/components/ProjectChainEditor";
+import { useProjectChains, templateFor } from "@/lib/projectChain";
 import {
   PRIORITIES,
   HEALTHS,
@@ -11,8 +13,6 @@ import {
   STATUS_META,
   PRIORITY_META,
   HEALTH_META,
-  CHAIN_TYPE_META,
-  CHAIN_ACTIONS,
   normalizeChain,
   metaOf,
   taskProgress,
@@ -38,14 +38,6 @@ const EMPTY = {
   notes: "",
   health: "On Track",
   chain: [],
-};
-
-const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
-const colorFor = (name) => {
-  const s = String(name || "?");
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i)) % AV_COLORS.length;
-  return AV_COLORS[h];
 };
 
 export default function TaskForm({ initial, users = [], projects = [], defaultProject = "", onSave, onCancel }) {
@@ -76,46 +68,17 @@ export default function TaskForm({ initial, users = [], projects = [], defaultPr
     return names.length ? names : ["سيم برايم", "IT TEAM", "CONTENT"];
   }, [users]);
 
-  const chainOn = f.chain.length > 0 || f._chainOn;
-
-  // ---- عمليات السلسلة ----
-  function toggleChain() {
-    setF((s) => {
-      if (s.chain.length > 0 || s._chainOn) return { ...s, chain: [], _chainOn: false };
-      const first = { person: userNames[0] || "", type: "work", action: CHAIN_ACTIONS.work[0], status: "pending" };
-      return { ...s, _chainOn: true, chain: [first] };
-    });
-  }
-  const addStep = () =>
-    setF((s) => ({
-      ...s,
-      _chainOn: true,
-      chain: [...s.chain, { person: userNames[0] || "", type: "approve", action: CHAIN_ACTIONS.approve[0], status: "pending" }],
-    }));
-  const updStep = (i, patch) => setF((s) => ({ ...s, chain: s.chain.map((st, j) => (j === i ? { ...st, ...patch } : st)) }));
-  const setType = (i, type) => updStep(i, { type, action: CHAIN_ACTIONS[type][0] });
-  const rmStep = (i) => setF((s) => ({ ...s, chain: s.chain.filter((_, j) => j !== i) }));
-  const move = (i, dir) =>
-    setF((s) => {
-      const j = i + dir;
-      if (j < 0 || j >= s.chain.length) return s;
-      const c = [...s.chain];
-      [c[i], c[j]] = [c[j], c[i]];
-      return { ...s, chain: c };
-    });
+  // سلسلة الاعتماد تأتي من المشروع (إلزامية) — لا تُعدَّل من المهمة
+  const { chains } = useProjectChains();
+  const projectChain = templateFor(chains, projects, f.project);
+  const projectId = projects.find((x) => x.name === f.project)?.id;
 
   async function submit(e) {
     e.preventDefault();
     if (!f.task.trim()) return;
     setSaving(true);
-    const chain = normalizeChain(f.chain).map((st) => ({
-      person: st.person,
-      type: st.type === "approve" ? "approve" : "work",
-      action: st.action || "",
-      status: st.status || "pending",
-      at: st.at || null,
-      note: st.note || "",
-    }));
+    // نحتفظ بحالة خطوات السلسلة كما هي (تُحدَّث من تفاصيل المهمة)
+    const chain = normalizeChain(f.chain);
     const { _chainOn, ...rest } = f;
     const progress = Math.max(0, Math.min(100, Number(f.progress) || 0));
     const payload = { ...rest, due_date: f.due_date || null, resolve_date: f.resolve_date || null, progress, deliverable: (f.deliverable || "").trim(), chain };
@@ -211,76 +174,23 @@ export default function TaskForm({ initial, users = [], projects = [], defaultPr
           <textarea rows={2} value={f.notes} onChange={set("notes")} />
         </label>
 
-        {/* ============ سلسلة تمرير المهمة (Workflow) ============ */}
+        {/* ============ سلسلة الاعتماد (من المشروع) ============ */}
         <div className="chain-box">
           <div className="chain-top">
             <div>
               <div className="chain-title">
                 <span className="ic"><Icon name="link" size={16} /></span>
-                سلسلة تمرير المهمة (Workflow)
+                سلسلة الاعتماد — من إعدادات المشروع
               </div>
               <p>
-                بعد إنجاز المسؤول، تنتقل المهمة حسب الدور:{" "}
-                <b style={{ color: CHAIN_TYPE_META.work.color }}>عمل</b> (مشارك في التنفيذ) أو{" "}
-                <b style={{ color: CHAIN_TYPE_META.approve.color }}>اعتماد</b> (مراجعة/توقيع)، بالترتيب بينهم.
+                {projectChain.length
+                  ? <>كل مهام <b>{f.project}</b> تمرّ بنفس المسار بالترتيب. لتعديله افتح صفحة المشروع ← «سلسلة الاعتمادات».</>
+                  : <>لم تُحدَّد سلسلة اعتماد لمشروع <b>{f.project || "—"}</b> بعد. حدّدها من صفحة المشروع لتنطبق على كل مهامه.</>}
               </p>
             </div>
-            <button type="button" className={`chain-switch ${chainOn ? "on" : ""}`} onClick={toggleChain} aria-label="تفعيل السلسلة">
-              <span className="knob" />
-            </button>
+            {projectId && <a className="btn sm ghost" href={`/projects/${projectId}#chain`} target="_blank" rel="noreferrer">صفحة المشروع</a>}
           </div>
-
-          {chainOn && (
-            <div className="chain-steps">
-              {f.chain.map((st, i) => {
-                const tm = CHAIN_TYPE_META[st.type] || CHAIN_TYPE_META.work;
-                return (
-                  <div className="chain-step" key={i}>
-                    <div className="cs-row">
-                      <span className="cs-order">{i + 1}</span>
-                      <select value={st.person} onChange={(e) => updStep(i, { person: e.target.value })}>
-                        {userNames.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                      <button type="button" className="cs-mv" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-                      <button type="button" className="cs-mv" onClick={() => move(i, 1)} disabled={i === f.chain.length - 1}>↓</button>
-                      <button type="button" className="cs-rm" onClick={() => rmStep(i)}>×</button>
-                    </div>
-                    <div className="cs-row2">
-                      <div className="cs-toggle">
-                        <button type="button" className={st.type === "work" ? "on" : ""} onClick={() => setType(i, "work")}>عمل</button>
-                        <button type="button" className={st.type === "approve" ? "on" : ""} onClick={() => setType(i, "approve")}>اعتماد</button>
-                      </div>
-                      <select value={st.action} onChange={(e) => updStep(i, { action: e.target.value })}>
-                        {(CHAIN_ACTIONS[st.type] || []).map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                );
-              })}
-              <button type="button" className="chain-add" onClick={addStep}>+ إضافة خطوة</button>
-
-              {f.chain.length > 0 && (
-                <div className="chain-path">
-                  <div className="cp-label">مسار المهمة</div>
-                  <div className="cp-nodes">
-                    {f.chain.map((st, i) => {
-                      const tm = CHAIN_TYPE_META[st.type] || CHAIN_TYPE_META.work;
-                      return (
-                        <div className="cp-node-wrap" key={i}>
-                          {i > 0 && <span className="cp-arrow">←</span>}
-                          <div className="cp-node">
-                            <div className="cp-av" style={{ background: colorFor(st.person) }}>{(st.person || "؟").slice(0, 1)}</div>
-                            <div className="cp-name">{st.person || "—"}</div>
-                            <span className="cp-tag" style={{ background: tm.soft, color: tm.color }}>{tm.ar}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {projectChain.length > 0 && <div className="chain-path" style={{ marginTop: 10 }}><ChainPath steps={projectChain} /></div>}
         </div>
       </div>
 

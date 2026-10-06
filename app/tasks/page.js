@@ -11,9 +11,12 @@ import { useRole } from "@/components/RoleProvider";
 import ReviewDialog from "@/components/ReviewDialog";
 import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, normalizeChain, chainProgress, chainHolder, isDone, isOverdue, taskProgress } from "@/lib/constants";
 import { ensureDeliverable } from "@/lib/workflow";
+import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
 
 function ChainTag({ task }) {
-  const chain = normalizeChain(task.chain);
+  const { projects } = useRole();
+  const { chains } = useProjectChains();
+  const chain = effectiveChain(templateFor(chains, projects, task.project), task.chain);
   const prog = chainProgress(chain);
   if (!prog) return null;
   const holder = chainHolder(chain);
@@ -21,7 +24,7 @@ function ChainTag({ task }) {
   const bg = prog.rejected ? "#fdecec" : prog.complete ? "#e6f5ec" : "var(--primary-soft)";
   return (
     <div className="chain-tagrow" onClick={(e) => e.stopPropagation()} style={{ pointerEvents: "none" }}>
-      <span className="ct-pill"><Icon name="link" size={12} /> سلسلة موافقات</span>
+      <span className="ct-pill"><Icon name="link" size={12} /> سلسلة الاعتماد</span>
       <span className="ct-prog" style={{ color, background: bg }}>{prog.rejected ? "رفض" : prog.complete ? "مكتملة" : `${prog.done}/${prog.total}`}</span>
       {!prog.complete && !prog.rejected && holder && <span className="ct-holder">عند: {holder}</span>}
     </div>

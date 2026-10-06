@@ -5,8 +5,11 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { STATUS_META } from "@/lib/constants";
 import { tasksStore, meetingsStore } from "@/lib/store";
+import { brandHeaderHtml, currentBrand, brandTitle } from "@/components/SettingsProvider";
 
-const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
+import { parseAttendees, presentOf, MEETING_STATUS, isLocked } from "@/lib/meetings";
+
+const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Approved: "معتمد", Cancelled: "ملغى" };
 
 export function fmtDate(iso) {
   if (!iso) return "—";
@@ -18,9 +21,9 @@ export function fmtDate(iso) {
 
 const toLines = (s) => String(s || "").split("\n").map((x) => x.trim()).filter(Boolean);
 
-// تصدير المحضر كمستند احترافي قابل للطباعة/الحفظ PDF (عبر iframe مخفي)
-export function exportMinutes(m) {
-  const attendees = Array.isArray(m.attendees) ? m.attendees : (m.attendees ? String(m.attendees).split(",") : []);
+// مستند المحضر (HTML كامل) — يُستخدم للطباعة/PDF ولبريد الحضور بعد الاعتماد
+export function minutesDocHtml(m) {
+  const attendees = presentOf(m);
   const links = Array.isArray(m.links) ? m.links : [];
   const items = Array.isArray(m.action_items) ? m.action_items : [];
   const decs = items.filter((a) => a.kind === "decision");
@@ -64,10 +67,7 @@ export function exportMinutes(m) {
   .sign { margin-top: 30px; display:flex; gap: 40px; }
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
-  <header>
-    <div class="brand">ڤيوليت × سيم برايم<small>مركز القيادة الموحد</small></div>
-    <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
-  </header>
+  ${brandHeaderHtml(currentBrand(), m.approved_at ? "محضر اجتماع معتمد" : "محضر اجتماع", new Date().toLocaleDateString("ar-SA"))}
 
   <h1>${esc(m.title)}</h1>
   <div class="sub">${esc(fmtDate(m.start_at))}</div>
@@ -77,6 +77,8 @@ export function exportMinutes(m) {
     <div class="kv"><span class="k">المشروع</span><span>${esc(m.project || "—")}</span></div>
     <div class="kv"><span class="k">المكان</span><span>${esc(m.location || "—")}</span></div>
     <div class="kv"><span class="k">الحالة</span><span>${esc(STATUS_AR[m.status] || m.status || "—")}</span></div>
+    ${m.approved_at ? `<div class="kv"><span class="k">اعتمده</span><span>${esc(m.approved_by || "—")} · ${esc(fmtDate(m.approved_at))}</span></div>` : ""}
+    ${m.ended_at ? `<div class="kv"><span class="k">انتهى</span><span>${esc(fmtDate(m.ended_at))}</span></div>` : ""}
   </div>
   ${attendees.length ? `<section><h2>الحضور</h2><div class="chips">${attendees.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}</div></section>` : ""}
 
@@ -90,9 +92,15 @@ export function exportMinutes(m) {
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>ڤيوليت × سيم برايم — مركز القيادة الموحد</span><span>${esc(m.title)}</span></footer>
+  <footer><span>${esc(brandTitle(currentBrand()))} — ${esc(currentBrand().tagline || "")}</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
+  return html;
+}
+
+// تصدير المحضر كمستند احترافي قابل للطباعة/الحفظ PDF (عبر iframe مخفي)
+export function exportMinutes(m) {
+  const html = minutesDocHtml(m);
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)
   const iframe = document.createElement("iframe");
   iframe.style.position = "fixed";
@@ -119,7 +127,10 @@ export function exportMinutes(m) {
 export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, readOnly }) {
   const [m, setM] = useState(meeting);
   const [busy, setBusy] = useState(false);
-  const attendees = Array.isArray(m.attendees) ? m.attendees : [];
+  const attendees = presentOf(m);
+  const invited = parseAttendees(m.attendees);
+  const absent = Array.isArray(m.present) && m.present.length ? invited.filter((a) => !m.present.includes(a)) : [];
+  const locked = isLocked(m);
   const links = Array.isArray(m.links) ? m.links : [];
   const items = Array.isArray(m.action_items) ? m.action_items : [];
   const agenda = toLines(m.agenda);
@@ -187,9 +198,21 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
         <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>{fmtDate(m.start_at)} · {m.duration} دقيقة{m.project ? ` · ${m.project}` : ""}</div>
       </div>
 
+      {m.status && m.status !== "Scheduled" && (
+        <div className={`mm-banner ${m.status}`}>
+          <Icon name={m.status === "Approved" ? "shield" : m.status === "Cancelled" ? "close" : "clock"} size={16} />
+          <span>
+            {m.status === "Approved"
+              ? <>محضر معتمد — اعتمده <b>{m.approved_by || "—"}</b> في {fmtDate(m.approved_at)}{m.emailed_at ? ` · أُرسل بالبريد لـ ${m.emailed_count || ""} من الحضور` : m.email_error ? ` · تعذّر الإرسال: ${m.email_error}` : ""}</>
+              : MEETING_STATUS[m.status]?.ar || m.status}
+          </span>
+        </div>
+      )}
+
       {attendees.length > 0 && (
         <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
           {attendees.map((a) => <span key={a} className="pill">{a}</span>)}
+          {absent.map((a) => <span key={a} className="pill" style={{ opacity: 0.55, textDecoration: "line-through" }} title="لم يحضر">{a}</span>)}
         </div>
       )}
 
@@ -257,7 +280,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
 
       <div className="modal-actions" style={{ marginTop: 18 }}>
         <button className="btn primary" onClick={() => exportMinutes(m)}><Icon name="upload" size={16} /> تصدير / طباعة PDF</button>
-        {!readOnly && <button className="btn" onClick={() => onEdit(m)}><Icon name="edit" size={16} /> تعديل / كتابة المحضر</button>}
+        {!readOnly && !locked && <button className="btn" onClick={() => onEdit(m)}><Icon name="edit" size={16} /> تعديل / كتابة المحضر</button>}
         <button className="btn ghost" style={{ marginInlineStart: "auto" }} onClick={onClose}>إغلاق</button>
       </div>
     </Modal>

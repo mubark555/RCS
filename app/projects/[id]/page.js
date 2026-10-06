@@ -9,12 +9,17 @@ import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskDetail from "@/components/TaskDetail";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
+import ProjectChainEditor, { ChainPath } from "@/components/ProjectChainEditor";
+import { useProjectChains, effectiveChain } from "@/lib/projectChain";
+import { chainProgress } from "@/lib/constants";
 import { STATUS_META, HEALTH_META, PRIORITY_META, VISIBILITY_META, projManagers, projClients, projMembers, kpiAssignees, isPublicKpi, isDone, isFinanceFile, isOverdue, taskProgress } from "@/lib/constants";
 import { taskStats, projectHealth, kpiAchievement, kpiPct } from "@/lib/metrics";
 
 export default function ProjectPage() {
   const { id } = useParams();
-  const { readOnly, role, canManage } = useRole();
+  const { role, can } = useRole();
+  const canManage = can("projects", "edit");
+  const readOnly = !canManage;
   const [newDeliv, setNewDeliv] = useState("");
   const [scopeEdit, setScopeEdit] = useState(null); // نص نطاق العمل أثناء التحرير
   const [uploading, setUploading] = useState(false);
@@ -28,6 +33,8 @@ export default function ProjectPage() {
   const [minutesOf, setMinutesOf] = useState(null);
   const [lnk, setLnk] = useState({ label: "", url: "" });
   const [busy, setBusy] = useState(false);
+  const [chainEdit, setChainEdit] = useState(false);
+  const { chains } = useProjectChains();
 
   async function loadAll() {
     const projs = await projectsStore.list().catch(() => []);
@@ -163,6 +170,44 @@ export default function ProjectPage() {
                 {project.scope.split("\n").map((l) => l.trim()).filter(Boolean).map((l, i) => <li key={i}>{l.replace(/^[-•*]\s*/, "")}</li>)}
               </ul>
             ) : <div className="muted" style={{ fontSize: 13 }}>لم يُحدَّد نطاق العمل بعد.</div>}
+          </div>
+
+          {/* سلسلة الاعتمادات — تنطبق على كل مهام المشروع */}
+          <div className="card pd-card" id="chain">
+            <div className="section-title" style={{ display: "flex", alignItems: "center" }}>
+              <span>سلسلة الاعتمادات</span>
+              {canManage && !chainEdit && <button className="btn sm ghost" style={{ marginInlineStart: "auto" }} onClick={() => setChainEdit(true)}><Icon name="edit" size={13} /> {(chains[project.id] || []).length ? "تعديل" : "تحديد السلسلة"}</button>}
+            </div>
+            {chainEdit ? (
+              <ProjectChainEditor project={project} steps={chains[project.id] || []}
+                people={users.map((u) => u.name)}
+                onSaved={() => setChainEdit(false)} onCancel={() => setChainEdit(false)} />
+            ) : (chains[project.id] || []).length ? (
+              <>
+                <p className="muted" style={{ fontSize: 12.5, margin: "0 0 10px" }}>كل مهمة في هذا المشروع تمرّ بهذه الخطوات بالترتيب.</p>
+                <ChainPath steps={chains[project.id]} />
+                {(() => {
+                  const tpl = chains[project.id];
+                  const open = tasks.filter((t) => !isDone(t));
+                  const atStep = tpl.map(() => 0);
+                  let complete = 0, rejected = 0;
+                  open.forEach((t) => {
+                    const ch = effectiveChain(tpl, t.chain);
+                    const pr = chainProgress(ch);
+                    if (pr?.rejected) rejected += 1;
+                    else if (pr?.complete) complete += 1;
+                    else { const i = ch.findIndex((x) => x.status !== "done" && x.status !== "approved"); if (i >= 0) atStep[i] += 1; }
+                  });
+                  return (
+                    <div className="pc-stats">
+                      {tpl.map((st, i) => <span key={i}><b>{atStep[i]}</b> عند {st.person}</span>)}
+                      <span style={{ color: "#16a34a" }}><b>{complete}</b> أكملت السلسلة</span>
+                      {rejected > 0 && <span style={{ color: "#dc2626" }}><b>{rejected}</b> مرفوضة</span>}
+                    </div>
+                  );
+                })()}
+              </>
+            ) : <div className="muted" style={{ fontSize: 13 }}>لم تُحدَّد سلسلة اعتماد لهذا المشروع بعد. {canManage ? "حدّدها لتنطبق تلقائياً على كل مهامه." : ""}</div>}
           </div>
 
           {/* المخرجات: كل مهمة ترتبط بمخرج محدد */}

@@ -8,6 +8,11 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import ChipMulti from "@/components/ChipMulti";
 import { PROJECTS, projManagers, projClients, projMembers, userProjects, isDone } from "@/lib/constants";
+import PermissionsMatrix, { PermissionsEditor } from "@/components/PermissionsMatrix";
+import { SECTIONS, ABILITIES, LEVELS } from "@/lib/permissions";
+import { useLeaves, activeLeaveOf, LEAVE_TYPES } from "@/lib/leaves";
+
+const isActive = (u) => u?.status !== "suspended";
 
 // حالة إشعار البريد المتوقّعة عند إضافة مستخدم (حسب الإعدادات)
 function addEmailStatus(prefs, users, newUserEmail) {
@@ -58,18 +63,6 @@ function loadInfo(open) {
 }
 const pct = (open) => Math.max(6, Math.min(100, Math.round((open / 8) * 100)));
 
-// صلاحيات كل دور (للعرض في بطاقة العضو)
-function permsFor(role) {
-  const m = role === "manager";
-  const isMember = role === "member";
-  return [
-    { label: "عرض جميع المشاريع", ok: m },
-    { label: "إدارة المهام", ok: m || isMember },
-    { label: "إدارة الفريق", ok: m },
-    { label: "الاعتماد والتوقيع", ok: m },
-  ];
-}
-
 // جسر أسماء: المهام المستوردة تستخدم أسماء لاتينية بينما المستخدمون بالعربية
 const NAME_ALIASES = {
   "عهود": ["ohood"],
@@ -95,7 +88,13 @@ function taskFor(t, name) {
 }
 
 export default function TeamPage() {
-  const { canManage, reloadUsers, projects } = useRole();
+  const { can, reloadUsers, projects, canManagePerms } = useRole();
+  const canManage = can("team", "edit");
+  const { leaves } = useLeaves();
+  const [tab, setTab] = useState("members");
+  const [permUser, setPermUser] = useState(null);
+  const [picked, setPicked] = useState([]); // تحديد متعدد للإجراءات الجماعية
+  const [bulkRole, setBulkRole] = useState("");
   const { notifyPrefs } = useNotifications();
   const [users, setUsers] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -110,6 +109,7 @@ export default function TeamPage() {
     reloadUsers();
   }
   useEffect(() => {
+    try { if (new URLSearchParams(window.location.search).get("tab") === "perms") setTab("perms"); } catch {}
     reload().catch(() => setUsers([]));
     tasksStore.list().then(setTasks).catch(() => {});
   }, []);
@@ -131,15 +131,36 @@ export default function TeamPage() {
 
   const totals = useMemo(() => {
     const list = users || [];
-    const active = list.filter((u) => (stat[u.id]?.open || 0) > 0).length;
+    const active = list.filter((u) => isActive(u)).length;
     const openTasks = tasks.filter((t) => !isDone(t)).length;
     const overloaded = list.filter((u) => (stat[u.id]?.open || 0) >= 6).length;
-    return { total: list.length, active, openTasks, overloaded };
-  }, [users, tasks, stat]);
+    const away = list.filter((u) => activeLeaveOf(leaves, u.name)).length;
+    return { total: list.length, active, openTasks, overloaded, away };
+  }, [users, tasks, stat, leaves]);
 
   async function del(u) {
     if (!confirm(`حذف المستخدم؟\n\n${u.name}`)) return;
     await usersStore.remove(u.id);
+    await reload();
+  }
+  async function toggleActive(u) {
+    const off = isActive(u);
+    if (off && !confirm(`إيقاف حساب ${u.name}؟\nلن يتمكن من الدخول للنظام حتى تعيد تفعيله.`)) return;
+    await usersStore.update(u.id, { status: off ? "suspended" : "active" });
+    await reload();
+  }
+  const togglePick = (id) => setPicked((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
+  async function bulk(action) {
+    const list = (users || []).filter((u) => picked.includes(u.id));
+    if (!list.length) return;
+    if (action === "delete" && !confirm(`حذف ${list.length} مستخدم نهائياً؟`)) return;
+    for (const u of list) {
+      if (action === "role" && bulkRole) await usersStore.update(u.id, { role: bulkRole });
+      if (action === "suspend") await usersStore.update(u.id, { status: "suspended" });
+      if (action === "activate") await usersStore.update(u.id, { status: "active" });
+      if (action === "delete") await usersStore.remove(u.id);
+    }
+    setPicked([]); setBulkRole("");
     await reload();
   }
 
@@ -155,9 +176,9 @@ export default function TeamPage() {
 
   const STAT_CARDS = [
     { n: totals.total, l: "إجمالي الأعضاء", ic: "users", color: "#e05a50", bg: "#fdeceb" },
-    { n: totals.active, l: "نشط الآن", ic: "check", color: "#3f9d6d", bg: "#eaf6ef" },
+    { n: totals.active, l: "حسابات مفعّلة", ic: "check", color: "#3f9d6d", bg: "#eaf6ef" },
     { n: totals.openTasks, l: "مهام مفتوحة", ic: "tasks", color: "#2e77e5", bg: "#eaf1fd" },
-    { n: totals.overloaded, l: "أعباء مرتفعة", ic: "alert", color: "#c88a2e", bg: "#fbf0de" },
+    { n: totals.away, l: "في إجازة اليوم", ic: "sun", color: "#c88a2e", bg: "#fbf0de" },
   ];
 
   return (
@@ -187,6 +208,21 @@ export default function TeamPage() {
         ))}
       </div>
 
+      <div className="tm-tabs">
+        <button className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}><Icon name="users" size={16} /> الأعضاء <span className="cnt">{users.length}</span></button>
+        <button className={tab === "perms" ? "on" : ""} onClick={() => setTab("perms")}><Icon name="shield" size={16} /> الصلاحيات</button>
+      </div>
+
+      {tab === "perms" ? (
+        <div className="card">
+          <div className="section-title"><span>مصفوفة الصلاحيات</span></div>
+          <p className="muted" style={{ fontSize: 12.5, margin: "-4px 0 14px" }}>
+            لكل شخص ولكل قسم: <b>بلا</b> (لا يظهر له القسم) · <b>اطلاع</b> · <b>تعديل</b>. اضغط الخانة للتبديل، أو اضغط اسم الشخص لتعديل كل صلاحياته بما فيها الصلاحيات الخاصة.
+            الافتراضي يتبع الدور، وأي تعديل يُحفظ كتخصيص لهذا الشخص.
+          </p>
+          <PermissionsMatrix onEditUser={(u) => setPermUser(u)} />
+        </div>
+      ) : (<>
       <div className="tm-toolbar">
         <div className="mtg-search" style={{ flex: 1, minWidth: 220, marginBottom: 0 }}>
           <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={18} /></span>
@@ -199,6 +235,21 @@ export default function TeamPage() {
           ))}
         </div>
       </div>
+
+      {canManage && picked.length > 0 && (
+        <div className="tm-bulk">
+          <span>تم تحديد {picked.length}</span>
+          <select value={bulkRole} onChange={(e) => setBulkRole(e.target.value)}>
+            <option value="">تغيير الدور إلى…</option>
+            {ROLES.map((r) => <option key={r.v} value={r.v}>{r.ar}</option>)}
+          </select>
+          {bulkRole && <button className="btn" onClick={() => bulk("role")}>تطبيق</button>}
+          <button className="btn" onClick={() => bulk("activate")}>تفعيل</button>
+          <button className="btn" onClick={() => bulk("suspend")}>إيقاف</button>
+          <button className="btn danger" onClick={() => bulk("delete")}>حذف</button>
+          <button className="btn ghost" style={{ marginInlineStart: "auto", color: "#fff" }} onClick={() => setPicked([])}>إلغاء التحديد</button>
+        </div>
+      )}
 
       {grouped.length === 0 ? (
         <div className="mtg-empty">لا يوجد أعضاء مطابقون.</div>
@@ -213,7 +264,8 @@ export default function TeamPage() {
                   const li = loadInfo(st.open);
                   const rs = ROLE_STYLE[u.role] || ROLE_STYLE.member;
                   return (
-                    <div className="tm-card" key={u.id} onClick={() => setDetail(u)}>
+                    <div className={`tm-card${isActive(u) ? "" : " off"}`} key={u.id} onClick={() => setDetail(u)}>
+                      {canManage && <input type="checkbox" className="tm-sel" checked={picked.includes(u.id)} onClick={(e) => e.stopPropagation()} onChange={() => togglePick(u.id)} />}
                       <div className="top">
                         <div className="tm-av-wrap">
                           <div className="tm-av" style={{ background: colorOf(u.role) }}>{u.name.slice(0, 1)}</div>
@@ -221,7 +273,9 @@ export default function TeamPage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div className="nm">{u.name}</div>
-                          <div className="ti">{u.title || "—"}</div>
+                          <div className="ti">{u.title || "—"}{u.department ? ` · ${u.department}` : ""}</div>
+                          {(() => { const lv = activeLeaveOf(leaves, u.name); return lv ? <span className="tm-away"><Icon name="sun" size={12} /> {LEAVE_TYPES[lv.type]?.ar || "إجازة"} حتى {lv.end}</span> : null; })()}
+                          {!isActive(u) && <span className="tm-status" style={{ background: "#fdeceb", color: "#e0574e" }}>موقوف</span>}
                         </div>
                         <span className="tm-role" style={{ background: rs.bg, color: rs.color }}>{roleAr(u.role)}</span>
                       </div>
@@ -244,6 +298,8 @@ export default function TeamPage() {
                         <span className="em">{u.email || "—"}</span>
                         {canManage && (
                           <div className="acts">
+                            <button className="tm-ib" onClick={(e) => { e.stopPropagation(); setPermUser(u); }} title="الصلاحيات"><Icon name="shield" size={15} /></button>
+                            <button className="tm-ib" onClick={(e) => { e.stopPropagation(); toggleActive(u); }} title={isActive(u) ? "إيقاف الحساب" : "تفعيل الحساب"}><Icon name={isActive(u) ? "lock" : "check"} size={15} /></button>
                             <button className="tm-ib" onClick={(e) => { e.stopPropagation(); setEditing(u); }} title="تعديل"><Icon name="edit" size={15} /></button>
                             <button className="tm-ib del" onClick={(e) => { e.stopPropagation(); del(u); }} title="حذف"><Icon name="trash" size={15} /></button>
                           </div>
@@ -258,14 +314,25 @@ export default function TeamPage() {
         </div>
       )}
 
+      </>)}
+
       {detail && (
         <MemberDrawer
           u={detail}
           stat={stat[detail.id] || { open: 0, done: 0, projs: [] }}
           canManage={canManage}
+          leave={activeLeaveOf(leaves, detail.name)}
           onClose={() => setDetail(null)}
           onEdit={() => { setDetail(null); setEditing(detail); }}
+          onPerms={() => { setPermUser(detail); setDetail(null); }}
+          onToggle={async () => { await toggleActive(detail); setDetail(null); }}
         />
+      )}
+
+      {permUser && (
+        <Modal title="صلاحيات المستخدم" wide onClose={() => setPermUser(null)}>
+          <PermissionsEditor user={permUser} onDone={() => setPermUser(null)} />
+        </Modal>
       )}
 
       {editing && (
@@ -273,6 +340,7 @@ export default function TeamPage() {
           <UserForm
             initial={editing.id ? editing : null}
             projectNames={(projects || []).map((p) => p.name)}
+            people={(users || []).filter((x) => x.role !== "client" && x.id !== editing.id).map((x) => x.name)}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               try {
@@ -346,7 +414,8 @@ export default function TeamPage() {
   );
 }
 
-function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
+function MemberDrawer({ u, stat, canManage, leave, onClose, onEdit, onPerms, onToggle }) {
+  const { permsOf } = useRole();
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
     window.addEventListener("keydown", onKey);
@@ -354,7 +423,7 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
   }, [onClose]);
 
   const li = loadInfo(stat.open);
-  const perms = permsFor(u.role);
+  const pr = permsOf(u);
   const joined = u.created_at ? new Date(u.created_at).toLocaleDateString("ar-SA", { year: "numeric", month: "long" }) : "—";
 
   return (
@@ -368,6 +437,7 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
               <div className="nm">{u.name}</div>
               <div className="ti">{u.title || "—"}</div>
               <span className="rl">{roleAr(u.role)}</span>
+              {!isActive(u) && <span className="rl" style={{ background: "#fdeceb", color: "#e0574e", marginInlineStart: 6 }}>موقوف</span>}
             </div>
           </div>
         </div>
@@ -377,8 +447,12 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
             <div className="tm-contact">
               <div className="li"><span className="ico"><Icon name="mail" size={17} /></span>{u.email || "—"}</div>
               {u.phone && <div className="li"><span className="ico"><Icon name="phone" size={17} /></span>{u.phone}</div>}
-              <div className="li"><span className="ico"><Icon name="clock" size={17} /></span>انضم في {joined}</div>
+              <div className="li"><span className="ico"><Icon name="clock" size={17} /></span>انضم في {u.start_date || joined}</div>
+              {u.department && <div className="li"><span className="ico"><Icon name="briefcase" size={17} /></span>{u.department}</div>}
+              {u.reports_to && <div className="li"><span className="ico"><Icon name="users" size={17} /></span>المسؤول المباشر: {u.reports_to}</div>}
+              {leave && <div className="li" style={{ color: "#b45309" }}><span className="ico"><Icon name="sun" size={17} /></span>{LEAVE_TYPES[leave.type]?.ar || "إجازة"} من {leave.start} إلى {leave.end}</div>}
             </div>
+            {u.notes && <div className="muted" style={{ fontSize: 13, marginTop: 10, whiteSpace: "pre-wrap" }}>{u.notes}</div>}
           </div>
 
           <div className="tm-mini">
@@ -409,10 +483,19 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
           <div className="tm-box">
             <div className="h">الصلاحيات</div>
             <div className="tm-perm">
-              {perms.map((p) => (
-                <div className="li" key={p.label}>
-                  <span>{p.label}</span>
-                  <span className={p.ok ? "yes" : "no"}>{p.ok ? "✓" : "—"}</span>
+              {SECTIONS.map((sct) => {
+                const lvl = pr.sections[sct.key] || "none";
+                return (
+                  <div className="li" key={sct.key}>
+                    <span>{sct.ar}</span>
+                    <span className={lvl === "none" ? "no" : "yes"}>{LEVELS.find((l) => l.key === lvl)?.ar}</span>
+                  </div>
+                );
+              })}
+              {ABILITIES.map((a) => (
+                <div className="li" key={a.key}>
+                  <span>{a.ar}</span>
+                  <span className={pr.abilities[a.key] ? "yes" : "no"}>{pr.abilities[a.key] ? "✓" : "—"}</span>
                 </div>
               ))}
             </div>
@@ -421,6 +504,8 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
           {canManage && (
             <div className="tm-dactions">
               <button className="btn primary" style={{ flex: 1, justifyContent: "center", padding: 13, borderRadius: 13 }} onClick={onEdit}>تعديل البيانات</button>
+              <button className="btn" style={{ flex: 1, justifyContent: "center", padding: 13, borderRadius: 13 }} onClick={onPerms}><Icon name="shield" size={16} /> الصلاحيات</button>
+              <button className="btn ghost" style={{ justifyContent: "center", padding: 13, borderRadius: 13 }} onClick={onToggle} title={isActive(u) ? "إيقاف الحساب" : "تفعيل الحساب"}><Icon name={isActive(u) ? "lock" : "check"} size={16} /></button>
             </div>
           )}
         </div>
@@ -429,9 +514,9 @@ function MemberDrawer({ u, stat, canManage, onClose, onEdit }) {
   );
 }
 
-function UserForm({ initial, projectNames = [], onSave, onCancel }) {
+function UserForm({ initial, projectNames = [], people = [], onSave, onCancel }) {
   const [f, setF] = useState({
-    name: "", role: "member", title: "", email: "", phone: "",
+    name: "", role: "member", title: "", email: "", phone: "", department: "", reports_to: "", start_date: "", notes: "", status: "active",
     ...(initial || {}),
     projects: userProjects(initial || {}),
   });
@@ -477,6 +562,33 @@ function UserForm({ initial, projectNames = [], onSave, onCancel }) {
         <label className="field">
           <span>الجوال</span>
           <input value={f.phone} onChange={set("phone")} placeholder="05xxxxxxxx" />
+        </label>
+        <label className="field">
+          <span>القسم / الفريق</span>
+          <input value={f.department || ""} onChange={set("department")} placeholder="مثال: التسويق، التطوير" list="dept-list" />
+          <datalist id="dept-list">{["الإدارة", "إدارة المشاريع", "التسويق", "المحتوى", "التصميم", "التطوير (IT)", "المالية"].map((d) => <option key={d} value={d} />)}</datalist>
+        </label>
+        <label className="field">
+          <span>المسؤول المباشر</span>
+          <select value={f.reports_to || ""} onChange={set("reports_to")}>
+            <option value="">—</option>
+            {people.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>تاريخ الانضمام</span>
+          <input type="date" value={f.start_date || ""} onChange={set("start_date")} />
+        </label>
+        <label className="field">
+          <span>حالة الحساب</span>
+          <select value={f.status || "active"} onChange={set("status")}>
+            <option value="active">مفعّل</option>
+            <option value="suspended">موقوف (لا يستطيع الدخول)</option>
+          </select>
+        </label>
+        <label className="field full">
+          <span>ملاحظات</span>
+          <textarea rows={2} value={f.notes || ""} onChange={set("notes")} placeholder="مهارات، مسؤوليات، أي ملاحظة داخلية…" />
         </label>
         {f.role === "client" && (
           <div className="field full">

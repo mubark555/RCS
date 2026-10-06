@@ -4,6 +4,7 @@ import "@fontsource/cairo/600.css";
 import "@fontsource/cairo/700.css";
 import "@fontsource/cairo/800.css";
 import "./globals.css";
+import "./features.css";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleProvider } from "@/components/RoleProvider";

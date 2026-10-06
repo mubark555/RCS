@@ -218,6 +218,22 @@ alter table public.files    add column if not exists ref         text default ''
 -- الدفعة 3: ربط المهمة بمحضر الاجتماع (انظر supabase/migrations/2026-09-batch3.sql)
 alter table public.tasks    add column if not exists meeting_id  text default '';
 
+-- الدفعة 4: دورة حياة الاجتماع + بيانات الفريق (انظر supabase/migrations/2026-10-batch4.sql)
+alter table public.meetings add column if not exists present       jsonb       default '[]'::jsonb;
+alter table public.meetings add column if not exists created_by    text        default '';
+alter table public.meetings add column if not exists ended_at      timestamptz;
+alter table public.meetings add column if not exists ended_by      text        default '';
+alter table public.meetings add column if not exists approved_at   timestamptz;
+alter table public.meetings add column if not exists approved_by   text        default '';
+alter table public.meetings add column if not exists emailed_at    timestamptz;
+alter table public.meetings add column if not exists emailed_count int         default 0;
+alter table public.meetings add column if not exists email_error   text        default '';
+alter table public.users    add column if not exists status     text default 'active';
+alter table public.users    add column if not exists department text default '';
+alter table public.users    add column if not exists reports_to text default '';
+alter table public.users    add column if not exists start_date date;
+alter table public.users    add column if not exists notes      text default '';
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

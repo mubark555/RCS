@@ -5,6 +5,7 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { STATUS_META } from "@/lib/constants";
 import { tasksStore, meetingsStore } from "@/lib/store";
+import { brandHeaderHtml, currentBrand, brandTitle } from "@/components/SettingsProvider";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
 
@@ -64,10 +65,7 @@ export function exportMinutes(m) {
   .sign { margin-top: 30px; display:flex; gap: 40px; }
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
-  <header>
-    <div class="brand">ڤيوليت × سيم برايم<small>مركز القيادة الموحد</small></div>
-    <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
-  </header>
+  ${brandHeaderHtml(currentBrand(), m.approved_at ? "محضر اجتماع معتمد" : "محضر اجتماع", new Date().toLocaleDateString("ar-SA"))}
 
   <h1>${esc(m.title)}</h1>
   <div class="sub">${esc(fmtDate(m.start_at))}</div>
@@ -90,7 +88,7 @@ export function exportMinutes(m) {
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>ڤيوليت × سيم برايم — مركز القيادة الموحد</span><span>${esc(m.title)}</span></footer>
+  <footer><span>${esc(brandTitle(currentBrand()))} — ${esc(currentBrand().tagline || "")}</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)

@@ -7,17 +7,24 @@ import { useSettings, brandTitle } from "@/components/SettingsProvider";
 import Icon from "@/components/Icon";
 import { STATUS_META, CURRENCY, isDone, taskProgress, isPublicKpi } from "@/lib/constants";
 import { taskStats, kpiAchievement, invoiceRows, money, daysUntil } from "@/lib/metrics";
+import { leavesApi, LEAVE_TYPES } from "@/lib/leaves";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const QUARTERS = ["الربع الأول", "الربع الثاني", "الربع الثالث", "الربع الرابع"];
-const TYPES = { week: "أسبوعي", month: "شهري", quarter: "ربع سنوي" };
+const TYPES = { day: "يومي", week: "أسبوعي", month: "شهري", quarter: "ربع سنوي" };
+const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const pad = (n) => String(n).padStart(2, "0");
 const DAY = 86400000;
 
 // حدود الفترة: offset = 0 الحالية، -1 السابقة…
 function periodOf(type, offset) {
   const now = new Date();
   let start, end, label;
-  if (type === "week") {
+  if (type === "day") {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    end = start;
+    label = `${WEEKDAYS[start.getDay()]} ${start.getDate()} ${MONTHS[start.getMonth()]} ${start.getFullYear()}`;
+  } else if (type === "week") {
     // الأسبوع يبدأ الأحد
     const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + offset * 7);
     start = s;
@@ -35,7 +42,7 @@ function periodOf(type, offset) {
   }
   const s0 = start.getTime();
   const e0 = end.getTime() + DAY - 1; // نهاية اليوم الأخير
-  return { start: s0, end: e0, label, current: offset === 0 };
+  return { start: s0, end: e0, label, current: offset === 0, iso: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}` };
 }
 const inRange = (iso, p) => {
   if (!iso) return false;
@@ -52,7 +59,7 @@ const lateBy = (t) => { const n = daysUntil(t.due_date); return n == null ? "" :
 export default function ReportsPage() {
   const { canFinance, scopeProjects, projects, role } = useRole();
   const { settings } = useSettings();
-  const [type, setType] = useState("week");
+  const [type, setType] = useState("day");
   const [offset, setOffset] = useState(0);
   const [fProject, setFProject] = useState("");
   const [data, setData] = useState(null);
@@ -64,7 +71,8 @@ export default function ReportsPage() {
       ]);
       let invoices = [], payments = [];
       if (canFinance) [invoices, payments] = await Promise.all([invoicesStore.list().catch(() => []), paymentsStore.list().catch(() => [])]);
-      setData({ tasks, meetings, kpis, invoices, payments });
+      const leaves = await leavesApi.list().catch(() => []);
+      setData({ tasks, meetings, kpis, invoices, payments, leaves });
     })();
   }, [canFinance]);
 
@@ -138,7 +146,15 @@ export default function ReportsPage() {
       };
     }
 
-    return { done, ongoing, late, parties, pendingApproval, waitingSeem, decisions, mtgs, mtgDecisions, perProject, kpiPct, fin, overall: taskStats(tasks) };
+    // المستحق خلال الفترة (غير المعتمد)
+    const due = tasks.filter((t) => !isDone(t) && t.due_date && inRange(t.due_date, p))
+      .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
+    // الغياب خلال الفترة (إجازات معتمدة تتقاطع معها)
+    const pS = new Date(p.start), pE = new Date(p.end);
+    const ymdL = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const away = (data.leaves || []).filter((l) => l.status === "approved" && l.start <= ymdL(pE) && l.end >= ymdL(pS));
+
+    return { due, away, done, ongoing, late, parties, pendingApproval, waitingSeem, decisions, mtgs, mtgDecisions, perProject, kpiPct, fin, overall: taskStats(tasks) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, period, fProject, scopeProjects, role, canFinance]);
 
@@ -163,6 +179,7 @@ export default function ReportsPage() {
       summary.push({ البند: `إجمالي المتبقّي (${CURRENCY})`, القيمة: r.fin.outstanding });
     }
     add("الملخّص", summary);
+    add("المستحق خلال الفترة", r.due.map((t) => ({ المهمة: t.task, المشروع: t.project, المسؤول: t.assigned_to || "", الحالة: STATUS_META[t.status]?.ar || t.status, "الإنجاز %": taskProgress(t), الاستحقاق: t.due_date })));
     add("المنجز", r.done.map((t) => ({ المهمة: t.task, المشروع: t.project, المخرج: t.deliverable || "", المعتمِد: t.reviewed_by || "", "تاريخ الاعتماد": fmtD(t.reviewed_at || t.completed_at) })));
     add("الجاري", r.ongoing.map((t) => ({ المهمة: t.task, المشروع: t.project, الحالة: STATUS_META[t.status]?.ar || t.status, المسؤول: t.assigned_to || "", "الإنجاز %": taskProgress(t), الاستحقاق: t.due_date || "" })));
     add("المتأخر وأسباب التعثر", r.late.map((t) => ({ المهمة: t.task, المشروع: t.project, الاستحقاق: t.due_date, "متأخرة": lateBy(t), السبب: t.blocker || "", "الإجراء مطلوب من": t.waiting_on || "", "موعد المعالجة": t.resolve_date || "" })));
@@ -189,7 +206,16 @@ export default function ReportsPage() {
           <button className="btn sm icon" onClick={() => setOffset((o) => o - 1)} title="الفترة السابقة">›</button>
           <b>{period.label}</b>
           <button className="btn sm icon" onClick={() => setOffset((o) => Math.min(0, o + 1))} disabled={offset >= 0} title="الفترة التالية">‹</button>
-          {offset !== 0 && <button className="btn sm ghost" onClick={() => setOffset(0)}>الحالية</button>}
+          {type === "day" && (
+            <input type="date" className="rep-date" value={period.iso} max={periodOf("day", 0).iso}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [y, m, d] = e.target.value.split("-").map(Number);
+                const t = new Date(); const t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+                setOffset(Math.min(0, Math.round((new Date(y, m - 1, d) - t0) / DAY)));
+              }} />
+          )}
+          {offset !== 0 && <button className="btn sm ghost" onClick={() => setOffset(0)}>{type === "day" ? "اليوم" : "الحالية"}</button>}
         </div>
         <select value={fProject} onChange={(e) => setFProject(e.target.value)} style={{ width: "auto" }}>
           <option value="">كل المشاريع</option>
@@ -204,12 +230,12 @@ export default function ReportsPage() {
       {/* الورقة القابلة للطباعة */}
       <div className="rep-sheet">
         <div className="rep-head">
-          <div>
+          <div className="rep-brand-line">
             <div className="rep-brand">{brandTitle(settings)}</div>
             <div className="muted" style={{ fontSize: 12.5, fontWeight: 700 }}>{settings.tagline}</div>
           </div>
           <div style={{ textAlign: "end" }}>
-            <h1>التقرير ال{TYPES[type] === "ربع سنوي" ? "ربع سنوي" : TYPES[type]}</h1>
+            <h1>التقرير {TYPES[type] === "ربع سنوي" ? "الربع سنوي" : `ال${TYPES[type]}`}</h1>
             <div className="muted" style={{ fontSize: 13 }}>{period.label}{fProject ? ` · ${fProject}` : ""} · أُعدّ في {fmtD(new Date().toISOString())}</div>
           </div>
         </div>
@@ -222,6 +248,29 @@ export default function ReportsPage() {
           <Stat n={`${r.overall.progress}%`} l="نسبة الإنجاز الكلية" />
           <Stat n={r.kpiPct == null ? "—" : `${r.kpiPct}%`} l="تحقق المستهدفات" />
         </div>
+
+        {/* المستحق خلال الفترة */}
+        <Section title={`المستحق خلال الفترة (${r.due.length})`}>
+          {r.due.length === 0 ? <Empty t="لا أعمال مستحقة في هذه الفترة." /> : (
+            <table className="rep-tbl">
+              <thead><tr><th>العمل</th><th>المشروع</th><th>المسؤول</th><th>الحالة</th><th>الإنجاز</th><th>الاستحقاق</th></tr></thead>
+              <tbody>{r.due.map((t) => (
+                <tr key={t.id}><td>{t.task}</td><td>{t.project}</td><td>{t.assigned_to || "—"}</td>
+                  <td><span style={{ color: STATUS_META[t.status]?.color, fontWeight: 700 }}>{STATUS_META[t.status]?.ar || t.status}</span></td>
+                  <td>{taskProgress(t)}%</td><td>{fmtD(t.due_date)}</td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </Section>
+
+        {r.away.length > 0 && (
+          <Section title={`الغياب والإجازات (${r.away.length})`}>
+            <table className="rep-tbl">
+              <thead><tr><th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th></tr></thead>
+              <tbody>{r.away.map((l) => <tr key={l.id}><td>{l.person}</td><td>{LEAVE_TYPES[l.type]?.ar || "إجازة"}</td><td>{fmtD(l.start)}</td><td>{fmtD(l.end)}</td></tr>)}</tbody>
+            </table>
+          </Section>
+        )}
 
         {/* 1) المنجز */}
         <Section title={`المنجز خلال الفترة (${r.done.length})`}>

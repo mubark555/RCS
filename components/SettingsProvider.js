@@ -29,6 +29,28 @@ export function brandTitle(s) {
 
 const Ctx = createContext(null);
 
+// نسخة حالية من الهوية لاستخدامها خارج React (مستندات الطباعة والبريد)
+let _current = DEFAULT_SETTINGS;
+export const currentBrand = () => _current;
+
+// ترويسة HTML موحّدة للمستندات الورقية: شعار ڤيوليت + اسم النظام + شعار سيم
+export function brandHeaderHtml(s = _current, docTitle = "", docSub = "") {
+  const esc = (x) => String(x || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const tile = (url, letter, color) => url
+    ? `<span style="width:54px;height:54px;border-radius:14px;border:1px solid #ece5da;background:#fff;display:inline-flex;align-items:center;justify-content:center;overflow:hidden"><img src="${esc(url)}" style="max-width:100%;max-height:100%;object-fit:contain;padding:4px"></span>`
+    : `<span style="width:54px;height:54px;border-radius:14px;background:${color};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:25px;-webkit-print-color-adjust:exact;print-color-adjust:exact">${esc(letter)}</span>`;
+  const primary = s.primaryColor || "#e05a50";
+  return `<div style="display:flex;align-items:center;gap:14px;border-bottom:2.5px solid ${primary};padding-bottom:12px;margin-bottom:16px;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    ${tile(s.partnerLogoUrl, s.partnerLogoText || (s.partnerName || "ڤ").trim().charAt(0), "#6d4aa8")}
+    <div style="flex:1;text-align:center">
+      <div style="font-size:21px;font-weight:800;color:${primary}">${esc(brandTitle(s))}</div>
+      <div style="font-size:12px;color:#8a8078;font-weight:700">${esc(s.tagline || "")}</div>
+      ${docTitle ? `<div style="font-size:13px;color:#2b2a32;font-weight:800;margin-top:4px">${esc(docTitle)}${docSub ? ` <span style="color:#8a8078;font-weight:600">· ${esc(docSub)}</span>` : ""}</div>` : ""}
+    </div>
+    ${tile(s.logoUrl, s.logoText || (s.appName || "س").trim().charAt(0), primary)}
+  </div>`;
+}
+
 // ---- أدوات الألوان ----
 function hexToRgb(h) {
   h = String(h || "").replace("#", "");
@@ -80,6 +102,8 @@ export function SettingsProvider({ children }) {
       }
     }).catch(() => {});
   }, []);
+
+  useEffect(() => { _current = settings; }, [settings]);
 
   useEffect(() => {
     applyTheme(settings.primaryColor);

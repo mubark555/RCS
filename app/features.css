@@ -332,3 +332,18 @@ th.pm-sticky { background: var(--surface-2); }
   .sr-breaks { border-inline-end: none; border-bottom: 1px solid var(--border); }
   .sr-extra { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- ترويسة الطباعة الموحّدة ---------- */
+.print-only { display: none; }
+@media print {
+  .print-only { display: flex !important; }
+  .print-header { align-items: center; gap: 16px; border-bottom: 2.5px solid var(--primary); padding-bottom: 12px; margin-bottom: 16px; }
+  .print-header .ph-mid { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .print-header .ph-mid b { font-size: 21px; font-weight: 800; }
+  .print-header .ph-mid small { font-size: 12px; color: #8a8078; font-weight: 700; }
+  .print-header .ph-mid span { font-size: 10.5px; color: #a49c94; margin-top: 2px; }
+  .print-header, .print-header * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wg-overlay, .sr-overlay, .overlay, .drawer-wrap { display: none !important; }
+  .rep-brand-line { display: none !important; }
+}
+.rep-date { width: auto; padding: 6px 10px; font-size: 13px; border-radius: 10px; }

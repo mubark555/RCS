@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { sectionOfPath, SECTIONS } from "@/lib/permissions";
 import WelcomeGate from "@/components/WelcomeGate";
+import PrintHeader from "@/components/PrintHeader";
 import { useAuth } from "@/components/AuthProvider";
 import { useRole } from "@/components/RoleProvider";
 import LoginScreen from "@/components/LoginScreen";
@@ -62,6 +63,7 @@ export default function AppShell({ children }) {
       <div className="main">
         <TopBar />
         <div className="content">
+          <PrintHeader />
           {blocked ? (
             <div className="perm-blocked">
               <span className="ic"><Icon name="lock" size={30} /></span>

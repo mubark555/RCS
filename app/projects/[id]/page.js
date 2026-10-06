@@ -14,7 +14,9 @@ import { taskStats, projectHealth, kpiAchievement, kpiPct } from "@/lib/metrics"
 
 export default function ProjectPage() {
   const { id } = useParams();
-  const { readOnly, role, canManage } = useRole();
+  const { role, can } = useRole();
+  const canManage = can("projects", "edit");
+  const readOnly = !canManage;
   const [newDeliv, setNewDeliv] = useState("");
   const [scopeEdit, setScopeEdit] = useState(null); // نص نطاق العمل أثناء التحرير
   const [uploading, setUploading] = useState(false);

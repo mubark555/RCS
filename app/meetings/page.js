@@ -22,7 +22,8 @@ const STATUS_AR = {
 };
 
 export default function MeetingsPage() {
-  const { readOnly, scopeProjects, users } = useRole();
+  const { can, scopeProjects, users } = useRole();
+  const readOnly = !can("meetings", "edit");
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);

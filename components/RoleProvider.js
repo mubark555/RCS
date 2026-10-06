@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 import { usersStore, projectsStore, appSettings } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
 import { projManagers, projClients, projMembers, userProjects, PROJECTS } from "@/lib/constants";
-import { canReview, canSubmit } from "@/lib/workflow";
+import { resolvePerms, atLeast } from "@/lib/permissions";
 
 const RoleCtx = createContext(null);
 
@@ -18,6 +18,8 @@ export function RoleProvider({ children }) {
   // قائمة الحسابات المخوّلة بقسم المالية (معرّفات مستخدمين) — يعيّنها مالك النظام
   const [financeUsers, setFinanceUsers] = useState([]);   // اطلاع
   const [financeEditors, setFinanceEditors] = useState([]); // اطلاع وتعديل
+  // مصفوفة الصلاحيات المخصّصة لكل مستخدم (تتجاوز افتراضيات الدور)
+  const [permOverrides, setPermOverrides] = useState({});
   const boundRef = useRef(false);
 
   const reloadUsers = useCallback(async () => {
@@ -36,6 +38,12 @@ export function RoleProvider({ children }) {
   const resolveCloudViewer = useCallback(async (list) => {
     const email = (authEmail || "").trim().toLowerCase();
     const matched = list.find((u) => (u.email || "").trim().toLowerCase() === email && email);
+    if (matched && matched.status === "suspended") {
+      // حساب موقوف من قسم الفريق → لا دخول
+      setNoAccess(true);
+      setViewerId(null);
+      return;
+    }
     if (matched) {
       setNoAccess(false);
       setViewerId(matched.id);
@@ -83,7 +91,21 @@ export function RoleProvider({ children }) {
       setFinanceUsers(Array.isArray(v?.users) ? v.users : []);
       setFinanceEditors(Array.isArray(v?.editors) ? v.editors : []);
     }).catch(() => {});
+    appSettings.get("permissions").then((v) => {
+      setPermOverrides(v && typeof v === "object" ? v : {});
+    }).catch(() => {});
   }, [authEmail, ready]);
+
+  // حفظ تخصيص صلاحيات مستخدم واحد (null = الرجوع لافتراضي الدور)
+  const savePermissions = useCallback(async (userId, value) => {
+    const cur = (await appSettings.get("permissions").catch(() => null)) || {};
+    const next = { ...cur };
+    if (value) next[userId] = value; else delete next[userId];
+    setPermOverrides(next);
+    await appSettings.set("permissions", next);
+    // توافق: صلاحية المالية القديمة لم تعد مصدر الحقيقة لهذا المستخدم
+    return next;
+  }, []);
 
   // users: صلاحية اطلاع فقط — editors: اطلاع وتعديل (مستقلة عن صلاحية إدارة المشاريع)
   const saveFinanceUsers = useCallback(async (ids, editors = []) => {
@@ -125,18 +147,26 @@ export function RoleProvider({ children }) {
   }
 
   const clientProject = role === "client" ? (scopeProjects && scopeProjects[0]) || viewer?.project || null : null;
-  const readOnly = role === "client";
+
+  // الصلاحيات الفعلية (افتراضي الدور + تخصيص الشخص)
+  const legacyFinance = { users: financeUsers, editors: financeEditors };
+  const perms = resolvePerms(viewer || { role }, permOverrides, legacyFinance);
+  const permsOf = useCallback((u) => resolvePerms(u, permOverrides, legacyFinance), [permOverrides, financeUsers, financeEditors]); // eslint-disable-line react-hooks/exhaustive-deps
+  const can = (section, need = "view") => atLeast(perms.sections[section] || "none", need);
+  const ability = (k) => !!perms.abilities[k];
+
+  const readOnly = !can("tasks", "edit");
   const canManage = role === "manager";
-  // صلاحية المالية: المدير دائماً + أي حساب عيّنه المالك في القائمة
-  const canFinanceEdit = canManage || (viewerId != null && financeEditors.includes(viewerId));
-  const canFinance = canFinanceEdit || (viewerId != null && financeUsers.includes(viewerId));
-  // الاعتماد لسيم (العميل) والمدير نيابةً عنها؛ التسليم لفريق ڤيوليت
-  const canApprove = canReview(role);
-  const canDeliver = canSubmit(role);
+  const canFinanceEdit = can("finance", "edit");
+  const canFinance = can("finance", "view");
+  // الاعتماد لسيم (العميل) والمدير نيابةً عنها؛ التسليم لفريق ڤيوليت — قابلة للتخصيص لكل شخص
+  const canApprove = ability("approve");
+  const canDeliver = ability("deliver");
+  const canManagePerms = ability("permissions");
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms }}
     >
       {children}
     </RoleCtx.Provider>
@@ -147,6 +177,7 @@ export function useRole() {
   return useContext(RoleCtx) || {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
     readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false,
+    perms: { sections: {}, abilities: {} }, permsOf: () => ({ sections: {}, abilities: {} }), can: () => true, ability: () => true, permOverrides: {}, savePermissions: async () => {}, canManagePerms: true,
     setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
 }

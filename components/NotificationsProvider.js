@@ -286,6 +286,36 @@ export function NotificationsProvider({ children }) {
   }, [pushToast, maybeSendEmail]);
 
 
+  // إرسال بريد مباشر (إجراء صريح من المستخدم، مثل اعتماد محضر) — يرجع { ok, error }
+  const sendEmail = useCallback(async ({ to, subject, body, html, path = "" }) => {
+    const p = prefsRef.current;
+    const list = [...new Set((to || []).map((e) => String(e || "").trim()).filter((e) => e.includes("@")))];
+    if (!list.length) return { ok: false, error: "لا يوجد بريد إلكتروني للمستقبلين." };
+    try {
+      const r = await fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: list, subject, html: html || buildEmailHtml(subject, body || "", systemUrlFrom(p) + path), fromName: (p.senderName || "").trim() || undefined }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: data?.error || "فشل الإرسال." };
+      return { ok: true, count: list.length };
+    } catch (e) {
+      return { ok: false, error: e?.message || "تعذّر الاتصال بخدمة البريد." };
+    }
+  }, []);
+
+  // إعلان حدث خارج جداول البيانات (إجازة، اعتماد محضر…): توست + جرس + سجل الأنشطة + بريد اختياري للفريق
+  const announce = useCallback(async ({ title, tone = "info", entity = "", label = "", action = "update", emailTo = null, emailBody = "", path = "" }) => {
+    pushToast(title, tone);
+    try {
+      const rec = await notificationsStore.create({ kind: action, entity, title, body: "", read: false });
+      if (rec) setItems((prev) => [rec, ...prev].slice(0, 50));
+    } catch {}
+    try { activityStore.log({ actor: viewerRef.current?.name || "", action, entity, label: label || title }); } catch {}
+    if (emailTo && prefsRef.current.emailEnabled) sendEmail({ to: emailTo, subject: title, body: emailBody || title, path });
+  }, [pushToast, sendEmail]);
+
   const unread = items.filter((n) => !n.read).length;
 
   const markAllRead = useCallback(async () => {
@@ -300,7 +330,7 @@ export function NotificationsProvider({ children }) {
     for (const n of cur) { notificationsStore.remove(n.id).catch(() => {}); }
   }, [items]);
 
-  const value = { items, unread, open, setOpen, reload, markAllRead, clearAll, pushToast, notifyPrefs, saveNotifyPrefs };
+  const value = { items, unread, open, setOpen, reload, markAllRead, clearAll, pushToast, notifyPrefs, saveNotifyPrefs, announce, sendEmail };
 
   return (
     <NotifCtx.Provider value={value}>
@@ -314,7 +344,7 @@ export function useNotifications() {
   return useContext(NotifCtx) || {
     items: [], unread: 0, open: false, setOpen: () => {}, reload: async () => {},
     markAllRead: async () => {}, clearAll: async () => {}, pushToast: () => {},
-    notifyPrefs: DEFAULT_NOTIFY, saveNotifyPrefs: async () => {},
+    notifyPrefs: DEFAULT_NOTIFY, saveNotifyPrefs: async () => {}, announce: async () => {}, sendEmail: async () => ({ ok: false }),
   };
 }
 

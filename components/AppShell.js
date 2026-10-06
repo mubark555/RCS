@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { sectionOfPath, SECTIONS } from "@/lib/permissions";
+import WelcomeGate from "@/components/WelcomeGate";
 import { useAuth } from "@/components/AuthProvider";
 import { useRole } from "@/components/RoleProvider";
 import LoginScreen from "@/components/LoginScreen";
@@ -12,7 +15,10 @@ import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
 
 export default function AppShell({ children }) {
   const { loading, authed, isCloud, authEmail, signOut } = useAuth();
-  const { ready, noAccess } = useRole();
+  const { ready, noAccess, can } = useRole();
+  const path = usePathname();
+  const section = sectionOfPath(path);
+  const blocked = ready && section && !can(section, "view");
 
   // عند الدخول في الوضع السحابي: عبّئ البيانات الأولية إن كانت القاعدة فارغة
   useEffect(() => {
@@ -55,7 +61,16 @@ export default function AppShell({ children }) {
       <Sidebar />
       <div className="main">
         <TopBar />
-        <div className="content">{children}</div>
+        <div className="content">
+          {blocked ? (
+            <div className="perm-blocked">
+              <span className="ic"><Icon name="lock" size={30} /></span>
+              <h2>لا تملك صلاحية على قسم «{SECTIONS.find((x) => x.key === section)?.ar}»</h2>
+              <p>تواصل مع مدير النظام لمنحك الصلاحية من قسم الفريق ← الصلاحيات.</p>
+            </div>
+          ) : children}
+        </div>
+        <WelcomeGate />
       </div>
     </div>
   );

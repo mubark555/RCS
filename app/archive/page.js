@@ -11,7 +11,8 @@ const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "ف�
 
 export default function ArchivePage() {
   const projectNames = useProjectNames();
-  const { readOnly, clientProject, canFinance } = useRole();
+  const { can, clientProject, canFinance } = useRole();
+  const readOnly = !can("archive", "edit");
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");

@@ -6,6 +6,7 @@ import BrandMark from "@/components/BrandMark";
 import { useRole } from "@/components/RoleProvider";
 import NotifSettings from "@/components/NotifSettings";
 import Icon from "@/components/Icon";
+import Link from "next/link";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
 
@@ -54,7 +55,8 @@ async function processLogo(file, maxSize = 512) {
 }
 
 export default function SettingsPage() {
-  const { canManage } = useRole();
+  const { can } = useRole();
+  const canManage = can("settings", "edit");
   const { settings, save, reset } = useSettings();
   const [f, setF] = useState(settings);
   const [saved, setSaved] = useState(false);
@@ -163,7 +165,13 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <FinanceAccessCard />
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="section-title"><span>الصلاحيات</span></div>
+        <p className="muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
+          صلاحيات كل شخص على كل قسم (بما فيها قسم المالية) والصلاحيات الخاصة كالاعتماد والإجازات تُدار الآن من مكان واحد.
+        </p>
+        <Link href="/team?tab=perms" className="btn primary" style={{ display: "inline-flex" }}><Icon name="shield" size={16} /> فتح مصفوفة الصلاحيات</Link>
+      </div>
 
       <NotifSettings />
     </div>
@@ -193,83 +201,3 @@ function LogoField({ title, name, onName, letter, onLetter, url, inputRef, onFil
   );
 }
 
-// إدارة صلاحية قسم المالية — مستقلة عن صلاحية إدارة المشاريع
-// ثلاثة مستويات لكل حساب: بلا صلاحية / اطلاع فقط / اطلاع وتعديل
-const FIN_LEVELS = [
-  { key: "none", label: "بلا صلاحية" },
-  { key: "view", label: "اطلاع فقط" },
-  { key: "edit", label: "اطلاع وتعديل" },
-];
-function FinanceAccessCard() {
-  const { users, financeUsers, financeEditors, saveFinanceUsers } = useRole();
-  const [sel, setSel] = useState(null); // { [userId]: level }
-  const [saved, setSaved] = useState(false);
-
-  const base = useMemo(() => {
-    const m = {};
-    (financeUsers || []).forEach((id) => { m[id] = "view"; });
-    (financeEditors || []).forEach((id) => { m[id] = "edit"; });
-    return m;
-  }, [financeUsers, financeEditors]);
-  const levels = sel ?? base;
-  const managers = users.filter((u) => u.role === "manager");
-  const others = users.filter((u) => u.role !== "manager");
-
-  function setLevel(id, lvl) {
-    setSaved(false);
-    setSel((prev) => ({ ...(prev ?? base), [id]: lvl }));
-  }
-  async function apply() {
-    const view = Object.keys(levels).filter((id) => levels[id] === "view");
-    const edit = Object.keys(levels).filter((id) => levels[id] === "edit");
-    await saveFinanceUsers(view, edit);
-    setSaved(true);
-  }
-
-  return (
-    <div className="card" style={{ marginTop: 18 }}>
-      <div className="section-title"><span>صلاحية قسم المالية</span></div>
-      <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        صلاحية المالية مستقلة عن إدارة المشاريع. <b>اطلاع فقط</b>: يرى الفواتير والمدفوعات ومرفقاتها.
-        <b> اطلاع وتعديل</b>: يضيف الفواتير ويسجّل السداد. حساب ممثل سيم يرى فواتير مشاريعه فقط.
-        <b> المدراء لهم صلاحية كاملة دائماً.</b>
-      </p>
-
-      {managers.length > 0 && (
-        <div className="fa-list">
-          {managers.map((u) => (
-            <div className="fa-row" key={u.id}>
-              <div><b>{u.name}</b> <span className="pill" style={{ fontSize: 11 }}>مدير</span></div>
-              <span className="pill" style={{ background: "#eaf6ef", color: "#16a34a" }}>صلاحية كاملة دائمة</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="fa-list" style={{ marginTop: 6 }}>
-        {others.length === 0 ? (
-          <div className="muted" style={{ fontSize: 13 }}>لا يوجد أعضاء آخرون لإضافتهم. أضِف المستخدمين من قسم «الفريق».</div>
-        ) : others.map((u) => {
-          const lvl = levels[u.id] || "none";
-          return (
-            <div className="fa-row" key={u.id}>
-              <div>
-                <b>{u.name}</b> {u.title ? <span className="muted" style={{ fontSize: 12 }}>· {u.title}</span> : null}
-                {u.role === "client" && <span className="pill" style={{ fontSize: 11, marginInlineStart: 6 }}>سيم</span>}
-              </div>
-              <div className="seg sm">
-                {FIN_LEVELS.map((l) => (
-                  <button key={l.key} type="button" className={lvl === l.key ? "on" : ""} onClick={() => setLevel(u.id, l.key)}>{l.label}</button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="modal-actions" style={{ marginTop: 16 }}>
-        <button className="btn primary" onClick={apply}>{saved ? "✓ تم الحفظ" : "حفظ الصلاحيات"}</button>
-      </div>
-    </div>
-  );
-}

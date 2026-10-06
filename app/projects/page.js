@@ -29,7 +29,8 @@ function fileToDataUrl(file) {
 }
 
 export default function ProjectsPage() {
-  const { canManage, scopeProjects, users, reloadProjects } = useRole();
+  const { can, scopeProjects, users, reloadProjects } = useRole();
+  const canManage = can("projects", "edit");
   const router = useRouter();
   const [projects, setProjects] = useState(null);
   const [tasks, setTasks] = useState([]);

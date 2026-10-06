@@ -26,7 +26,8 @@ function statusOf(pct) {
 }
 
 export default function KpisPage() {
-  const { canManage, projects, users } = useRole();
+  const { can, projects, users } = useRole();
+  const canManage = can("kpis", "edit");
   const [kpis, setKpis] = useState(null);
   const [period, setPeriod] = useState(""); // "" = الكل
   const [fProject, setFProject] = useState("");

@@ -6,6 +6,7 @@ import { daysUntil, relDays } from "@/lib/metrics";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
+import PermissionsMatrix from "@/components/PermissionsMatrix";
 import Donut from "@/components/Donut";
 import Bar from "@/components/Bar";
 import TrendLine from "@/components/TrendLine";
@@ -26,7 +27,8 @@ function shortMoney(n) {
 }
 
 export default function FinancePage() {
-  const { canFinance, canFinanceEdit: canManage, projects, ready, scopeProjects, role } = useRole();
+  const { canFinance, canFinanceEdit: canManage, projects, ready, scopeProjects, role, canManagePerms } = useRole();
+  const [showPerms, setShowPerms] = useState(false);
   const [allInvoices, setInvoices] = useState(null);
   const [files, setFiles] = useState([]);           // مرفقات الفواتير والسداد
   const [detail, setDetail] = useState(null);       // فاتورة معروضة بالتفصيل
@@ -143,7 +145,7 @@ export default function FinancePage() {
         <div style={{ display: "inline-flex", marginBottom: 12, color: "var(--muted)" }}><Icon name="alert" size={34} /></div>
         <div style={{ fontWeight: 800, fontSize: 17, color: "var(--ink)" }}>قسم المالية مقيّد</div>
         <p className="muted" style={{ maxWidth: 380, margin: "8px auto 0" }}>
-          هذا القسم متاح للحسابات المخوّلة فقط. تواصل مع مالك النظام لمنحك الصلاحية من «تخصيص النظام».
+          هذا القسم متاح للحسابات المخوّلة فقط. تواصل مع مدير النظام لمنحك الصلاحية من «الفريق ← الصلاحيات».
         </p>
       </div>
     );
@@ -153,11 +155,22 @@ export default function FinancePage() {
 
   return (
     <div className="fin-page">
+      {showPerms && (
+        <Modal title="صلاحيات قسم المالية" wide onClose={() => setShowPerms(false)}>
+          <p className="muted" style={{ fontSize: 12.5, margin: "0 0 14px" }}>
+            حدّد لكل شخص: <b>بلا</b> (لا يرى قسم المالية إطلاقاً ولا يظهر له في القائمة) · <b>اطلاع</b> (يرى الفواتير والمدفوعات) · <b>تعديل</b> (يضيف الفواتير ويسجّل السداد).
+            ممثل سيم يرى فواتير مشاريعه فقط. باقي الأقسام تُدار من «الفريق ← الصلاحيات».
+          </p>
+          <PermissionsMatrix sections={["finance"]} />
+          <div className="modal-actions"><button className="btn primary" onClick={() => setShowPerms(false)}>تم</button></div>
+        </Modal>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
         <div className="muted" style={{ fontSize: 13.5, fontWeight: 600 }}>
           المقابل المالي: <b style={{ color: "var(--ink)" }}>{FINANCE_PROVIDER}</b> تُصدر الفواتير و<b style={{ color: "var(--ink)" }}>{FINANCE_PAYER}</b> تسدّد
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          {canManagePerms && <button className="btn ghost" onClick={() => setShowPerms(true)} title="من يطّلع على قسم المالية"><Icon name="shield" size={16} /> الصلاحيات</button>}
           <button className="btn ghost" onClick={exportExcel} title="تصدير Excel"><Icon name="upload" size={16} /> تصدير Excel</button>
           <button className="btn ghost" onClick={() => window.print()} title="طباعة / PDF"><Icon name="file" size={16} /> طباعة</button>
           {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ فاتورة جديدة</button>}

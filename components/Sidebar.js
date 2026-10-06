@@ -8,31 +8,20 @@ import { useAuth } from "@/components/AuthProvider";
 import { useSettings, brandTitle } from "@/components/SettingsProvider";
 import { BrandLogos } from "@/components/BrandMark";
 import Icon from "@/components/Icon";
+import { SECTIONS } from "@/lib/permissions";
 
-const ALL_LINKS = [
-  { href: "/", label: "الرئيسية", ico: "home", roles: ["manager", "member", "client"] },
-  { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
-  { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
-  { href: "/approvals", label: "الاعتمادات", ico: "check", roles: ["manager", "member", "client"] },
-  { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
-  { href: "/reports", label: "التقارير", ico: "file", roles: ["manager", "member"] },
-  { href: "/finance", label: "المالية", ico: "briefcase", roles: ["manager", "member", "client"], finance: true },
-  { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
-  { href: "/calendar", label: "الروزنامة السنوية", ico: "flag", roles: ["manager", "member", "client"] },
-  { href: "/activity", label: "سجل الأنشطة", ico: "clock", roles: ["manager", "member"] },
-  { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
-  { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
-];
+// روابط القائمة = الأقسام التي يملك المستخدم صلاحية الاطلاع عليها (مصفوفة الصلاحيات)
+const ALL_LINKS = SECTIONS.filter((x) => x.nav !== false).map((x) => ({ href: x.href, label: x.ar, ico: x.ico, section: x.key }));
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
 export default function Sidebar() {
   const path = usePathname();
-  const { users, viewer, viewerId, setViewer, role, allowSwitch, canFinance } = useRole();
+  const { users, viewer, viewerId, setViewer, role, allowSwitch, can } = useRole();
   const { authEmail, signOut } = useAuth();
   const { settings } = useSettings();
-  // قسم المالية يظهر فقط للحسابات المخوّلة (يعيّنها مالك النظام)
-  const links = ALL_LINKS.filter((l) => l.roles.includes(role) && (!l.finance || canFinance));
+  // كل قسم يظهر فقط لمن يملك صلاحية الاطلاع عليه
+  const links = ALL_LINKS.filter((l) => can(l.section, "view"));
 
   return (
     <aside className="sidebar">

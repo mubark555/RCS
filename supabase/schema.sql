@@ -234,6 +234,31 @@ alter table public.users    add column if not exists reports_to text default '';
 alter table public.users    add column if not exists start_date date;
 alter table public.users    add column if not exists notes      text default '';
 
+-- ------------------------- شات الملاحظات تحت كل مهمة -------------------------
+create table if not exists public.task_comments (
+  id          uuid primary key default gen_random_uuid(),
+  task_id     uuid        not null references public.tasks(id) on delete cascade,
+  author      text        default '',
+  author_role text        default '',     -- manager | member | client
+  body        text        default '',
+  attachments jsonb       default '[]'::jsonb,  -- [{name, size, mime, path}]
+  created_at  timestamptz default now()
+);
+
+create index if not exists task_comments_task_idx on public.task_comments (task_id, created_at);
+
+-- تفعيل التحديث الفوري (Realtime) للشات
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'task_comments'
+  ) then
+    alter publication supabase_realtime add table public.task_comments;
+  end if;
+exception when undefined_object then null;  -- لا توجد publication (بيئة غير Supabase)
+end $$;
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
@@ -250,6 +275,7 @@ alter table public.app_settings enable row level security;
 alter table public.invoices enable row level security;
 alter table public.payments enable row level security;
 alter table public.activity enable row level security;
+alter table public.task_comments enable row level security;
 
 do $$
 begin
@@ -285,6 +311,9 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='app_settings' and policyname='app_settings_all') then
     create policy app_settings_all on public.app_settings for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='task_comments' and policyname='task_comments_all') then
+    create policy task_comments_all on public.task_comments for all using (true) with check (true);
   end if;
 end $$;
 

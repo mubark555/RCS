@@ -12,7 +12,7 @@ import { welcome, pageTip, reactionFor, IDLE_TIPS, summarizeTask, timeGreeting, 
 import { tourFor, isNewEmployee } from "@/lib/amalTour";
 import AmalTour from "@/components/AmalTour";
 
-const STALE_MS = 60 * 1000;
+const STALE_MS = 5 * 60 * 1000; // تحديث بيانات أمل كل 5 دقائق (وأي تعديل في النظام يحدّثها فوراً)
 const SLEEP_AFTER = 2 * 60 * 1000;   // تنام بعد دقيقتين بلا نشاط
 const TIP_AFTER = 50 * 1000;         // تلميح خمول بعد 50 ثانية
 const TIP_GAP = 5 * 60 * 1000;       // تلميح خمول واحد كل 5 دقائق كحد أقصى
@@ -150,6 +150,7 @@ export default function AmalAssistant() {
   const [pos, setPos] = useState(null);         // موضع مخصص بعد السحب (null = وسط الشاشة)
   const drag = useRef(null);
   const tourActive = useRef(false);
+  const sleepingRef = useRef(false);
 
   const data = useRef({ at: 0, scopeKey: "" });
   const listRef = useRef(null);
@@ -298,8 +299,16 @@ export default function AmalAssistant() {
   }, [muted, setMood, speak]);
 
   // تحميل البيانات مبكراً حتى تظهر النصائح فوراً
+  // التحميل المسبق ينتظر فراغ المتصفح حتى لا ينافس تحميل الصفحة نفسها
   useEffect(() => {
-    if (ready && viewer) loadData().catch(() => {});
+    if (!ready || !viewer) return;
+    const run = () => loadData().catch(() => {});
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(run, { timeout: 1500 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(run, 600);
+    return () => clearTimeout(t);
   }, [ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // بيانات جاهزة فوراً (المخزّنة إن وُجدت) مع تحديث في الخلفية
   const quickData = useCallback(async () => {
@@ -370,22 +379,23 @@ export default function AmalAssistant() {
   // ---------- الخمول: تلميحات ثم نوم، والاستيقاظ عند العودة ----------
   useEffect(() => {
     if (!viewer) return;
+    // خفيف جداً: يحدّث وقت آخر نشاط فقط، ولا يغيّر الحالة (ولا يعيد الرسم) إلا إذا كانت نائمة
     const wake = () => {
-      const was = Date.now() - lastActive.current;
-      lastActive.current = Date.now();
-      setSleeping((s) => {
-        if (s && was > SLEEP_AFTER) {
-          setTimeout(() => say({ mood: "wave", text: `${timeGreeting()}! رجعت 😊 لو احتجت شي أنا هنا.` }), 50);
-        }
-        return false;
-      });
+      const now = Date.now();
+      if (now - lastActive.current < 1000 && !sleepingRef.current) return;
+      const was = now - lastActive.current;
+      lastActive.current = now;
+      if (!sleepingRef.current) return;
+      sleepingRef.current = false;
+      setSleeping(false);
+      if (was > SLEEP_AFTER) setTimeout(() => say({ mood: "wave", text: `${timeGreeting()}! رجعت 😊 لو احتجت شي أنا هنا.` }), 50);
     };
     const evs = ["mousemove", "keydown", "scroll", "touchstart", "click"];
     evs.forEach((e) => window.addEventListener(e, wake, { passive: true }));
     const iv = setInterval(() => {
       const idle = Date.now() - lastActive.current;
       if (openRef.current) return;
-      if (idle > SLEEP_AFTER) { setSleeping(true); setBubble(null); return; }
+      if (idle > SLEEP_AFTER) { if (!sleepingRef.current) { sleepingRef.current = true; setSleeping(true); setBubble(null); } return; }
       if (idle > TIP_AFTER && Date.now() - lastTip.current > TIP_GAP) {
         lastTip.current = Date.now();
         const tip = IDLE_TIPS[Math.floor(Math.random() * IDLE_TIPS.length)];
@@ -394,26 +404,6 @@ export default function AmalAssistant() {
     }, 10000);
     return () => { evs.forEach((e) => window.removeEventListener(e, wake)); clearInterval(iv); };
   }, [viewer, say, can]);
-
-  // ---------- الالتفات نحو المؤشر ----------
-  useEffect(() => {
-    let raf = 0;
-    const onMove = (e) => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const el = charRef.current;
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        const dx = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2)));
-        const dy = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 3)) / (window.innerHeight / 2)));
-        el.style.setProperty("--ry", `${(dx * 9).toFixed(2)}deg`);
-        el.style.setProperty("--rx", `${(-dy * 4).toFixed(2)}deg`);
-      });
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => { window.removeEventListener("mousemove", onMove); cancelAnimationFrame(raf); };
-  }, []);
 
   // ---------- طلب من أي مكان في النظام: window.dispatchEvent(new CustomEvent("amal:ask", { detail })) ----------
   useEffect(() => {

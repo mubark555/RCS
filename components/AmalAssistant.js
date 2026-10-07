@@ -37,6 +37,34 @@ const once = {
   mark(k) { try { window.sessionStorage.setItem(`amal_${k}`, "1"); } catch {} },
 };
 
+// ================= صوت أنثوي عربي =================
+// أسماء أصوات نسائية معروفة في المتصفحات (Edge/Windows/macOS/Android) — الخليجي أولاً
+const FEMALE_AR = ["zariyah", "noura", "fatima", "amany", "aysha", "laila", "layla", "salma", "hoda", "mouna", "amina", "rana", "sana", "iman", "reem", "mariam", "lana", "female", "امرأة", "أنثى"];
+const MALE_AR = ["naayf", "hamed", "shakir", "fahed", "hamdan", "rami", "taim", "ali", "bassel", "moaz", "jamal", "hedi", "omar", "saleh", "ismael", "abdullah", "majed", "maged", "tarik", "tariq", "male"];
+let _voice = null;
+function pickVoice() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const all = window.speechSynthesis.getVoices().filter((v) => /^ar/i.test(v.lang));
+  if (!all.length) return null;
+  const nm = (v) => String(v.name || "").toLowerCase();
+  const score = (v) => {
+    const n = nm(v);
+    let sc = 0;
+    if (FEMALE_AR.some((f) => n.includes(f))) sc += 10;
+    if (MALE_AR.some((m) => new RegExp(`\\b${m}\\b`).test(n))) sc -= 20;
+    if (/sa|ae|kw|qa|bh|om/i.test(v.lang.split("-")[1] || "")) sc += 3; // لهجة خليجية
+    if (/natural|online|neural/i.test(n)) sc += 2;                     // أصوات أوضح
+    if (/google/i.test(n)) sc += 1;
+    return sc;
+  };
+  _voice = [...all].sort((a, b) => score(b) - score(a))[0];
+  _voice._female = FEMALE_AR.some((f) => nm(_voice).includes(f)) || /google/i.test(nm(_voice));
+  return _voice;
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  try { window.speechSynthesis.onvoiceschanged = () => { _voice = null; pickVoice(); }; } catch {}
+}
+
 // انتظار إغلاق نوافذ الترحيب الأصلية في النظام (الحمد لله على السلامة / تهنئة المناسبات) قبل أن تتكلم أمل
 function afterOverlays(fn, tries = 240) {
   if (typeof document === "undefined") return fn();
@@ -70,10 +98,8 @@ export default function AmalAssistant() {
   const [mini, setMini] = useState(false);
   const [muted, setMuted] = useState(false);
   const [voice, setVoice] = useState(false);
-  const [listening, setListening] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [burst, setBurst] = useState(0);
-  const [canListen, setCanListen] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
   const [tour, setTour] = useState(null);       // { steps, key }
   const [tourStepId, setTourStepId] = useState(null);
@@ -90,7 +116,6 @@ export default function AmalAssistant() {
   const bubbleHover = useRef(false);
   const lastActive = useRef(Date.now());
   const lastTip = useRef(Date.now());
-  const recRef = useRef(null);
   const openRef = useRef(false);
   const voiceRef = useRef(false);
   openRef.current = open;
@@ -103,10 +128,9 @@ export default function AmalAssistant() {
   useEffect(() => {
     setMini(pref.get("mini", false));
     setMuted(pref.get("muted", false));
-    setVoice(pref.get("voice", false));
+    setVoice(pref.get("voice", true));
     try { const p = JSON.parse(window.localStorage.getItem("amal_pos") || "null"); if (p && typeof p.x === "number") setPos(p); } catch {}
     setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
-    setCanListen(typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
   // ---------- البيانات ----------
@@ -159,22 +183,43 @@ export default function AmalAssistant() {
     if (!hold && m !== "idle") moodTimer.current = setTimeout(() => setMoodState("idle"), MOOD_MS);
   }, []);
 
-  const speak = useCallback((s) => {
+  // النطق بصوت أنثوي. المتصفحات تمنع الصوت قبل أول تفاعل من المستخدم،
+  // فإن رُفض نؤجّله لأول نقرة/ضغطة زر (مثل ترحيب الدخول)
+  const pendingSpeech = useRef(null);
+  const speak = useCallback((s, { defer = false } = {}) => {
     if (!voiceRef.current || typeof window === "undefined" || !window.speechSynthesis) return;
-    const say = speakable(s);
-    if (!say) return;
+    const text = speakable(s);
+    if (!text) return;
     try {
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(say.slice(0, 400));
-      u.lang = "ar-SA";
-      const v = window.speechSynthesis.getVoices().find((x) => /^ar/i.test(x.lang));
-      if (v) u.voice = v;
-      u.rate = 1;
-      u.onstart = () => setMood("talk", true);
+      const u = new SpeechSynthesisUtterance(text.slice(0, 450));
+      const v = _voice || pickVoice();
+      if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "ar-SA";
+      // إذا ما توفر صوت نسائي في الجهاز نرفع طبقة الصوت ليقترب من صوت أنثوي
+      u.pitch = v && v._female ? 1.05 : 1.35;
+      u.rate = 0.98;
+      u.onstart = () => { pendingSpeech.current = null; setMood("talk", true); };
       u.onend = () => setMood("idle");
+      u.onerror = (e) => {
+        if (defer && (e.error === "not-allowed" || e.error === "interrupted" || e.error === "canceled")) pendingSpeech.current = s;
+      };
+      if (defer) pendingSpeech.current = s; // يُمسح عند بدء النطق فعلاً
       window.speechSynthesis.speak(u);
     } catch {}
   }, [setMood]);
+
+  // نطق المؤجَّل عند أول تفاعل
+  useEffect(() => {
+    const go = () => {
+      const s = pendingSpeech.current;
+      if (!s) return;
+      pendingSpeech.current = null;
+      setTimeout(() => speak(s), 30);
+    };
+    window.addEventListener("pointerdown", go, true);
+    window.addEventListener("keydown", go, true);
+    return () => { window.removeEventListener("pointerdown", go, true); window.removeEventListener("keydown", go, true); };
+  }, [speak]);
 
   const say = useCallback((r, { force = false } = {}) => {
     if (!r || !r.text) return;
@@ -183,7 +228,7 @@ export default function AmalAssistant() {
     if (muted && !force) return;
     clearTimeout(bubbleTimer.current);
     setBubble({ text: r.text, chips: (r.chips || []).slice(0, 2), key: Date.now() });
-    speak(r.text);
+    speak(r.speech || r.text, { defer: !!r.speech });
     const hide = () => {
       if (bubbleHover.current) { bubbleTimer.current = setTimeout(hide, 2500); return; }
       setBubble(null);
@@ -221,7 +266,12 @@ export default function AmalAssistant() {
           return;
         }
         // داخل في إجازته/أوفه، أو مريض، أو راجع من إجازة
-        const greet = leaveGreeting(viewer, d.myLeaves) || welcome(ctxOf(d));
+        const first = role === "client" ? "" : String(viewer.name || "").split(" ")[0];
+        const hello = `${timeGreeting()}${first ? ` يا ${first}` : ""}`;
+        const leaveMsg = leaveGreeting(viewer, d.myLeaves);
+        const greet = leaveMsg
+          ? { ...leaveMsg, speech: `${hello}. ${leaveMsg.text}` }
+          : { ...welcome(ctxOf(d)), speech: `${hello}. أنا أمل، مساعدتك الذكية في النظام. أتابع معك المهام والمشاريع والاجتماعات، وأجاوب على أسئلتك، وأقدر أنشئ لك مهام. اضغط عليّ متى ما احتجتني.` };
         afterOverlays(() => say(greet, { force: true }));
       }
     }, 250);
@@ -366,7 +416,7 @@ export default function AmalAssistant() {
     setSleeping(false);
     if (!steps.length) { say({ mood: "thinking", text: "ما عندي شرح مفصّل لهالصفحة للحين، بس تقدر تسألني عنها 😊" }, { force: true }); return; }
     const first = role === "client" ? "" : String(viewer?.name || "").split(" ")[0];
-    const personal = steps.map((st) => ({ ...st, text: st.text.replace("{name}", first ? `يا ${first}` : "") }));
+    const personal = steps.map((st) => ({ ...st, text: st.text.replace("{greet}", timeGreeting()).replace("{name}", first ? `يا ${first}` : "") }));
     setTour({ steps: personal, key: Date.now() });
   }
   function endTour(completed) {
@@ -478,30 +528,6 @@ export default function AmalAssistant() {
     setMsgs((m) => m.map((x, i) => (i === idx ? { ...x, action: { ...x.action, cancelled: true } } : x)).concat({ from: "amal", text: "تمام، ألغيت الطلب." }));
   }
 
-  // ---------- الاستماع للصوت ----------
-  function toggleListen() {
-    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SR) return;
-    if (listening) { try { recRef.current?.stop(); } catch {} return; }
-    try {
-      const rec = new SR();
-      rec.lang = "ar-SA";
-      rec.interimResults = true;
-      rec.maxAlternatives = 1;
-      rec.onresult = (e) => {
-        const r = e.results[e.results.length - 1];
-        const t = r[0]?.transcript || "";
-        setText(t);
-        if (r.isFinal && t.trim()) { try { rec.stop(); } catch {} ask(t); }
-      };
-      rec.onend = () => { setListening(false); setMood("idle"); };
-      rec.onerror = () => { setListening(false); setMood("idle"); };
-      recRef.current = rec;
-      rec.start();
-      setListening(true);
-      setMood("listen", true);
-    } catch { setListening(false); }
-  }
 
   function toggle(k) {
     if (k === "voice") {
@@ -516,12 +542,12 @@ export default function AmalAssistant() {
 
   if (!ready || !viewer) return null;
 
-  const liveMood = sleeping && !open ? "sleep" : listening ? "listen" : busy ? "thinking" : mood;
-  const status = listening ? "تسمعك…" : busy ? "تفكّر…" : liveMood === "talk" ? "تتكلم…" : "متصلة الآن";
+  const liveMood = sleeping && !open ? "sleep" : busy ? "thinking" : mood;
+  const status = busy ? "تفكّر…" : liveMood === "talk" ? "تتكلم…" : "متصلة الآن";
 
   return (
     <>
-      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`); }} />}
+      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st, idx) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`, { defer: idx === 0 }); }} />}
       {!open && (!tour || tourStepId === "amal") && (
         <div
           className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : "is-center"}`}
@@ -655,16 +681,11 @@ export default function AmalAssistant() {
           </div>
 
           <form className="amal-input" onSubmit={(e) => { e.preventDefault(); ask(text); }}>
-            {canListen && (
-              <button className={`btn ghost amal-mic ${listening ? "on" : ""}`} type="button" onClick={toggleListen} title={listening ? "إيقاف الاستماع" : "اسألها بصوتك"}>
-                <Icon name="mic" size={16} />
-              </button>
-            )}
             <input
               ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={listening ? "أسمعك… تكلّم" : `اسأل ${AMAL_NAME}… مثلاً: وش المتأخر في هوميرا؟`}
+              placeholder={`اسأل ${AMAL_NAME}… مثلاً: وش المتأخر في هوميرا؟`}
             />
             <button className="btn primary" type="submit" disabled={!text.trim() || busy} title="إرسال">
               <Icon name="send" size={16} />

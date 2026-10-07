@@ -9,6 +9,8 @@ import { tasksStore, meetingsStore, kpisStore, invoicesStore, paymentsStore, com
 import { leavesApi } from "@/lib/leaves";
 import { answer, suggestions, taskItem, AMAL_NAME, PRIORITY_OPTIONS } from "@/lib/amal";
 import { welcome, pageTip, reactionFor, IDLE_TIPS, summarizeTask, timeGreeting } from "@/lib/amalLife";
+import { tourFor, isNewEmployee } from "@/lib/amalTour";
+import AmalTour from "@/components/AmalTour";
 
 const STALE_MS = 60 * 1000;
 const SLEEP_AFTER = 2 * 60 * 1000;   // تنام بعد دقيقتين بلا نشاط
@@ -60,6 +62,10 @@ export default function AmalAssistant() {
   const [burst, setBurst] = useState(0);
   const [canListen, setCanListen] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
+  const [tour, setTour] = useState(null);       // { steps, key }
+  const [tourStepId, setTourStepId] = useState(null);
+  const [pos, setPos] = useState(null);         // موضع مخصص بعد السحب (null = وسط الشاشة)
+  const drag = useRef(null);
 
   const data = useRef({ at: 0, scopeKey: "" });
   const listRef = useRef(null);
@@ -83,6 +89,7 @@ export default function AmalAssistant() {
     setMini(pref.get("mini", false));
     setMuted(pref.get("muted", false));
     setVoice(pref.get("voice", false));
+    try { const p = JSON.parse(window.localStorage.getItem("amal_pos") || "null"); if (p && typeof p.x === "number") setPos(p); } catch {}
     setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
     setCanListen(typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
@@ -170,7 +177,12 @@ export default function AmalAssistant() {
       if (!once.has(k)) {
         once.mark(k);
         once.mark(`tip_${path}`);
-        say(welcome(ctxOf(d)));
+        const first = role === "client" ? "" : String(viewer.name || "").split(" ")[0];
+        if (!pref.get(`tour_${viewer.id}`, false) && isNewEmployee(viewer)) {
+          say({ mood: "wave", text: `${timeGreeting()}${first ? ` يا ${first}` : ""}، وأهلاً بك في الفريق 🎉 أنا أمل، مساعدتك. أسوي لك جولة سريعة أعرّفك فيها على كل أجزاء النظام؟`, chips: ["ابدأ الجولة", "لاحقاً"] }, { force: true });
+        } else {
+          say(welcome(ctxOf(d)));
+        }
       }
     }, 1400);
     return () => clearTimeout(t);
@@ -305,6 +317,69 @@ export default function AmalAssistant() {
   // تغيّر المستخدم (تبديل الحساب) → محادثة جديدة
   useEffect(() => { setMsgs([]); data.current = { at: 0, scopeKey: "" }; }, [viewer?.id]);
 
+  function startTour(kind = "full") {
+    const steps = kind === "page" ? tourFor(can, { path }) : tourFor(can);
+    setOpen(false);
+    setBubble(null);
+    setSleeping(false);
+    if (!steps.length) { say({ mood: "thinking", text: "ما عندي شرح مفصّل لهالصفحة للحين، بس تقدر تسألني عنها 😊" }, { force: true }); return; }
+    setTour({ steps, key: Date.now() });
+  }
+  function endTour(completed) {
+    setTour(null);
+    setTourStepId(null);
+    if (viewer) pref.set(`tour_${viewer.id}`, true);
+    say(completed
+      ? { mood: "celebrate", text: "كفو! خلصت الجولة 🎉 صرت تعرف النظام. لو احتجت أي شي أنا هنا.", chips: ["وش علي اليوم؟", "ملخّص اليوم"] }
+      : { mood: "idle", text: "تمام، وقفنا الجولة. تقدر ترجع لها بأي وقت: قل لي «سوي لي جولة»." }, { force: true });
+  }
+  function onChip(c) {
+    setBubble(null);
+    if (c === "لاحقاً") { if (viewer) pref.set(`tour_${viewer.id}`, true); say({ mood: "idle", text: "ولا يهمك، متى ما حبيت قل لي «سوي لي جولة» 😊" }, { force: true }); return; }
+    if (c === "ابدأ الجولة") { startTour("full"); return; }
+    ask(c);
+  }
+  const startTourRef = useRef(startTour);
+  startTourRef.current = startTour;
+  useEffect(() => {
+    const onTour = (e) => startTourRef.current(e.detail?.kind || "full");
+    window.addEventListener("amal:tour", onTour);
+    return () => window.removeEventListener("amal:tour", onTour);
+  }, []);
+
+  // ---------- السحب لتغيير المكان (النقر بدون سحب يفتح الشات) ----------
+  function onDragStart(e) {
+    if (e.button != null && e.button !== 0) return;
+    const dock = e.currentTarget.closest(".amal-dock");
+    const r = dock.getBoundingClientRect();
+    drag.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function onDragMove(e) {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
+    d.moved = true;
+    const x = Math.max(4, Math.min(window.innerWidth - 120, d.ox + dx));
+    const y = Math.max(4, Math.min(window.innerHeight - 120, d.oy + dy));
+    setPos({ x, y });
+  }
+  function onDragEnd() {
+    const d = drag.current;
+    drag.current = null;
+    if (!d) return;
+    if (d.moved) {
+      setPos((p) => { try { window.localStorage.setItem("amal_pos", JSON.stringify(p)); } catch {} return p; });
+      return;
+    }
+    lastActive.current = Date.now(); setSleeping(false); setOpen(true);
+  }
+  function resetPos() {
+    setPos(null);
+    try { window.localStorage.removeItem("amal_pos"); } catch {}
+  }
+
   async function ask(q) {
     const question = String(q || "").trim();
     if (!question || busy) return;
@@ -321,6 +396,8 @@ export default function AmalAssistant() {
       setMsgs((m) => [...m, { from: "amal", ...reply }]);
       setMood(moodOfReply(reply));
       speak(reply.text);
+      if (reply.action?.type === "tour") setTimeout(() => startTourRef.current("full"), 900);
+      if (reply.action?.type === "pageTour") setTimeout(() => startTourRef.current("page"), 900);
     } catch {
       setMsgs((m) => [...m, { from: "amal", text: "صار خطأ وأنا أقرأ البيانات، جرّب مرة ثانية بعد شوي." }]);
       setMood("concerned");
@@ -400,8 +477,12 @@ export default function AmalAssistant() {
 
   return (
     <>
-      {!open && (
-        <div className={`amal-dock ${mini ? "is-mini" : ""}`}>
+      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} onEnd={endTour} onStep={(st) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`); }} />}
+      {!open && (!tour || tourStepId === "amal") && (
+        <div
+          className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : "is-center"}`}
+          style={pos ? { left: pos.x, top: pos.y } : undefined}
+        >
           {bubble && (
             <div
               key={bubble.key}
@@ -413,14 +494,19 @@ export default function AmalAssistant() {
               <div className="amal-say-txt">{bubble.text}</div>
               {bubble.chips?.length > 0 && (
                 <div className="amal-chips">
-                  {bubble.chips.map((c) => <button key={c} type="button" onClick={() => { setBubble(null); ask(c); }}>{c}</button>)}
+                  {bubble.chips.map((c) => <button key={c} type="button" onClick={() => onChip(c)}>{c}</button>)}
                 </div>
               )}
             </div>
           )}
 
           {mini ? (
-            <button className={`amal-mini mood-${liveMood}`} type="button" onClick={() => setOpen(true)} title={`اسأل ${AMAL_NAME}`}>
+            <button
+              className={`amal-mini mood-${liveMood}`} type="button"
+              onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={() => { drag.current = null; }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+              title={`اسأل ${AMAL_NAME} — اسحبها لتغيير مكانها`}
+            >
               <img src={FACE} alt="" />
               <span className="amal-tag-name">{AMAL_NAME} <span className="amal-ai">AI</span></span>
               {liveMood === "sleep" && <span className="amal-z">z</span>}
@@ -430,7 +516,12 @@ export default function AmalAssistant() {
               <button className="amal-char-min" type="button" onClick={() => toggle("mini")} title="تصغير أمل">
                 <Icon name="close" size={11} />
               </button>
-              <button className="amal-char-btn" type="button" onClick={() => { lastActive.current = Date.now(); setSleeping(false); setOpen(true); }} title={`اسأل ${AMAL_NAME}`} aria-label={`فتح المساعدة ${AMAL_NAME}`}>
+              <button
+                className="amal-char-btn" type="button"
+                onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={() => { drag.current = null; }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+                title={`اسأل ${AMAL_NAME} — اسحبها لتغيير مكانها`} aria-label={`فتح المساعدة ${AMAL_NAME}`}
+              >
                 <span className="amal-shadow" />
                 <img className="amal-body" src={FULL} alt={`${AMAL_NAME} — المساعدة الذكية`} draggable={false} />
                 <span className="amal-tag-name">{AMAL_NAME} <span className="amal-ai">AI</span></span>
@@ -536,7 +627,10 @@ export default function AmalAssistant() {
             </button>
           </form>
           <div className="amal-panel-foot">
-            <button type="button" onClick={() => toggle("mini")}>{mini ? "إظهار أمل كاملة في الزاوية" : "تصغير أمل في الزاوية"}</button>
+            <button type="button" onClick={() => startTour("full")}>🧭 جولة تعريفية بالنظام</button>
+            <button type="button" onClick={() => startTour("page")}>اشرحي هالصفحة</button>
+            <button type="button" onClick={() => toggle("mini")}>{mini ? "إظهار أمل كاملة" : "تصغير أمل"}</button>
+            {pos && <button type="button" onClick={resetPos}>إرجاعها للوسط</button>}
           </div>
         </div>
       )}

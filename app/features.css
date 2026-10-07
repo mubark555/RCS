@@ -380,11 +380,14 @@ th.pm-sticky { background: var(--surface-2); }
 
 /* ================= المساعدة «أمل» — الشخصية الحيّة ================= */
 .amal-dock {
-  position: fixed; left: 12px; bottom: 0; z-index: 9000;
-  display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;
+  position: fixed; z-index: 9000;
+  display: flex; flex-direction: column; align-items: center; pointer-events: none;
 }
 .amal-dock > * { pointer-events: auto; }
-.amal-dock.is-mini { left: 18px; bottom: 18px; }
+/* افتراضياً في وسط الشاشة تماماً، وبعد السحب في المكان الذي يختاره المستخدم */
+.amal-dock.is-center { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.amal-dock.is-center .amal-char { width: 210px; height: 228px; }
+.amal-char-btn, .amal-mini { touch-action: none; }
 
 /* الشخصية */
 .amal-char { position: relative; width: 168px; height: 182px; --rx: 0deg; --ry: 0deg; perspective: 700px; }
@@ -461,13 +464,14 @@ th.pm-sticky { background: var(--surface-2); }
 
 /* فقاعة الكلام */
 .amal-say {
-  position: relative; margin: 0 0 -6px 18px; max-width: 280px; min-width: 180px;
+  position: relative; margin: 0 0 -6px; max-width: 300px; min-width: 200px;
   padding: 11px 14px 11px 30px; border-radius: 16px; border-end-start-radius: 16px; border-end-end-radius: 4px;
   background: var(--surface); border: 1px solid #e3d6fb; box-shadow: var(--shadow-lg);
   font-size: 13.5px; line-height: 1.7; color: var(--text); white-space: pre-wrap;
   animation: amal-pop .32s cubic-bezier(.2,.9,.3,1.3);
 }
 .amal-dock.is-mini .amal-say { margin: 0 0 10px 0; }
+.amal-say::after { left: 50% !important; margin-left: -7px; }
 .amal-say::after {
   content: ""; position: absolute; bottom: -8px; left: 46px; width: 14px; height: 14px;
   background: var(--surface); border-right: 1px solid #e3d6fb; border-bottom: 1px solid #e3d6fb; transform: rotate(45deg);
@@ -500,7 +504,7 @@ th.pm-sticky { background: var(--surface-2); }
 
 /* نافذة المحادثة */
 .amal-panel {
-  position: fixed; left: 22px; bottom: 22px; z-index: 9000;
+  position: fixed; inset: 0; margin: auto; z-index: 9000;
   width: min(410px, calc(100vw - 32px)); height: min(640px, calc(100vh - 44px));
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--bg); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg);
@@ -557,7 +561,7 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-input input { flex: 1; min-width: 0; }
 .amal-input .btn { width: 42px; padding: 0; display: grid; place-items: center; flex-shrink: 0; }
 .amal-mic.on { color: #fff; background: #7c3aed; border-color: #7c3aed; animation: amal-dot 1.2s infinite; }
-.amal-panel-foot { padding: 0 10px 8px; background: var(--surface); text-align: center; }
+.amal-panel-foot { padding: 0 10px 8px; background: var(--surface); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; }
 .amal-panel-foot button { border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
 .amal-card { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid #e3d6fb; border-radius: 14px; }
 .amal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); flex: 1; min-width: 0; }
@@ -576,14 +580,42 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-ask-btn + .chat-jump { margin-inline-start: 0; }
 
 @media (max-width: 560px) {
-  .amal-dock { left: 4px; }
-  .amal-char { width: 112px; height: 124px; }
+  .amal-char, .amal-dock.is-center .amal-char { width: 140px; height: 152px; }
   .amal-tag-name { font-size: 11.5px; padding: 3px 9px; }
-  .amal-say { max-width: calc(100vw - 40px); margin-left: 8px; }
-  .amal-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); }
+  .amal-say { max-width: calc(100vw - 40px); }
+  .amal-panel { width: calc(100vw - 16px); height: calc(100vh - 16px); }
   .amal-ask-btn { padding: 0 4px; font-size: 0; gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .amal-body, .amal-char .amal-body, .amal-mini, .amal-say, .amal-zzz i, .amal-confetti i, .amal-ring { animation: none !important; }
 }
-@media print { .amal-dock, .amal-panel { display: none !important; } }
+
+/* ================= جولة أمل التعريفية ================= */
+.amal-tour { position: fixed; inset: 0; z-index: 9600; }
+.amal-dim { position: fixed; inset: 0; background: rgba(24, 16, 34, .58); animation: wg-fade .25s ease; }
+.amal-spot {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(24, 16, 34, .58), 0 0 0 3px #a78bfa, 0 0 24px 6px rgba(167, 139, 250, .55);
+  transition: top .35s ease, left .35s ease, width .35s ease, height .35s ease;
+  animation: amal-glow 1.8s ease-in-out infinite;
+}
+@keyframes amal-glow { 0%, 100% { box-shadow: 0 0 0 9999px rgba(24,16,34,.58), 0 0 0 3px #a78bfa, 0 0 18px 4px rgba(167,139,250,.45); } 50% { box-shadow: 0 0 0 9999px rgba(24,16,34,.58), 0 0 0 3px #c4b5fd, 0 0 30px 8px rgba(167,139,250,.7); } }
+.amal-tcard {
+  position: fixed; background: var(--surface); border-radius: 18px; padding: 14px 16px;
+  border: 1px solid #e3d6fb; box-shadow: 0 24px 60px rgba(24, 16, 34, .35);
+  transition: top .35s ease, left .35s ease; animation: amal-pop .3s cubic-bezier(.2,.9,.3,1.2);
+}
+.amal-tcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.amal-tcard-head img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, #efe6fd, #fde7e4); border: 2px solid #e3d6fb; flex-shrink: 0; }
+.amal-tcard-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.45; }
+.amal-tcard-head small { font-size: 11.5px; color: #7c3aed; font-weight: 700; display: inline-flex; gap: 5px; align-items: center; }
+.amal-tcard-head b { font-size: 16px; color: var(--ink); }
+.amal-tcount { font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.amal-tcard-txt { font-size: 14px; line-height: 1.85; color: var(--text); white-space: pre-wrap; }
+.amal-tcard.is-wait .amal-tcard-txt { color: var(--muted); }
+.amal-tprog { height: 5px; border-radius: 999px; background: var(--surface-2); margin: 12px 0 10px; overflow: hidden; }
+.amal-tprog span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #7c3aed); transition: width .35s ease; }
+.amal-tcard-acts { display: flex; align-items: center; gap: 8px; }
+.amal-tskip { margin-inline-start: auto; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+
+@media print { .amal-dock, .amal-panel, .amal-tour { display: none !important; } }

@@ -524,6 +524,8 @@ th.pm-sticky { background: var(--surface-2); }
   width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); flex-shrink: 0;
   background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; cursor: pointer;
 }
+.amal-voice { position: relative; }
+.amal-vtag { position: absolute; bottom: 1px; left: 2px; font-size: 9px; font-weight: 800; color: #7c3aed; line-height: 1; }
 .amal-x.on { color: #7c3aed; background: #f1ebfd; border-color: #e3d6fb; }
 .amal-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .amal-msg { display: flex; gap: 8px; max-width: 96%; align-items: flex-start; }

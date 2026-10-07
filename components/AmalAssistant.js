@@ -97,7 +97,7 @@ export default function AmalAssistant() {
   const [bubble, setBubble] = useState(null); // { text, chips, key }
   const [mini, setMini] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [voice, setVoice] = useState(false);
+  const [voice, setVoice] = useState("auto"); // auto: اللحظات المهمة فقط | on: كل الكلام | off: صامتة
   const [sleeping, setSleeping] = useState(false);
   const [burst, setBurst] = useState(0);
   const [canSpeak, setCanSpeak] = useState(false);
@@ -117,7 +117,7 @@ export default function AmalAssistant() {
   const lastActive = useRef(Date.now());
   const lastTip = useRef(Date.now());
   const openRef = useRef(false);
-  const voiceRef = useRef(false);
+  const voiceRef = useRef("auto");
   openRef.current = open;
   tourActive.current = !!tour;
   voiceRef.current = voice;
@@ -128,7 +128,7 @@ export default function AmalAssistant() {
   useEffect(() => {
     setMini(pref.get("mini", false));
     setMuted(pref.get("muted", false));
-    setVoice(pref.get("voice", true));
+    try { const v = window.localStorage.getItem("amal_voice_mode"); if (v === "on" || v === "off" || v === "auto") setVoice(v); } catch {}
     try { const p = JSON.parse(window.localStorage.getItem("amal_pos") || "null"); if (p && typeof p.x === "number") setPos(p); } catch {}
     setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
   }, []);
@@ -186,8 +186,11 @@ export default function AmalAssistant() {
   // النطق بصوت أنثوي. المتصفحات تمنع الصوت قبل أول تفاعل من المستخدم،
   // فإن رُفض نؤجّله لأول نقرة/ضغطة زر (مثل ترحيب الدخول)
   const pendingSpeech = useRef(null);
-  const speak = useCallback((s, { defer = false } = {}) => {
-    if (!voiceRef.current || typeof window === "undefined" || !window.speechSynthesis) return;
+  // important: الترحيب وإنجاز المهام والشكر والتحيات — تُنطق تلقائياً؛ والباقي فقط إذا فُعّل «كل الكلام»
+  const speak = useCallback((s, { defer = false, important = false } = {}) => {
+    const mode = voiceRef.current;
+    if (mode === "off" || (mode === "auto" && !important)) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
     const text = speakable(s);
     if (!text) return;
     try {
@@ -214,7 +217,7 @@ export default function AmalAssistant() {
       const s = pendingSpeech.current;
       if (!s) return;
       pendingSpeech.current = null;
-      setTimeout(() => speak(s), 30);
+      setTimeout(() => speak(s, { important: true }), 30);
     };
     window.addEventListener("pointerdown", go, true);
     window.addEventListener("keydown", go, true);
@@ -225,10 +228,10 @@ export default function AmalAssistant() {
     if (!r || !r.text) return;
     if (r.mood) setMood(r.mood);
     if (openRef.current) return; // داخل الشات لا نعرض فقاعات
-    if (muted && !force) return;
+    if (muted && !force && !r.important) return;
     clearTimeout(bubbleTimer.current);
     setBubble({ text: r.text, chips: (r.chips || []).slice(0, 2), key: Date.now() });
-    speak(r.speech || r.text, { defer: !!r.speech });
+    speak(r.speech || r.text, { defer: !!r.speech, important: !!r.important });
     const hide = () => {
       if (bubbleHover.current) { bubbleTimer.current = setTimeout(hide, 2500); return; }
       setBubble(null);
@@ -270,8 +273,8 @@ export default function AmalAssistant() {
         const hello = `${timeGreeting()}${first ? ` يا ${first}` : ""}`;
         const leaveMsg = leaveGreeting(viewer, d.myLeaves);
         const greet = leaveMsg
-          ? { ...leaveMsg, speech: `${hello}. ${leaveMsg.text}` }
-          : { ...welcome(ctxOf(d)), speech: `${hello}. أنا أمل، مساعدتك الذكية في النظام. أتابع معك المهام والمشاريع والاجتماعات، وأجاوب على أسئلتك، وأقدر أنشئ لك مهام. اضغط عليّ متى ما احتجتني.` };
+          ? { ...leaveMsg, important: true, speech: `${hello}. ${leaveMsg.text}` }
+          : { ...welcome(ctxOf(d)), important: true, speech: `${hello}. أنا أمل، مساعدتك الذكية في النظام. أتابع معك المهام والمشاريع والاجتماعات، وأجاوب على أسئلتك، وأقدر أنشئ لك مهام. اضغط عليّ متى ما احتجتني.` };
         afterOverlays(() => say(greet, { force: true }));
       }
     }, 250);
@@ -424,7 +427,7 @@ export default function AmalAssistant() {
     setTourStepId(null);
     if (viewer) pref.set(`tour_${viewer.id}`, true);
     say(completed
-      ? { mood: "celebrate", text: "كفو! خلصت الجولة 🎉 صرت تعرف النظام. لو احتجت أي شي أنا هنا.", chips: ["وش علي اليوم؟", "ملخّص اليوم"] }
+      ? { mood: "celebrate", important: true, text: "كفو! خلصت الجولة 🎉 صرت تعرف النظام. لو احتجت أي شي أنا هنا.", chips: ["وش علي اليوم؟", "ملخّص اليوم"] }
       : { mood: "idle", text: "تمام، وقفنا الجولة. تقدر ترجع لها بأي وقت: قل لي «سوي لي جولة»." }, { force: true });
   }
   function onChip(c) {
@@ -517,6 +520,7 @@ export default function AmalAssistant() {
     const rec = await tasksStore.create(payload);
     data.current.at = 0;
     setMood("celebrate");
+    speak("تم إنشاء المهمة", { important: true });
     setMsgs((m) => m.map((x, i) => (i === idx ? { ...x, action: { ...x.action, done: true } } : x)).concat({
       from: "amal",
       text: "تم إنشاء المهمة ✅",
@@ -531,10 +535,13 @@ export default function AmalAssistant() {
 
   function toggle(k) {
     if (k === "voice") {
-      const v = !voice;
-      setVoice(v); pref.set("voice", v);
-      if (!v) { try { window.speechSynthesis?.cancel(); } catch {} }
-      else { voiceRef.current = true; speak("أهلاً، صرت أتكلم معك"); }
+      const next = { auto: "on", on: "off", off: "auto" }[voice] || "auto";
+      setVoice(next);
+      voiceRef.current = next;
+      try { window.localStorage.setItem("amal_voice_mode", next); } catch {}
+      if (next === "off") { try { window.speechSynthesis?.cancel(); } catch {} }
+      if (next === "on") speak("تمام، بتكلم معك في كل شي", { important: true });
+      if (next === "auto") speak("بتكلم بس في الترحيب وإنجاز المهام", { important: true });
     }
     if (k === "muted") { const v = !muted; setMuted(v); pref.set("muted", v); if (v) setBubble(null); }
     if (k === "mini") { const v = !mini; setMini(v); pref.set("mini", v); setBubble(null); }
@@ -547,7 +554,7 @@ export default function AmalAssistant() {
 
   return (
     <>
-      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st, idx) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`, { defer: idx === 0 }); }} />}
+      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st, idx) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`, { defer: idx === 0, important: st.id === "meet" }); }} />}
       {!open && (!tour || tourStepId === "amal") && (
         <div
           className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : "is-center"}`}
@@ -617,8 +624,12 @@ export default function AmalAssistant() {
               <small>{status}</small>
             </div>
             {canSpeak && (
-              <button className={`amal-x ${voice ? "on" : ""}`} type="button" onClick={() => toggle("voice")} title={voice ? "إيقاف صوت أمل" : "تشغيل صوت أمل"}>
-                <Icon name={voice ? "volume" : "mute"} size={16} />
+              <button
+                className={`amal-x amal-voice ${voice === "on" ? "on" : ""}`} type="button" onClick={() => toggle("voice")}
+                title={{ auto: "الصوت: تلقائي (الترحيب وإنجاز المهام فقط) — اضغط لتشغيل كل الكلام", on: "الصوت: كل الكلام — اضغط لكتم الصوت", off: "الصوت: صامتة — اضغط للوضع التلقائي" }[voice]}
+              >
+                <Icon name={voice === "off" ? "mute" : "volume"} size={16} />
+                {voice === "auto" && <span className="amal-vtag">A</span>}
               </button>
             )}
             <button className={`amal-x ${muted ? "" : "on"}`} type="button" onClick={() => toggle("muted")} title={muted ? "تشغيل نصائح أمل" : "إيقاف نصائح أمل"}>

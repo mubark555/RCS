@@ -378,69 +378,167 @@ th.pm-sticky { background: var(--surface-2); }
 .mm-recip small { font-size: 12px; color: var(--muted); }
 .mm-done { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; }
 
-/* ================= المساعدة «أمل» ================= */
-.amal-fab {
-  position: fixed; left: 22px; bottom: 22px; z-index: 9000;
-  display: inline-flex; align-items: center; gap: 10px;
-  padding: 7px 16px 7px 7px; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--ink);
-  box-shadow: var(--shadow-lg); cursor: pointer; font: inherit; font-weight: 700; font-size: 14px;
-  transition: transform .15s ease, box-shadow .15s ease;
+/* ================= المساعدة «أمل» — الشخصية الحيّة ================= */
+.amal-dock {
+  position: fixed; left: 12px; bottom: 0; z-index: 9000;
+  display: flex; flex-direction: column; align-items: flex-end; pointer-events: none;
 }
-.amal-fab:hover { transform: translateY(-2px); }
-.amal-fab-txt { display: inline-flex; align-items: center; gap: 6px; }
+.amal-dock > * { pointer-events: auto; }
+.amal-dock.is-mini { left: 18px; bottom: 18px; }
+
+/* الشخصية */
+.amal-char { position: relative; width: 168px; height: 182px; --rx: 0deg; --ry: 0deg; perspective: 700px; }
+.amal-char-btn {
+  position: absolute; inset: 0; border: 0; background: none; padding: 0; cursor: pointer;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.amal-body {
+  width: 100%; height: 100%; object-fit: contain; object-position: bottom center;
+  transform-origin: 50% 100%;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform .35s cubic-bezier(.2,.8,.2,1), filter .6s ease;
+  filter: drop-shadow(0 10px 18px rgba(44, 30, 60, .22));
+  animation: amal-breathe 4.2s ease-in-out infinite;
+  user-select: none; -webkit-user-drag: none;
+}
+.amal-shadow {
+  position: absolute; bottom: 4px; left: 50%; width: 110px; height: 14px; transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(44, 30, 60, .28), transparent); border-radius: 50%;
+}
+.amal-tag-name {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 800;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.amal-char-btn:hover .amal-body { animation: amal-wave .9s ease-in-out 1, amal-breathe 4.2s ease-in-out .9s infinite; }
+.amal-char-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; border-radius: 16px; }
+.amal-char-min {
+  position: absolute; top: 6px; left: 6px; z-index: 2; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .2s;
+}
+.amal-char:hover .amal-char-min, .amal-char-min:focus-visible { opacity: 1; }
+
+/* المزاجات */
+.amal-char.mood-wave .amal-body { animation: amal-wave .9s ease-in-out 2; }
+.amal-char.mood-happy .amal-body { animation: amal-hop .55s ease-out 2; }
+.amal-char.mood-celebrate .amal-body { animation: amal-hop .5s ease-out 3; }
+.amal-char.mood-concerned .amal-body { animation: amal-concern 1.4s ease-in-out 2; }
+.amal-char.mood-thinking .amal-body { animation: amal-think 1.6s ease-in-out infinite; }
+.amal-char.mood-talk .amal-body { animation: amal-talk .45s ease-in-out infinite; }
+.amal-char.mood-listen .amal-body { animation: amal-breathe 1.6s ease-in-out infinite; }
+.amal-char.mood-sleep .amal-body { filter: grayscale(.35) brightness(.92) drop-shadow(0 6px 10px rgba(44,30,60,.15)); animation: amal-sleep 5s ease-in-out infinite; }
+
+@keyframes amal-breathe { 0%, 100% { transform: rotateX(var(--rx)) rotateY(var(--ry)) scale(1, 1); } 50% { transform: rotateX(var(--rx)) rotateY(var(--ry)) scale(1.012, 1.018); } }
+@keyframes amal-wave { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+@keyframes amal-hop { 0%, 100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-14px) scale(1.02, .99); } 70% { transform: translateY(0) scale(1.01, .98); } }
+@keyframes amal-concern { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-3deg) translateX(-2px); } 60% { transform: rotate(2deg) translateX(2px); } }
+@keyframes amal-think { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(1.5deg) translateY(-2px); } }
+@keyframes amal-talk { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.006); } }
+@keyframes amal-sleep { 0%, 100% { transform: rotate(-4deg) translateY(2px); } 50% { transform: rotate(-5deg) translateY(4px) scale(1, .99); } }
+
+/* مؤثرات */
+.amal-zzz { position: absolute; top: 18px; right: 22px; pointer-events: none; }
+.amal-zzz i { position: absolute; font-style: normal; font-weight: 800; color: #7c3aed; opacity: 0; animation: amal-z 3s ease-in infinite; }
+.amal-zzz i:nth-child(1) { font-size: 12px; }
+.amal-zzz i:nth-child(2) { font-size: 15px; animation-delay: 1s; }
+.amal-zzz i:nth-child(3) { font-size: 19px; animation-delay: 2s; }
+@keyframes amal-z { 0% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-18px, -34px); } }
+.amal-think { position: absolute; top: 8px; right: 14px; display: flex; gap: 4px; padding: 7px 9px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.amal-think i { width: 6px; height: 6px; border-radius: 50%; background: #7c3aed; animation: amal-dot 1s infinite ease-in-out; }
+.amal-think i:nth-child(2) { animation-delay: .15s; }
+.amal-think i:nth-child(3) { animation-delay: .3s; }
+.amal-ring { position: absolute; left: 50%; bottom: 18px; width: 120px; height: 120px; margin-left: -60px; border-radius: 50%; border: 3px solid #7c3aed; opacity: 0; animation: amal-ring 1.4s ease-out infinite; pointer-events: none; }
+@keyframes amal-ring { 0% { transform: scale(.6); opacity: .7; } 100% { transform: scale(1.35); opacity: 0; } }
+.amal-confetti { position: absolute; left: 50%; top: 40%; pointer-events: none; }
+.amal-confetti i { position: absolute; border-radius: 2px; opacity: 0; animation: amal-conf 1.3s cubic-bezier(.15,.7,.3,1) forwards; }
+@keyframes amal-conf {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--x), calc(var(--y) + 90px)) rotate(var(--r)); }
+}
+
+/* فقاعة الكلام */
+.amal-say {
+  position: relative; margin: 0 0 -6px 18px; max-width: 280px; min-width: 180px;
+  padding: 11px 14px 11px 30px; border-radius: 16px; border-end-start-radius: 16px; border-end-end-radius: 4px;
+  background: var(--surface); border: 1px solid #e3d6fb; box-shadow: var(--shadow-lg);
+  font-size: 13.5px; line-height: 1.7; color: var(--text); white-space: pre-wrap;
+  animation: amal-pop .32s cubic-bezier(.2,.9,.3,1.3);
+}
+.amal-dock.is-mini .amal-say { margin: 0 0 10px 0; }
+.amal-say::after {
+  content: ""; position: absolute; bottom: -8px; left: 46px; width: 14px; height: 14px;
+  background: var(--surface); border-right: 1px solid #e3d6fb; border-bottom: 1px solid #e3d6fb; transform: rotate(45deg);
+}
+.amal-say .amal-chips { margin-top: 8px; }
+.amal-say-x {
+  position: absolute; top: 7px; left: 7px; width: 20px; height: 20px; border-radius: 50%;
+  border: 0; background: var(--surface-2); color: var(--muted); display: grid; place-items: center; cursor: pointer;
+}
+@keyframes amal-pop { 0% { opacity: 0; transform: translateY(8px) scale(.92); } 100% { opacity: 1; transform: none; } }
+
+/* الوضع المصغّر */
+.amal-mini {
+  position: relative; display: inline-flex; align-items: center; gap: 9px; padding: 5px 14px 5px 5px;
+  border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-lg);
+  cursor: pointer; font: inherit;
+}
+.amal-mini img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, #efe6fd, #fde7e4); }
+.amal-mini .amal-tag-name { position: static; transform: none; border: 0; box-shadow: none; padding: 0; background: none; font-size: 14px; }
+.amal-mini.mood-happy, .amal-mini.mood-celebrate { animation: amal-hop .5s ease-out 2; }
+.amal-mini.mood-sleep img { filter: grayscale(.4); }
+.amal-z { position: absolute; top: -6px; left: 30px; font-weight: 800; color: #7c3aed; animation: amal-z 3s ease-in infinite; }
+
+/* شارات */
 .amal-ai {
   font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 1px 6px; border-radius: 6px;
   color: #fff; background: linear-gradient(135deg, #7c3aed, var(--primary)); direction: ltr;
 }
-.amal-av {
-  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px;
-  background: linear-gradient(135deg, #7c3aed, var(--primary));
-}
-.amal-av.lg { width: 40px; height: 40px; font-size: 17px; }
+.amal-badge { font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: #7c3aed; background: #f1ebfd; }
+
+/* نافذة المحادثة */
 .amal-panel {
   position: fixed; left: 22px; bottom: 22px; z-index: 9000;
-  width: min(400px, calc(100vw - 32px)); height: min(620px, calc(100vh - 44px));
+  width: min(410px, calc(100vw - 32px)); height: min(640px, calc(100vh - 44px));
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--bg); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg);
-  animation: wg-fade .18s ease;
+  animation: amal-pop .22s ease;
 }
-.amal-head {
-  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-  background: var(--surface); border-bottom: 1px solid var(--border);
-}
+.amal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.amal-face { position: relative; flex-shrink: 0; width: 46px; height: 46px; }
+.amal-face img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, #efe6fd, #fde7e4); border: 2px solid #e3d6fb; }
+.amal-panel.mood-thinking .amal-face img, .amal-panel.mood-talk .amal-face img { animation: amal-talk .5s ease-in-out infinite; }
+.amal-panel.mood-celebrate .amal-face img, .amal-panel.mood-happy .amal-face img { animation: amal-hop .5s ease-out 2; }
+.amal-dot { position: absolute; bottom: 1px; left: 1px; width: 11px; height: 11px; border-radius: 50%; background: #16a34a; border: 2px solid var(--surface); }
+.amal-panel.mood-listen .amal-dot { background: #7c3aed; animation: amal-dot 1s infinite; }
 .amal-who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
-.amal-who b { font-size: 15px; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.amal-who b { font-size: 15px; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .amal-who small { font-size: 11.5px; color: var(--muted); }
-.amal-badge {
-  font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px;
-  color: #7c3aed; background: #f1ebfd;
-}
 .amal-x {
-  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); flex-shrink: 0;
   background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; cursor: pointer;
 }
+.amal-x.on { color: #7c3aed; background: #f1ebfd; border-color: #e3d6fb; }
 .amal-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.amal-msg { display: flex; flex-direction: column; gap: 6px; max-width: 94%; align-items: flex-start; }
-.amal-msg.me { align-self: flex-end; align-items: flex-end; max-width: 85%; }
+.amal-msg { display: flex; gap: 8px; max-width: 96%; align-items: flex-start; }
+.amal-msg.me { align-self: flex-end; max-width: 85%; }
+.amal-msg-av { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: linear-gradient(135deg, #efe6fd, #fde7e4); }
+.amal-msg-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; align-items: flex-start; }
+.amal-msg.me .amal-msg-body { align-items: flex-end; }
 .amal-bubble {
-  padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.75;
-  white-space: pre-wrap; overflow-wrap: anywhere;
-  background: var(--surface); border: 1px solid var(--border); color: var(--text);
-  border-start-start-radius: 4px;
+  padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text); border-start-start-radius: 4px;
+  animation: amal-pop .25s ease;
 }
-.amal-msg.me .amal-bubble {
-  background: var(--primary); border-color: var(--primary); color: #fff;
-  border-start-start-radius: 14px; border-start-end-radius: 4px;
-}
+.amal-msg.me .amal-bubble { background: var(--primary); border-color: var(--primary); color: #fff; border-start-start-radius: 14px; border-start-end-radius: 4px; }
 .amal-items { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .amal-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 11px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  color: inherit; text-decoration: none; transition: border-color .15s;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s;
 }
-.amal-item:hover { border-color: var(--primary); }
+.amal-item:hover { border-color: var(--primary); transform: translateX(-2px); }
 .amal-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .amal-item-main b { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; }
 .amal-item-main small { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
@@ -448,11 +546,8 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-foot { font-size: 12px; color: var(--muted); }
 .amal-link { font-size: 12.5px; font-weight: 700; color: var(--primary-2); display: inline-flex; align-items: center; gap: 4px; }
 .amal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.amal-chips button {
-  font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; cursor: pointer;
-  border: 1px solid #e3d6fb; background: #f7f2fe; color: #6d28d9;
-}
-.amal-chips button:hover { background: #efe6fd; }
+.amal-chips button { font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; cursor: pointer; border: 1px solid #e3d6fb; background: #f7f2fe; color: #6d28d9; transition: background .15s, transform .15s; }
+.amal-chips button:hover { background: #efe6fd; transform: translateY(-1px); }
 .amal-typing { display: inline-flex; gap: 4px; padding: 12px 14px; }
 .amal-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: amal-dot 1s infinite ease-in-out; }
 .amal-typing span:nth-child(2) { animation-delay: .15s; }
@@ -461,17 +556,34 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-input { display: flex; gap: 8px; padding: 10px; background: var(--surface); border-top: 1px solid var(--border); }
 .amal-input input { flex: 1; min-width: 0; }
 .amal-input .btn { width: 42px; padding: 0; display: grid; place-items: center; flex-shrink: 0; }
-.amal-card {
-  width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px;
-  background: var(--surface); border: 1px solid #e3d6fb; border-radius: 14px;
-}
+.amal-mic.on { color: #fff; background: #7c3aed; border-color: #7c3aed; animation: amal-dot 1.2s infinite; }
+.amal-panel-foot { padding: 0 10px 8px; background: var(--surface); text-align: center; }
+.amal-panel-foot button { border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+.amal-card { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid #e3d6fb; border-radius: 14px; }
 .amal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); flex: 1; min-width: 0; }
 .amal-card input, .amal-card select { width: 100%; }
 .amal-row { display: flex; gap: 8px; }
 .amal-actions { display: flex; gap: 8px; }
 .amal-err { font-size: 12px; color: var(--primary-2); }
-@media (max-width: 560px) {
-  .amal-fab { left: 14px; bottom: 14px; }
-  .amal-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); }
+
+/* زر «اسألي أمل» داخل المهمة */
+.amal-ask-btn {
+  margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 4px;
+  border-radius: 999px; border: 1px solid #e3d6fb; background: #f7f2fe; color: #6d28d9; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
 }
-@media print { .amal-fab, .amal-panel { display: none !important; } }
+.amal-ask-btn img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #fff; }
+.amal-ask-btn:hover { background: #efe6fd; }
+.amal-ask-btn + .chat-jump { margin-inline-start: 0; }
+
+@media (max-width: 560px) {
+  .amal-dock { left: 4px; }
+  .amal-char { width: 112px; height: 124px; }
+  .amal-tag-name { font-size: 11.5px; padding: 3px 9px; }
+  .amal-say { max-width: calc(100vw - 40px); margin-left: 8px; }
+  .amal-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); }
+  .amal-ask-btn { padding: 0 4px; font-size: 0; gap: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .amal-body, .amal-char .amal-body, .amal-mini, .amal-say, .amal-zzz i, .amal-confetti i, .amal-ring { animation: none !important; }
+}
+@media print { .amal-dock, .amal-panel { display: none !important; } }

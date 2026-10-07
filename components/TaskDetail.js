@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
+import TaskChat from "@/components/TaskChat";
 import { filesStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
@@ -179,6 +180,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
               ))
             )}
           </div>
+
+          {/* شات الملاحظات والتواصل حول المهمة */}
+          <div className="d-section"><span className="st-ic"><Icon name="chat" size={15} /></span>شات الملاحظات</div>
+          <TaskChat taskId={t.id} />
         </div>
 
         {!readOnly && (

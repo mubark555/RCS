@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskChat from "@/components/TaskChat";
@@ -31,6 +31,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const [dialog, setDialog] = useState(null); // submit | approve | revision
   const [uploading, setUploading] = useState(false);
   const [t, setT] = useState(task);
+  const [chatCount, setChatCount] = useState(0);
+  const chatRef = useRef(null);
   const [handTo, setHandTo] = useState("");
   const [handNote, setHandNote] = useState("");
   const [newLink, setNewLink] = useState({ type: "مستند", label: "", url: "" });
@@ -139,6 +141,9 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
           <div className="top">
             <span className="pill">{t.project || "بدون مشروع"}</span>
             {t.activity && <span className="pill">{t.activity}</span>}
+            <button className="chat-jump" type="button" onClick={() => chatRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} title="الانتقال إلى شات الملاحظات">
+              <Icon name="chat" size={15} /> الشات{chatCount > 0 && <span className="n">{chatCount}</span>}
+            </button>
             <button className="x" onClick={onClose} title="إغلاق"><Icon name="close" size={16} /></button>
           </div>
           <h3>{t.task}</h3>
@@ -416,8 +421,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
           </div>
 
           {/* شات الملاحظات والتواصل حول المهمة */}
-          <div className="d-section"><span className="st-ic"><Icon name="chat" size={15} /></span>شات الملاحظات</div>
-          <TaskChat taskId={t.id} />
+          <div className="d-section" ref={chatRef} style={{ scrollMarginTop: 16 }}><span className="st-ic"><Icon name="chat" size={15} /></span>شات الملاحظات</div>
+          <TaskChat taskId={t.id} onCount={setChatCount} />
         </div>
 
         {!readOnly && (

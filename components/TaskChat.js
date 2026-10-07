@@ -20,7 +20,7 @@ function fmtTime(iso) {
 }
 
 // شات الملاحظات أسفل كل مهمة: رسائل نصية + مرفقات، متاح لكل الأدوار (بما فيها العميل)
-export default function TaskChat({ taskId }) {
+export default function TaskChat({ taskId, onCount }) {
   const { viewer, role, canManage } = useRole();
   const [items, setItems] = useState(null);
   const [text, setText] = useState("");
@@ -43,6 +43,10 @@ export default function TaskChat({ taskId }) {
     load();
     return commentsStore.subscribe(taskId, load);
   }, [taskId, load]);
+
+  useEffect(() => {
+    if (onCount) onCount(items ? items.length : 0);
+  }, [items, onCount]);
 
   useEffect(() => {
     const el = listRef.current;

@@ -524,6 +524,8 @@ th.pm-sticky { background: var(--surface-2); }
   width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); flex-shrink: 0;
   background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; cursor: pointer;
 }
+.amal-voice { position: relative; }
+.amal-vtag { position: absolute; bottom: 1px; left: 2px; font-size: 9px; font-weight: 800; color: #7c3aed; line-height: 1; }
 .amal-x.on { color: #7c3aed; background: #f1ebfd; border-color: #e3d6fb; }
 .amal-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .amal-msg { display: flex; gap: 8px; max-width: 96%; align-items: flex-start; }
@@ -562,6 +564,7 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-input .btn { width: 42px; padding: 0; display: grid; place-items: center; flex-shrink: 0; }
 .amal-mic.on { color: #fff; background: #7c3aed; border-color: #7c3aed; animation: amal-dot 1.2s infinite; }
 .amal-panel-foot { padding: 0 10px 8px; background: var(--surface); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; }
+.amal-panel-foot .amal-tips-off { color: #7c3aed !important; font-weight: 700; flex-basis: 100%; }
 .amal-panel-foot button { border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
 .amal-card { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid #e3d6fb; border-radius: 14px; }
 .amal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); flex: 1; min-width: 0; }
@@ -604,6 +607,13 @@ th.pm-sticky { background: var(--surface-2); }
   position: fixed; background: var(--surface); border-radius: 18px; padding: 14px 16px;
   border: 1px solid #e3d6fb; box-shadow: 0 24px 60px rgba(24, 16, 34, .35);
   transition: top .35s ease, left .35s ease; animation: amal-pop .3s cubic-bezier(.2,.9,.3,1.2);
+}
+.amal-tcard.is-hero { padding-inline-start: 196px; min-height: 300px; }
+.amal-thero { position: absolute; bottom: 0; right: 8px; width: 180px; height: 290px; object-fit: contain; object-position: bottom; animation: amal-hop .6s ease-out 1, amal-breathe 4.2s ease-in-out .6s infinite; transform-origin: 50% 100%; }
+.amal-tcard.is-hero .amal-tcard-head img { display: none; }
+@media (max-width: 560px) {
+  .amal-tcard.is-hero { padding-inline-start: 16px; padding-top: 150px; }
+  .amal-thero { top: -60px; bottom: auto; right: 50%; transform: translateX(50%); width: 140px; height: 200px; animation: none; }
 }
 .amal-tcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .amal-tcard-head img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, #efe6fd, #fde7e4); border: 2px solid #e3d6fb; flex-shrink: 0; }

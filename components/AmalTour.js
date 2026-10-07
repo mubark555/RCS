@@ -29,7 +29,7 @@ function findTarget(target) {
 }
 
 // جولة أمل: تنقّل بين الصفحات، تسلّط الضوء على كل جزء، وتشرحه في بطاقة
-export default function AmalTour({ steps, face, onEnd, onStep }) {
+export default function AmalTour({ steps, face, full, onEnd, onStep }) {
   const router = useRouter();
   const path = usePathname();
   const [i, setI] = useState(0);
@@ -104,7 +104,7 @@ export default function AmalTour({ steps, face, onEnd, onStep }) {
 
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const w = Math.min(CARD_W, vw - 24);
+  const w = Math.min(step?.hero ? 560 : CARD_W, vw - 24);
   const show = !searching && rect && step.target;
 
   // موضع البطاقة: تحت العنصر، ثم فوقه، ثم بجانبه، وإلا في المنتصف
@@ -128,7 +128,8 @@ export default function AmalTour({ steps, face, onEnd, onStep }) {
       ) : (
         <div className="amal-dim" />
       )}
-      <div className={`amal-tcard ${searching ? "is-wait" : ""}`} ref={cardRef} style={{ ...style, width: w }} key={step.id}>
+      <div className={`amal-tcard ${searching ? "is-wait" : ""} ${step.hero ? "is-hero" : ""}`} ref={cardRef} style={{ ...style, width: w }} key={step.id}>
+        {step.hero && full && <img className="amal-thero" src={full} alt="أمل" />}
         <div className="amal-tcard-head">
           <img src={face} alt="" />
           <div>

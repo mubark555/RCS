@@ -605,6 +605,13 @@ th.pm-sticky { background: var(--surface-2); }
   border: 1px solid #e3d6fb; box-shadow: 0 24px 60px rgba(24, 16, 34, .35);
   transition: top .35s ease, left .35s ease; animation: amal-pop .3s cubic-bezier(.2,.9,.3,1.2);
 }
+.amal-tcard.is-hero { padding-inline-start: 196px; min-height: 300px; }
+.amal-thero { position: absolute; bottom: 0; right: 8px; width: 180px; height: 290px; object-fit: contain; object-position: bottom; animation: amal-hop .6s ease-out 1, amal-breathe 4.2s ease-in-out .6s infinite; transform-origin: 50% 100%; }
+.amal-tcard.is-hero .amal-tcard-head img { display: none; }
+@media (max-width: 560px) {
+  .amal-tcard.is-hero { padding-inline-start: 16px; padding-top: 150px; }
+  .amal-thero { top: -60px; bottom: auto; right: 50%; transform: translateX(50%); width: 140px; height: 200px; animation: none; }
+}
 .amal-tcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .amal-tcard-head img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, #efe6fd, #fde7e4); border: 2px solid #e3d6fb; flex-shrink: 0; }
 .amal-tcard-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.45; }

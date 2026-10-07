@@ -8,7 +8,7 @@ import { useRole } from "@/components/RoleProvider";
 import { tasksStore, meetingsStore, kpisStore, invoicesStore, paymentsStore, commentsStore, onDataChange } from "@/lib/store";
 import { leavesApi } from "@/lib/leaves";
 import { answer, suggestions, taskItem, AMAL_NAME, PRIORITY_OPTIONS } from "@/lib/amal";
-import { welcome, pageTip, reactionFor, IDLE_TIPS, summarizeTask, timeGreeting } from "@/lib/amalLife";
+import { welcome, pageTip, reactionFor, IDLE_TIPS, summarizeTask, timeGreeting, leaveGreeting } from "@/lib/amalLife";
 import { tourFor, isNewEmployee } from "@/lib/amalTour";
 import AmalTour from "@/components/AmalTour";
 
@@ -26,10 +26,23 @@ const pref = {
   get(k, d) { try { const v = window.localStorage.getItem(`amal_${k}`); return v == null ? d : v === "1"; } catch { return d; } },
   set(k, v) { try { window.localStorage.setItem(`amal_${k}`, v ? "1" : "0"); } catch {} },
 };
+// آخر مرة قيلت فيها نصيحة صفحة (حتى تتكلم في كل زيارة دون تكرار مزعج)
+const TIP_REPEAT = 3 * 60 * 1000;
+const recent = {
+  is(k, ms) { try { const t = Number(window.sessionStorage.getItem(`amal_${k}`) || 0); return Date.now() - t < ms; } catch { return false; } },
+  mark(k) { try { window.sessionStorage.setItem(`amal_${k}`, String(Date.now())); } catch {} },
+};
 const once = {
   has(k) { try { return window.sessionStorage.getItem(`amal_${k}`) === "1"; } catch { return false; } },
   mark(k) { try { window.sessionStorage.setItem(`amal_${k}`, "1"); } catch {} },
 };
+
+// انتظار إغلاق نوافذ الترحيب الأصلية في النظام (الحمد لله على السلامة / تهنئة المناسبات) قبل أن تتكلم أمل
+function afterOverlays(fn, tries = 240) {
+  if (typeof document === "undefined") return fn();
+  if (!document.querySelector(".wg-overlay") || tries <= 0) return fn();
+  setTimeout(() => afterOverlays(fn, tries - 1), 500);
+}
 
 // مزاج الرد في الشات بحسب محتواه
 function moodOfReply(r) {
@@ -66,6 +79,7 @@ export default function AmalAssistant() {
   const [tourStepId, setTourStepId] = useState(null);
   const [pos, setPos] = useState(null);         // موضع مخصص بعد السحب (null = وسط الشاشة)
   const drag = useRef(null);
+  const tourActive = useRef(false);
 
   const data = useRef({ at: 0, scopeKey: "" });
   const listRef = useRef(null);
@@ -80,6 +94,7 @@ export default function AmalAssistant() {
   const openRef = useRef(false);
   const voiceRef = useRef(false);
   openRef.current = open;
+  tourActive.current = !!tour;
   voiceRef.current = voice;
 
   const scopeKey = `${viewer?.id || ""}|${(scopeProjects || []).join(",")}`;
@@ -111,7 +126,7 @@ export default function AmalAssistant() {
       can("tasks") ? tasksStore.list().catch(() => []) : [],
       can("meetings") ? meetingsStore.list().catch(() => []) : [],
       can("kpis") ? kpisStore.list().catch(() => []) : [],
-      can("leaves") ? leavesApi.list().catch(() => []) : [],
+      leavesApi.list().catch(() => []),
       can("finance") ? invoicesStore.list().catch(() => []) : [],
       can("finance") ? paymentsStore.list().catch(() => []) : [],
     ]);
@@ -122,7 +137,8 @@ export default function AmalAssistant() {
       // اجتماع بلا مشروع: يظهر لغير العملاء فقط
       meetings: meetings.filter((m) => (m.project ? inScope(m.project) : role !== "client")),
       kpis: kpis.filter((k) => !k.project || inScope(k.project)),
-      leaves,
+      leaves: can("leaves") ? leaves : [],
+      myLeaves: leaves.filter((l) => l.person === viewer?.name),
       invoices: invoices.filter((v) => !v.project || inScope(v.project)),
       payments,
     };
@@ -198,13 +214,15 @@ export default function AmalAssistant() {
       const k = `welcome_${viewer.id}`;
       if (!once.has(k)) {
         once.mark(k);
-        once.mark(`tip_${path}`);
-        const first = role === "client" ? "" : String(viewer.name || "").split(" ")[0];
+        recent.mark(`tip_${path}`);
+        // موظف جديد: تعرّفه على نفسها ثم تبدأ الجولة مباشرة
         if (!pref.get(`tour_${viewer.id}`, false) && isNewEmployee(viewer)) {
-          say({ mood: "wave", text: `${timeGreeting()}${first ? ` يا ${first}` : ""}، وأهلاً بك في الفريق 🎉 أنا أمل، مساعدتك. أسوي لك جولة سريعة أعرّفك فيها على كل أجزاء النظام؟`, chips: ["ابدأ الجولة", "لاحقاً"] }, { force: true });
-        } else {
-          say(welcome(ctxOf(d)));
+          afterOverlays(() => setTimeout(() => startTourRef.current("full"), 200));
+          return;
         }
+        // داخل في إجازته/أوفه، أو مريض، أو راجع من إجازة
+        const greet = leaveGreeting(viewer, d.myLeaves) || welcome(ctxOf(d));
+        afterOverlays(() => say(greet, { force: true }));
       }
     }, 250);
     return () => clearTimeout(t);
@@ -215,11 +233,13 @@ export default function AmalAssistant() {
     if (!ready || !viewer) return;
     setBubble(null);
     const t = setTimeout(async () => {
-      if (openRef.current || once.has(`tip_${path}`)) return;
+      // الترحيب أولاً: لا نعرض نصيحة الصفحة قبل ما تقول أمل ترحيبها
+      if (!once.has(`welcome_${viewer.id}`)) return;
+      if (openRef.current || tourActive.current || recent.is(`tip_${path}`, TIP_REPEAT)) return;
       const d = await quickData().catch(() => null);
       if (!d) return;
       const tip = pageTip(path, ctxOf(d));
-      once.mark(`tip_${path}`);
+      recent.mark(`tip_${path}`);
       if (tip) { lastTip.current = Date.now(); say(tip); }
     }, 150);
     return () => clearTimeout(t);
@@ -345,7 +365,9 @@ export default function AmalAssistant() {
     setBubble(null);
     setSleeping(false);
     if (!steps.length) { say({ mood: "thinking", text: "ما عندي شرح مفصّل لهالصفحة للحين، بس تقدر تسألني عنها 😊" }, { force: true }); return; }
-    setTour({ steps, key: Date.now() });
+    const first = role === "client" ? "" : String(viewer?.name || "").split(" ")[0];
+    const personal = steps.map((st) => ({ ...st, text: st.text.replace("{name}", first ? `يا ${first}` : "") }));
+    setTour({ steps: personal, key: Date.now() });
   }
   function endTour(completed) {
     setTour(null);
@@ -499,7 +521,7 @@ export default function AmalAssistant() {
 
   return (
     <>
-      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} onEnd={endTour} onStep={(st) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`); }} />}
+      {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`); }} />}
       {!open && (!tour || tourStepId === "amal") && (
         <div
           className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : "is-center"}`}

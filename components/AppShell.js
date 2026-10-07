@@ -12,7 +12,9 @@ import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
 import DeadlineAlerts from "@/components/DeadlineAlerts";
-import AmalAssistant from "@/components/AmalAssistant";
+import dynamic from "next/dynamic";
+// أمل تُحمَّل بعد ظهور الصفحة حتى لا تؤخر فتحها
+const AmalAssistant = dynamic(() => import("@/components/AmalAssistant"), { ssr: false });
 import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
 
 export default function AppShell({ children }) {

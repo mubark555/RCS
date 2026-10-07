@@ -27,7 +27,7 @@ const pref = {
   set(k, v) { try { window.localStorage.setItem(`amal_${k}`, v ? "1" : "0"); } catch {} },
 };
 // آخر مرة قيلت فيها نصيحة صفحة (حتى تتكلم في كل زيارة دون تكرار مزعج)
-const TIP_REPEAT = 3 * 60 * 1000;
+const TIP_REPEAT = 1500; // «الزبدة» في كل زيارة للصفحة (فقط نمنع التكرار المتلاحق)
 const recent = {
   is(k, ms) { try { const t = Number(window.sessionStorage.getItem(`amal_${k}`) || 0); return Date.now() - t < ms; } catch { return false; } },
   mark(k) { try { window.sessionStorage.setItem(`amal_${k}`, String(Date.now())); } catch {} },
@@ -171,7 +171,7 @@ export default function AmalAssistant() {
   // ---------- التفضيلات وقدرات المتصفح ----------
   useEffect(() => {
     setMini(pref.get("mini", false));
-    setMuted(pref.get("muted", false));
+    setMuted(pref.get("tips_off", false));
     try { const v = window.localStorage.getItem("amal_voice_mode"); if (v === "on" || v === "off" || v === "auto") setVoice(v); } catch {}
     try { const p = JSON.parse(window.localStorage.getItem("amal_pos") || "null"); if (p && typeof p.x === "number") setPos(p); } catch {}
     setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
@@ -339,13 +339,14 @@ export default function AmalAssistant() {
     return () => clearTimeout(t);
   }, [ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---------- نصيحة لكل صفحة (مرة واحدة في الجلسة) ----------
+  // ---------- «الزبدة»: ملخص كل صفحة عند فتحها ----------
+  const mountedAt = useRef(Date.now());
   useEffect(() => {
     if (!ready || !viewer) return;
     setBubble(null);
     const t = setTimeout(async () => {
-      // الترحيب أولاً: لا نعرض نصيحة الصفحة قبل ما تقول أمل ترحيبها
-      if (!once.has(`welcome_${viewer.id}`)) return;
+      // الترحيب أولاً: لا نعرض نصيحة الصفحة قبل ما تقول أمل ترحيبها (بحد أقصى 4 ثوانٍ)
+      if (!once.has(`welcome_${viewer.id}`) && Date.now() - mountedAt.current < 4000) return;
       if (openRef.current || tourActive.current || recent.is(`tip_${path}`, TIP_REPEAT)) return;
       const d = await quickData().catch(() => null);
       if (!d) return;
@@ -601,7 +602,11 @@ export default function AmalAssistant() {
       if (next === "on") speak("تمام، بتكلم معك في كل شي", { important: true });
       if (next === "auto") speak("بتكلم بس في الترحيب وإنجاز المهام", { important: true });
     }
-    if (k === "muted") { const v = !muted; setMuted(v); pref.set("muted", v); if (v) setBubble(null); }
+    if (k === "muted") {
+      const v = !muted; setMuted(v); pref.set("tips_off", v);
+      if (v) setBubble(null);
+      else setTimeout(() => { recent.mark("x"); quickData().then((d) => say(pageTip(path, ctxOf(d)), { force: true })).catch(() => {}); }, 50);
+    }
     if (k === "mini") { const v = !mini; setMini(v); pref.set("mini", v); setBubble(null); }
   }
 
@@ -690,7 +695,7 @@ export default function AmalAssistant() {
                 {voice === "auto" && <span className="amal-vtag">A</span>}
               </button>
             )}
-            <button className={`amal-x ${muted ? "" : "on"}`} type="button" onClick={() => toggle("muted")} title={muted ? "تشغيل نصائح أمل" : "إيقاف نصائح أمل"}>
+            <button className={`amal-x ${muted ? "" : "on"}`} type="button" onClick={() => toggle("muted")} title={muted ? "ملخص الصفحات متوقف — اضغط لتشغيله" : "ملخص الصفحات شغّال — اضغط لإيقافه"}>
               <Icon name="bulb" size={16} />
             </button>
             <button className="amal-x" type="button" onClick={() => { setMsgs([]); data.current.at = 0; }} title="محادثة جديدة">
@@ -761,6 +766,7 @@ export default function AmalAssistant() {
             </button>
           </form>
           <div className="amal-panel-foot">
+            {muted && <button type="button" className="amal-tips-off" onClick={() => toggle("muted")}>💡 ملخص الصفحات متوقف — تشغيله</button>}
             <button type="button" onClick={() => startTour("full")}>🧭 جولة تعريفية بالنظام</button>
             <button type="button" onClick={() => startTour("page")}>اشرحي هالصفحة</button>
             <button type="button" onClick={() => toggle("mini")}>{mini ? "إظهار أمل كاملة" : "تصغير أمل"}</button>

@@ -132,7 +132,7 @@ export default function AmalAssistant() {
       {!open && (
         <button className="amal-fab" type="button" onClick={() => setOpen(true)} title={`اسأل ${AMAL_NAME}`} aria-label={`فتح المساعدة ${AMAL_NAME}`}>
           <span className="amal-av lg">أ</span>
-          <span className="amal-fab-txt">اسأل {AMAL_NAME}</span>
+          <span className="amal-fab-txt">{AMAL_NAME} <span className="amal-ai">AI</span></span>
         </button>
       )}
       {open && (
@@ -140,7 +140,7 @@ export default function AmalAssistant() {
           <div className="amal-head">
             <span className="amal-av">أ</span>
             <div className="amal-who">
-              <b>{AMAL_NAME} <span className="amal-badge">مساعد</span></b>
+              <b>{AMAL_NAME} <span className="amal-ai">AI</span> <span className="amal-badge">مساعد</span></b>
               <small>تجاوب من بيانات النظام</small>
             </div>
             <button className="amal-x" type="button" onClick={() => { setMsgs([]); data.current.at = 0; }} title="محادثة جديدة">

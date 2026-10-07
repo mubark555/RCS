@@ -380,7 +380,7 @@ th.pm-sticky { background: var(--surface-2); }
 
 /* ================= المساعدة «أمل» ================= */
 .amal-fab {
-  position: fixed; left: 22px; bottom: 22px; z-index: 900;
+  position: fixed; left: 22px; bottom: 22px; z-index: 9000;
   display: inline-flex; align-items: center; gap: 10px;
   padding: 7px 16px 7px 7px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface); color: var(--ink);
@@ -388,6 +388,11 @@ th.pm-sticky { background: var(--surface-2); }
   transition: transform .15s ease, box-shadow .15s ease;
 }
 .amal-fab:hover { transform: translateY(-2px); }
+.amal-fab-txt { display: inline-flex; align-items: center; gap: 6px; }
+.amal-ai {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .5px; padding: 1px 6px; border-radius: 6px;
+  color: #fff; background: linear-gradient(135deg, #7c3aed, var(--primary)); direction: ltr;
+}
 .amal-av {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
   display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px;
@@ -395,7 +400,7 @@ th.pm-sticky { background: var(--surface-2); }
 }
 .amal-av.lg { width: 40px; height: 40px; font-size: 17px; }
 .amal-panel {
-  position: fixed; left: 22px; bottom: 22px; z-index: 900;
+  position: fixed; left: 22px; bottom: 22px; z-index: 9000;
   width: min(400px, calc(100vw - 32px)); height: min(620px, calc(100vh - 44px));
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--bg); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg);
@@ -467,8 +472,6 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-err { font-size: 12px; color: var(--primary-2); }
 @media (max-width: 560px) {
   .amal-fab { left: 14px; bottom: 14px; }
-  .amal-fab-txt { display: none; }
-  .amal-fab { padding: 6px; }
   .amal-panel { left: 8px; right: 8px; bottom: 8px; width: auto; height: calc(100vh - 16px); }
 }
 @media print { .amal-fab, .amal-panel { display: none !important; } }

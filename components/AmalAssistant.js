@@ -95,9 +95,17 @@ export default function AmalAssistant() {
   }, []);
 
   // ---------- البيانات ----------
-  const loadData = useCallback(async (force = false) => {
+  const inflight = useRef(null);
+  const loadData = useCallback((force = false) => {
     const d = data.current;
-    if (!force && d.scopeKey === scopeKey && Date.now() - d.at < STALE_MS) return d;
+    if (!force && d.scopeKey === scopeKey && Date.now() - d.at < STALE_MS) return Promise.resolve(d);
+    if (inflight.current?.key === scopeKey) return inflight.current.p;
+    const p = fetchData().finally(() => { inflight.current = null; });
+    inflight.current = { key: scopeKey, p };
+    return p;
+  }, [scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchData = async () => {
     const inScope = (p) => !scopeProjects || scopeProjects.includes(p);
     const [tasks, meetings, kpis, leaves, invoices, payments] = await Promise.all([
       can("tasks") ? tasksStore.list().catch(() => []) : [],
@@ -119,7 +127,7 @@ export default function AmalAssistant() {
       payments,
     };
     return data.current;
-  }, [can, scopeProjects, scopeKey, role]);
+  };
 
   const ctxOf = useCallback((d) => ({
     viewer, role, can, users, scopeProjects,
@@ -167,11 +175,25 @@ export default function AmalAssistant() {
     bubbleTimer.current = setTimeout(hide, BUBBLE_MS + Math.min(6000, r.text.length * 40));
   }, [muted, setMood, speak]);
 
+  // تحميل البيانات مبكراً حتى تظهر النصائح فوراً
+  useEffect(() => {
+    if (ready && viewer) loadData().catch(() => {});
+  }, [ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // بيانات جاهزة فوراً (المخزّنة إن وُجدت) مع تحديث في الخلفية
+  const quickData = useCallback(async () => {
+    const d = data.current;
+    if (d.at && d.scopeKey === scopeKey) {
+      if (Date.now() - d.at > STALE_MS) loadData().catch(() => {});
+      return d;
+    }
+    return loadData();
+  }, [loadData, scopeKey]);
+
   // ---------- الترحيب عند الدخول ----------
   useEffect(() => {
     if (!ready || !viewer) return;
     const t = setTimeout(async () => {
-      const d = await loadData().catch(() => null);
+      const d = await quickData().catch(() => null);
       if (!d) return;
       const k = `welcome_${viewer.id}`;
       if (!once.has(k)) {
@@ -184,7 +206,7 @@ export default function AmalAssistant() {
           say(welcome(ctxOf(d)));
         }
       }
-    }, 1400);
+    }, 250);
     return () => clearTimeout(t);
   }, [ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -194,12 +216,12 @@ export default function AmalAssistant() {
     setBubble(null);
     const t = setTimeout(async () => {
       if (openRef.current || once.has(`tip_${path}`)) return;
-      const d = await loadData().catch(() => null);
+      const d = await quickData().catch(() => null);
       if (!d) return;
       const tip = pageTip(path, ctxOf(d));
       once.mark(`tip_${path}`);
       if (tip) { lastTip.current = Date.now(); say(tip); }
-    }, 2600);
+    }, 150);
     return () => clearTimeout(t);
   }, [path, ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

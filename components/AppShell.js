@@ -12,6 +12,7 @@ import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
 import DeadlineAlerts from "@/components/DeadlineAlerts";
+import AmalAssistant from "@/components/AmalAssistant";
 import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
 
 export default function AppShell({ children }) {
@@ -74,6 +75,7 @@ export default function AppShell({ children }) {
         </div>
         <WelcomeGate />
       </div>
+      <AmalAssistant />
     </div>
   );
 }

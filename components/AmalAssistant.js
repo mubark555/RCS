@@ -65,6 +65,50 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   try { window.speechSynthesis.onvoiceschanged = () => { _voice = null; pickVoice(); }; } catch {}
 }
 
+// ================= الصوت النسائي من الإنترنت (/api/tts) =================
+// يقسّم النص لمقاطع ≤ 180 حرف عند نهايات الجمل ويشغّلها بالتتابع
+function chunkText(text, max = 180) {
+  const parts = String(text).split(/(?<=[.!؟،,:\n])\s+/);
+  const out = [];
+  let cur = "";
+  for (const p of parts) {
+    if ((cur + " " + p).trim().length <= max) cur = (cur + " " + p).trim();
+    else {
+      if (cur) out.push(cur);
+      let rest = p;
+      while (rest.length > max) { const cut = rest.lastIndexOf(" ", max) > 40 ? rest.lastIndexOf(" ", max) : max; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trim(); }
+      cur = rest;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+let _onlineOk = true; // يتعطّل بعد فشل الخدمة، فنرجع لصوت الجهاز
+let _audio = null;
+function stopOnline() { try { if (_audio) { _audio.pause(); _audio.src = ""; } } catch {} _audio = null; }
+// يرجع Promise: تنجح عند انتهاء النطق، وتُرفض بـ "blocked" (منع المتصفح قبل التفاعل) أو "failed"
+function playOnline(text, { onStart } = {}) {
+  return new Promise((resolve, reject) => {
+    const chunks = chunkText(text).slice(0, 6);
+    let i = 0;
+    stopOnline();
+    const next = () => {
+      if (i >= chunks.length) { _audio = null; resolve(); return; }
+      const a = new Audio(`/api/tts?q=${encodeURIComponent(chunks[i++])}`);
+      a.preload = "auto";
+      _audio = a;
+      a.onended = next;
+      a.onerror = () => { if (_audio === a) { _audio = null; reject(new Error("failed")); } };
+      a.play().then(() => { if (i === 1) onStart?.(); }).catch((e) => {
+        if (_audio !== a) return;
+        _audio = null;
+        reject(new Error(e?.name === "NotAllowedError" ? "blocked" : "failed"));
+      });
+    };
+    next();
+  });
+}
+
 // انتظار إغلاق نوافذ الترحيب الأصلية في النظام (الحمد لله على السلامة / تهنئة المناسبات) قبل أن تتكلم أمل
 function afterOverlays(fn, tries = 240) {
   if (typeof document === "undefined") return fn();
@@ -190,9 +234,23 @@ export default function AmalAssistant() {
   const speak = useCallback((s, { defer = false, important = false } = {}) => {
     const mode = voiceRef.current;
     if (mode === "off" || (mode === "auto" && !important)) return;
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
     const text = speakable(s);
     if (!text) return;
+    // أولاً: الصوت النسائي من الإنترنت
+    if (_onlineOk) {
+      try { window.speechSynthesis?.cancel(); } catch {}
+      if (defer) pendingSpeech.current = s;
+      playOnline(text, { onStart: () => { pendingSpeech.current = null; setMood("talk", true); } })
+        .then(() => setMood("idle"))
+        .catch((e) => {
+          if (e.message === "blocked") { if (defer) pendingSpeech.current = s; return; }
+          _onlineOk = false; // الخدمة غير متاحة → صوت الجهاز
+          speak(s, { defer, important });
+        });
+      return;
+    }
+    if (!window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text.slice(0, 450));
@@ -539,7 +597,7 @@ export default function AmalAssistant() {
       setVoice(next);
       voiceRef.current = next;
       try { window.localStorage.setItem("amal_voice_mode", next); } catch {}
-      if (next === "off") { try { window.speechSynthesis?.cancel(); } catch {} }
+      if (next === "off") { try { window.speechSynthesis?.cancel(); } catch {} stopOnline(); }
       if (next === "on") speak("تمام، بتكلم معك في كل شي", { important: true });
       if (next === "auto") speak("بتكلم بس في الترحيب وإنجاز المهام", { important: true });
     }

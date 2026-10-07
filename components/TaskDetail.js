@@ -141,6 +141,9 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
           <div className="top">
             <span className="pill">{t.project || "بدون مشروع"}</span>
             {t.activity && <span className="pill">{t.activity}</span>}
+            <button className="amal-ask-btn" type="button" onClick={() => window.dispatchEvent(new CustomEvent("amal:ask", { detail: { task: t } }))} title="أمل تلخّص لك المهمة وآخر النقاش">
+              <img src="/amal/amal-face.webp" alt="" /> اسألي أمل
+            </button>
             <button className="chat-jump" type="button" onClick={() => chatRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} title="الانتقال إلى شات الملاحظات">
               <Icon name="chat" size={15} /> الشات{chatCount > 0 && <span className="n">{chatCount}</span>}
             </button>

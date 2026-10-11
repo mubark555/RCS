@@ -11,6 +11,7 @@ import TaskForm from "@/components/TaskForm";
 import Icon from "@/components/Icon";
 import { ATTENDANCE_TYPES, attendanceOf } from "@/lib/constants";
 import { myAction, isWaitingOnOthers, isAssignee, stageOf } from "@/lib/workflow.mjs";
+import { canSeeTask, canSeeMeeting } from "@/lib/permissions.mjs";
 
 const PRI = { High: 0, Medium: 1, Low: 2 };
 const dayKey = (d) => {
@@ -28,7 +29,7 @@ export default function Home() {
 }
 
 function MyWork() {
-  const { viewer } = useRole();
+  const { viewer, access, canAny } = useRole();
   const [tasks, setTasks] = useState(null);
   const [meetings, setMeetings] = useState([]);
   const [viewing, setViewing] = useState(null);
@@ -51,6 +52,7 @@ function MyWork() {
     if (!tasks || !viewer) return out;
     const today = dayKey(new Date());
     for (const t of tasks) {
+      if (!canSeeTask(t, access, viewer)) continue;
       const a = myAction(t, viewer);
       if (a) {
         if (a.kind === "fix") out.returned.push(t);
@@ -64,12 +66,12 @@ function MyWork() {
     for (const k of Object.keys(out)) out[k].sort(byUrgency);
     out.done.sort((a, b) => String(b.completed_at || b.due_date || "").localeCompare(String(a.completed_at || a.due_date || "")));
     return out;
-  }, [tasks, viewer]);
+  }, [tasks, viewer, access]);
 
   const myMeetings = useMemo(() => {
     const now = new Date().toISOString();
     return (meetings || [])
-      .filter((m) => m.status !== "Cancelled" && m.start_at >= now && Array.isArray(m.attendees) && m.attendees.includes(viewer?.name))
+      .filter((m) => m.status !== "Cancelled" && m.start_at >= now && Array.isArray(m.attendees) && m.attendees.includes(viewer?.name) && canSeeMeeting(m, access, viewer))
       .sort((a, b) => a.start_at.localeCompare(b.start_at))
       .slice(0, 5);
   }, [meetings, viewer]);
@@ -98,7 +100,7 @@ function MyWork() {
             {g.upcoming.length ? <> و<b>{g.upcoming.length}</b> قيد التنفيذ</> : null}
           </p>
         </div>
-        <button className="btn primary" onClick={() => setEditing({})}><Icon name="plus" size={16} /> مهمة جديدة</button>
+        {canAny("task.create") && <button className="btn primary" onClick={() => setEditing({})}><Icon name="plus" size={16} /> مهمة جديدة</button>}
       </div>
 
       <div className="mw-stats">

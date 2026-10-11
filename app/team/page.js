@@ -4,21 +4,24 @@ import { useEffect, useState } from "react";
 import { usersStore, tasksStore } from "@/lib/store";
 import { findUserByName, normName } from "@/lib/workflow.mjs";
 import { useRole } from "@/components/RoleProvider";
+import Guard from "@/components/Guard";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { PROJECTS } from "@/lib/constants";
 
-const ROLES = [
-  { v: "manager", ar: "مدير" },
-  { v: "member", ar: "عضو" },
-  { v: "client", ar: "عميل" },
-];
-const roleAr = (r) => ROLES.find((x) => x.v === r)?.ar || r;
-const ROLE_PLURAL = { manager: "المدراء", member: "الأعضاء", client: "العملاء" };
-const colorOf = (r) => (r === "manager" ? "#e05a50" : r === "client" ? "#3a56c5" : "#3f8e7f");
+import { DEFAULT_ROLES } from "@/lib/permissions.mjs";
+
+const colorOf = (r) => (r === "manager" ? "#e05a50" : r === "client" ? "#3a56c5" : r === "member" ? "#3f8e7f" : "#7c3aed");
 
 export default function TeamPage() {
-  const { canManage, reloadUsers, authRequired } = useRole();
+  return <Guard perm={"page.team"}><Team /></Guard>;
+}
+
+function Team() {
+  const { can, roles, reloadUsers, authRequired } = useRole();
+  const canManage = can("users.manage");
+  const ROLES = (roles.length ? roles : DEFAULT_ROLES).map((r) => ({ v: r.key, ar: r.name }));
+  const roleAr = (r) => ROLES.find((x) => x.v === r)?.ar || r;
   const [users, setUsers] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -40,7 +43,10 @@ export default function TeamPage() {
 
   if (!users) return <div className="empty">جاري التحميل…</div>;
 
-  const grouped = ROLES.map((r) => ({ ...r, list: users.filter((u) => u.role === r.v) }));
+  const known = new Set(ROLES.map((r) => r.v));
+  const grouped = [...ROLES, { v: "__other", ar: "بدور غير معرّف" }].map((r) => ({
+    ...r, list: users.filter((u) => (r.v === "__other" ? !known.has(u.role) : u.role === r.v)),
+  }));
 
   return (
     <div>
@@ -56,7 +62,7 @@ export default function TeamPage() {
         g.list.length === 0 ? null : (
           <div key={g.v}>
             <div className="section-title">
-              {ROLE_PLURAL[g.v] || roleAr(g.v)}
+              {g.ar}
               <span className="hint">({g.list.length})</span>
             </div>
             {g.list.map((u) => (
@@ -91,6 +97,7 @@ export default function TeamPage() {
       {editing && (
         <Modal title={editing.id ? "تعديل مستخدم" : "مستخدم جديد"} onClose={() => setEditing(null)}>
           <UserForm
+            roles={ROLES}
             initial={editing.id ? editing : null}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
@@ -106,7 +113,7 @@ export default function TeamPage() {
   );
 }
 
-function UserForm({ initial, onSave, onCancel }) {
+function UserForm({ initial, roles: ROLES, onSave, onCancel }) {
   const [f, setF] = useState({
     name: "", role: "member", title: "", project: "", email: "", can_self_approve: false, ...(initial || {}),
     aliasesText: Array.isArray(initial?.aliases) ? initial.aliases.join("، ") : "",

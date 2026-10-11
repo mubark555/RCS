@@ -35,12 +35,13 @@ const EMPTY = {
 
 // الحالة لا تُعدَّل من هنا — تتغير فقط عبر إجراءات سير العمل في تفاصيل المهمة
 export default function TaskForm({ initial, onSave, onCancel }) {
-  const { users, projects, viewer, canManage } = useRole();
+  const { users, projects, viewer, can } = useRole();
   const staff = useMemo(() => users.filter((u) => u.role !== "client"), [users]);
-  const projectNames = projects.length ? projects.map((p) => p.name) : PROJECTS;
+  // المشاريع التي يملك فيها صلاحية إنشاء المهام فقط
+  const projectNames = (projects.length ? projects.map((p) => p.name) : PROJECTS).filter((n) => can("task.create", n) || n === initial?.project);
 
   const [f, setF] = useState(() => {
-    const base = { ...EMPTY, ...(initial || {}), due_date: initial?.due_date || "" };
+    const base = { ...EMPTY, project: projectNames[0] || "", ...(initial || {}), due_date: initial?.due_date || "" };
     if (initial) base.workflow = workflowOf(initial);
     else applyProjectDefaults(base, base.project);
     for (const k of ["assignee_id", "reviewer_id", "approver_id", "final_approver_id"]) base[k] = base[k] || "";
@@ -57,8 +58,9 @@ export default function TaskForm({ initial, onSave, onCancel }) {
     return s;
   }
 
-  // المنفذ لا يغيّر مسار اعتماد مهمته أو مراجعها بعد إنشائها
-  const lockRouting = Boolean(initial?.id) && !canManage && isAssignee(initial, viewer);
+  // تغيير المسؤول ومسار الاعتماد بعد الإنشاء يتطلب صلاحية الإسناد، والمنفذ لا يغيّرها لمهمته
+  const lockRouting = Boolean(initial?.id) && (!can("task.assign", initial.project)
+    || (isAssignee(initial, viewer) && initial.created_by !== viewer?.id));
   const steps = WORKFLOWS[f.workflow]?.steps || [];
   const legacyAssignee = !f.assignee_id && f.assigned_to;
   const assigneeUser = staff.find((u) => u.id === f.assignee_id);
@@ -156,7 +158,7 @@ export default function TaskForm({ initial, onSave, onCancel }) {
             </div>
           )}
           {selfRouted && <div className="wf-err">المنفذ لا يستطيع مراجعة أو اعتماد عمله إلا بصلاحية صريحة — اختر شخصاً آخر.</div>}
-          {lockRouting && <div className="muted" style={{ fontSize: 12 }}>مسار الاعتماد يحدده المدير أو منشئ المهمة.</div>}
+          {lockRouting && <div className="muted" style={{ fontSize: 12 }}>المسؤول ومسار الاعتماد يحددهما صاحب صلاحية الإسناد في المشروع.</div>}
         </div>
 
         {initial?.id && (
@@ -180,7 +182,7 @@ export default function TaskForm({ initial, onSave, onCancel }) {
       </div>
 
       <div className="modal-actions">
-        <button type="submit" className="btn primary" disabled={saving || selfRouted}>
+        <button type="submit" className="btn primary" disabled={saving || selfRouted || !f.project}>
           {saving ? "جاري الحفظ…" : "حفظ"}
         </button>
         <button type="button" className="btn ghost" onClick={onCancel}>

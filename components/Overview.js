@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
 import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
 import { actionForStatus } from "@/lib/workflow.mjs";
+import { canSeeMeeting } from "@/lib/permissions.mjs";
 
 const DAY = 86400000;
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -16,7 +17,7 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).g
 // لوحة القيادة العامة (للإدارة) — والرئيسية للعميل
 export default function Overview() {
   const router = useRouter();
-  const { viewer, clientProject, scopeProjects } = useRole();
+  const { viewer, clientProject, access } = useRole();
   const [allTasks, setAllTasks] = useState(null);
   const [allMeetings, setAllMeetings] = useState([]);
 
@@ -28,8 +29,9 @@ export default function Overview() {
     meetingsStore.list().then(setAllMeetings).catch(() => setAllMeetings([]));
   }, []);
 
-  const tasks = scopeProjects && allTasks ? allTasks.filter((t) => scopeProjects.includes(t.project)) : allTasks;
-  const meetings = scopeProjects ? (allMeetings || []).filter((m) => scopeProjects.includes(m.project)) : allMeetings;
+  // المؤشرات تُحسب من نطاق المستخدم فقط
+  const tasks = allTasks ? allTasks.filter((t) => access.canSeeProject(t.project)) : allTasks;
+  const meetings = (allMeetings || []).filter((m) => canSeeMeeting(m, access, viewer));
 
   const s = useMemo(() => {
     if (!tasks) return null;

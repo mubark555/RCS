@@ -6,11 +6,20 @@ import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { PROJECTS } from "@/lib/constants";
+import Guard from "@/components/Guard";
+import { canSeeFile } from "@/lib/permissions.mjs";
 
 const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "محاضر", "تسجيلات", "أخرى"];
 
 export default function ArchivePage() {
-  const { readOnly, clientProject } = useRole();
+  return <Guard perm="page.archive"><Archive /></Guard>;
+}
+
+function Archive() {
+  const { access, can, canAny, projects } = useRole();
+  const allNames = projects.length ? projects.map((p) => p.name) : PROJECTS;
+  const visibleNames = allNames.filter((n) => access.canSeeProject(n));
+  const uploadNames = allNames.filter((n) => can("file.upload", n));
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");
@@ -28,13 +37,13 @@ export default function ArchivePage() {
   const filtered = useMemo(() => {
     if (!files) return [];
     return files.filter((f) => {
-      if (clientProject && f.project !== clientProject) return false;
+      if (!canSeeFile(f, access)) return false;
       if (fProject && f.project !== fProject) return false;
       if (fCat && f.category !== fCat) return false;
       if (q && !`${f.name} ${f.note}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [files, fProject, fCat, q, clientProject]);
+  }, [files, fProject, fCat, q, access]);
 
   async function open(rec) {
     setBusyId(rec.id);
@@ -64,12 +73,12 @@ export default function ArchivePage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{filtered.length} عنصر</span>
         <div style={{ marginInlineStart: "auto" }} />
-        {!readOnly && (
+        {canAny("file.upload") && (
           <button className="btn primary" onClick={() => setModal("upload")}><Icon name="upload" size={16} /> رفع ملف</button>
         )}
       </div>
 
-      {!isCloud && !readOnly && (
+      {!isCloud && canAny("file.upload") && (
         <div className="card" style={{ borderColor: "#f3cfc9", background: "#fcece9", marginBottom: 14, fontSize: 13, color: "#cf4940" }}>
           الوضع المحلي التجريبي: تُحفظ الملفات المرفوعة داخل متصفحك فقط. الروابط تعمل دائماً. عند ربط Supabase تُرفع للتخزين السحابي وتُشارك مع الفريق.
         </div>
@@ -77,10 +86,10 @@ export default function ArchivePage() {
 
       <div className="toolbar">
         <input placeholder="بحث…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 200 }} />
-        {!clientProject && (
+        {visibleNames.length > 1 && (
           <select value={fProject} onChange={(e) => setFProject(e.target.value)}>
             <option value="">كل المشاريع</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {visibleNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
         <select value={fCat} onChange={(e) => setFCat(e.target.value)}>
@@ -109,7 +118,7 @@ export default function ArchivePage() {
             </div>
             <div className="row-actions">
               <button className="btn sm" disabled={busyId === f.id} onClick={() => open(f)}>فتح</button>
-              {!readOnly && <button className="btn sm danger icon" disabled={busyId === f.id} onClick={() => del(f)} title="حذف"><Icon name="trash" size={15} /></button>}
+              {can("file.delete", f.project || undefined) && <button className="btn sm danger icon" disabled={busyId === f.id} onClick={() => del(f)} title="حذف"><Icon name="trash" size={15} /></button>}
             </div>
           </div>
         ))
@@ -117,16 +126,16 @@ export default function ArchivePage() {
 
       {modal === "upload" && (
         <Modal title="رفع ملف جديد" onClose={() => setModal(null)}>
-          <UploadForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
+          <UploadForm projectNames={uploadNames} allowNone={can("file.upload")} onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
         </Modal>
       )}
     </div>
   );
 }
 
-function UploadForm({ onDone, onCancel }) {
+function UploadForm({ onDone, onCancel, projectNames = PROJECTS, allowNone = true }) {
   const fileRef = useRef(null);
-  const [meta, setMeta] = useState({ project: "", category: CATEGORIES[0], note: "" });
+  const [meta, setMeta] = useState({ project: allowNone ? "" : projectNames[0] || "", category: CATEGORIES[0], note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -151,8 +160,8 @@ function UploadForm({ onDone, onCancel }) {
       <div className="form-grid">
         <label className="field"><span>المشروع</span>
           <select value={meta.project} onChange={(e) => setMeta({ ...meta, project: e.target.value })}>
-            <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {allowNone && <option value="">—</option>}
+            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>التصنيف</span>

@@ -12,4 +12,4 @@ run tests/sql/00_supabase_stubs.sql
 run supabase/schema.sql
 run supabase/seed.sql
 for f in supabase/migrations/*.sql; do run "$f"; run "$f"; done   # مرتان: للتأكد من إمكانية إعادة التشغيل
-psql -d "$DB" -q -v ON_ERROR_STOP=1 -f tests/sql/10_workflow_test.sql
+for f in tests/sql/[1-9]*_test.sql; do psql -d "$DB" -q -v ON_ERROR_STOP=1 -f "$f"; done

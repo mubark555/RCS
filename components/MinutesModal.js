@@ -115,8 +115,10 @@ export function exportMinutes(m) {
   setTimeout(done, 350);
 }
 
-export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, readOnly }) {
-  const { users, projects } = useRole();
+export default function MinutesModal({ meeting, onClose, onEdit, onUpdated }) {
+  const { users, projects, can } = useRole();
+  const canEdit = can("meeting.edit", meeting.project || undefined);
+  const canCreateTasks = can("task.create", meeting.project || undefined);
   const [m, setM] = useState(meeting);
   const [busy, setBusy] = useState(false);
   const attendees = Array.isArray(m.attendees) ? m.attendees : [];
@@ -199,7 +201,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
 
       <div className="d-section" style={{ display: "flex", alignItems: "center" }}>
         القرارات والمهام الناتجة ({items.length})
-        {!readOnly && pending > 0 && (
+        {canCreateTasks && pending > 0 && (
           <button className="btn sm primary" style={{ marginInlineStart: "auto" }} onClick={convertAll} disabled={busy}>تحويل الكل إلى مهام ({pending})</button>
         )}
       </div>
@@ -215,7 +217,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
                 <small className="muted">{it.assignee || "غير مُسند"}{it.due ? ` · ${it.due}` : ""}</small>
               </div>
               {it.taskId ? <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>مهمة مُنشأة</span>
-                : !readOnly ? <button className="btn sm" onClick={() => convert(i)} disabled={busy}>إنشاء مهمة</button> : null}
+                : canCreateTasks ? <button className="btn sm" onClick={() => convert(i)} disabled={busy}>إنشاء مهمة</button> : null}
             </div>
           ))
         )}
@@ -237,8 +239,8 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
       )}
 
       <div className="modal-actions" style={{ marginTop: 18 }}>
-        <button className="btn primary" onClick={() => exportMinutes(m)}><Icon name="upload" size={16} /> تصدير / طباعة PDF</button>
-        {!readOnly && <button className="btn" onClick={() => onEdit(m)}><Icon name="edit" size={16} /> تعديل / كتابة المحضر</button>}
+        {can("report.export") && <button className="btn primary" onClick={() => exportMinutes(m)}><Icon name="upload" size={16} /> تصدير / طباعة PDF</button>}
+        {canEdit && <button className="btn" onClick={() => onEdit(m)}><Icon name="edit" size={16} /> تعديل / كتابة المحضر</button>}
         <button className="btn ghost" style={{ marginInlineStart: "auto" }} onClick={onClose}>إغلاق</button>
       </div>
     </Modal>

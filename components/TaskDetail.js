@@ -6,13 +6,17 @@ import Icon from "@/components/Icon";
 import { filesStore, eventsStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import WorkflowActions from "@/components/WorkflowActions";
+import { canSeeFile } from "@/lib/permissions.mjs";
 import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
 import { STAGES, STEPS, WORKFLOWS, ACTION_AR, stageOf, stepsOf, workflowOf, waitingOn, myAction } from "@/lib/workflow.mjs";
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
 export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
-  const { users, readOnly, viewer } = useRole();
+  const { users, viewer, can, access } = useRole();
+  const canEdit = can("task.edit", task.project);
+  const canDelete = can("task.delete", task.project);
+  const readOnly = !canEdit;
   const [events, setEvents] = useState([]);
   const [files, setFiles] = useState([]);
   const [t, setT] = useState(task);
@@ -27,7 +31,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
-    filesStore.list().then((all) => setFiles(all.filter((f) => f.project === task.project))).catch(() => {});
+    // ملفات المشروع تظهر فقط لمن يرى المشروع (الطرف في المهمة من خارج المشروع لا يرى ملفاته)
+    filesStore.list().then((all) => setFiles(all.filter((f) => f.project === task.project && canSeeFile(f, access)))).catch(() => {});
     eventsStore.forTask(task.id).then(setEvents).catch(() => setEvents([]));
     return () => window.removeEventListener("keydown", onKey);
   }, [task, onClose]);
@@ -246,7 +251,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
         {!readOnly && (
           <div className="drawer-foot">
             <button className="btn primary" onClick={() => onEdit(t)}><Icon name="edit" size={16} /> تعديل</button>
-            <button className="btn danger" onClick={() => onDelete(t)}><Icon name="trash" size={16} /> حذف</button>
+            {canDelete && <button className="btn danger" onClick={() => onDelete(t)}><Icon name="trash" size={16} /> حذف</button>}
             <button className="btn ghost" style={{ marginInlineStart: "auto" }} onClick={onClose}>إغلاق</button>
           </div>
         )}

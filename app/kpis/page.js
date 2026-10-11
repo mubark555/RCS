@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { kpisStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
+import Guard from "@/components/Guard";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 
@@ -22,7 +23,12 @@ function statusOf(pct) {
 }
 
 export default function KpisPage() {
-  const { canManage } = useRole();
+  return <Guard perm={["page.kpis", "report.kpis"]}><Kpis /></Guard>;
+}
+
+function Kpis() {
+  const { can } = useRole();
+  const canManage = can("kpi.edit");
   const [kpis, setKpis] = useState(null);
   const [period, setPeriod] = useState("quarter");
   const [editing, setEditing] = useState(null);

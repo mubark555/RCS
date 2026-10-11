@@ -7,26 +7,30 @@ import { useRole } from "@/components/RoleProvider";
 import { useSettings } from "@/components/SettingsProvider";
 import Icon from "@/components/Icon";
 
+// كل رابط يظهر فقط لمن يملك صلاحية الصفحة
 const ALL_LINKS = [
-  { href: "/", label: "مهامي", ico: "home", roles: ["manager", "member"] },
-  { href: "/", label: "الرئيسية", ico: "home", roles: ["client"] },
-  { href: "/overview", label: "لوحة القيادة", ico: "flag", roles: ["manager"] },
-  { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
-  { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
-  { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
-  { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
-  { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
-  { href: "/audit", label: "سجل الإجراءات", ico: "clock", roles: ["manager"] },
-  { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
+  { href: "/", label: "مهامي", ico: "home", show: (r) => r.role !== "client" },
+  { href: "/", label: "الرئيسية", ico: "home", show: (r) => r.role === "client" },
+  { href: "/overview", label: "لوحة القيادة", ico: "flag", perm: "page.overview" },
+  { href: "/tasks", label: "المهام", ico: "tasks", perm: "page.tasks" },
+  { href: "/projects", label: "المشاريع", ico: "projects", perm: "page.projects" },
+  { href: "/meetings", label: "الاجتماعات", ico: "calendar", perm: "page.meetings" },
+  { href: "/archive", label: "الأرشيف", ico: "archive", perm: "page.archive" },
+  { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", perm: "page.kpis" },
+  { href: "/team", label: "الفريق", ico: "users", perm: "page.team" },
+  { href: "/audit", label: "سجل الإجراءات", ico: "clock", perm: "page.audit" },
+  { href: "/access", label: "الصلاحيات والوحدات", ico: "briefcase", perm: "page.access" },
+  { href: "/settings", label: "تخصيص النظام", ico: "settings", perm: "page.settings" },
 ];
 
-const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
 export default function Sidebar() {
   const path = usePathname();
-  const { users, viewer, viewerId, setViewer, role, authRequired, signOut } = useRole();
+  const ctx = useRole();
+  const { users, roles, viewer, viewerId, setViewer, role, authRequired, signOut, can, access } = ctx;
+  const roleName = (key) => roles.find((r) => r.key === key)?.name || key;
   const { settings } = useSettings();
-  const links = ALL_LINKS.filter((l) => l.roles.includes(role));
+  const links = ALL_LINKS.filter((l) => (l.perm ? can(l.perm) : l.show(ctx)));
 
   return (
     <aside className="sidebar">
@@ -60,14 +64,14 @@ export default function Sidebar() {
           <select value={viewerId || ""} onChange={(e) => setViewer(e.target.value)}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name} — {ROLE_AR[u.role] || u.role}
+                {u.name} — {roleName(u.role)}
                 {u.project ? ` (${u.project})` : ""}
               </option>
             ))}
           </select>
           {viewer && (
             <div className="rs-active">
-              الدور الفعّال: <b>{ROLE_AR[role]}</b>
+              الدور الفعّال: <b>{access.role?.name || roleName(role)}</b>
               {viewer.project ? ` · ${viewer.project}` : ""}
             </div>
           )}

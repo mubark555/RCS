@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { eventsStore } from "@/lib/store";
-import { useRole } from "@/components/RoleProvider";
+import Guard from "@/components/Guard";
 import { ACTION_AR, STAGES } from "@/lib/workflow.mjs";
 
 // سجل الإجراءات: من نفّذ ماذا ومتى (للإدارة)
 export default function AuditPage() {
-  const { canManage, ready } = useRole();
+  return <Guard perm={["page.audit", "report.audit"]}><Audit /></Guard>;
+}
+
+function Audit() {
   const [events, setEvents] = useState(null);
   const [q, setQ] = useState("");
   const [actor, setActor] = useState("");
@@ -24,8 +27,7 @@ export default function AuditPage() {
     (!q || `${e.task_title} ${e.note}`.toLowerCase().includes(q.toLowerCase()))
   ), [events, q, actor, action]);
 
-  if (!ready || !events) return <div className="empty">جاري التحميل…</div>;
-  if (!canManage) return <div className="empty">هذه الصفحة متاحة للإدارة فقط.</div>;
+  if (!events) return <div className="empty">جاري التحميل…</div>;
 
   return (
     <div>

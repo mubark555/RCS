@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useSettings } from "@/components/SettingsProvider";
-import { useRole } from "@/components/RoleProvider";
+import Guard from "@/components/Guard";
 import Icon from "@/components/Icon";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
@@ -17,7 +17,10 @@ function fileToDataUrl(file) {
 }
 
 export default function SettingsPage() {
-  const { canManage } = useRole();
+  return <Guard perm={["page.settings", "settings.manage"]}><Settings /></Guard>;
+}
+
+function Settings() {
   const { settings, save, reset } = useSettings();
   const [f, setF] = useState(settings);
   const [saved, setSaved] = useState(false);
@@ -51,7 +54,6 @@ export default function SettingsPage() {
     setSaved(false);
   }
 
-  if (!canManage) return <div className="empty">هذا القسم متاح للمدير فقط.</div>;
 
   return (
     <div>

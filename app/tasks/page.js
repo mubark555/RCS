@@ -10,6 +10,8 @@ import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
 import { STATUS_META, PRIORITY_META, STATUSES, PROJECTS } from "@/lib/constants";
 import { STAGES, stageOf, actionForStatus, availableActions } from "@/lib/workflow.mjs";
+import { canSeeTask } from "@/lib/permissions.mjs";
+import Guard from "@/components/Guard";
 
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
 const colorFor = (name) => {
@@ -31,7 +33,11 @@ function isArchived(t) {
 }
 
 export default function TasksPage() {
-  const { readOnly, scopeProjects, projects, viewer } = useRole();
+  return <Guard perm="page.tasks"><Tasks /></Guard>;
+}
+
+function Tasks() {
+  const { scopeProjects, projects, viewer, access, canAny } = useRole();
   const [tasks, setTasks] = useState(null);
   const [view, setView] = useState("board"); // board | list | calendar
   const [q, setQ] = useState("");
@@ -64,7 +70,8 @@ export default function TasksPage() {
     return map;
   }, [projects]);
 
-  const projectOptions = scopeProjects || PROJECTS;
+  const allNames = projects.length ? projects.map((p) => p.name) : PROJECTS;
+  const projectOptions = scopeProjects || allNames;
   const assignees = useMemo(() => {
     if (!tasks) return [];
     return [...new Set(tasks.map((t) => (t.assigned_to || "").trim()).filter(Boolean))].sort();
@@ -73,7 +80,7 @@ export default function TasksPage() {
   const visible = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
-      if (scopeProjects && !scopeProjects.includes(t.project)) return false;
+      if (!canSeeTask(t, access, viewer)) return false;
       if (fProjects.length && !fProjects.includes(t.project)) return false;
       if (fAssignee && (t.assigned_to || "").trim() !== fAssignee) return false;
       if (q) {
@@ -82,7 +89,7 @@ export default function TasksPage() {
       }
       return true;
     });
-  }, [tasks, q, fProjects, fAssignee, scopeProjects]);
+  }, [tasks, q, fProjects, fAssignee, access, viewer]);
 
   const active = useMemo(() => visible.filter((t) => !isArchived(t)), [visible]);
   const archived = useMemo(() => visible.filter(isArchived), [visible]);
@@ -130,7 +137,8 @@ export default function TasksPage() {
   const hasFilter = q || fProjects.length || fAssignee;
 
   // تجميع القائمة حسب المشروع
-  const byProject = projectOptions
+  const groupNames = [...new Set([...projectOptions, ...active.map((t) => t.project || "")])];
+  const byProject = groupNames
     .map((p) => ({ project: p, items: active.filter((t) => t.project === p) }))
     .filter((g) => g.items.length);
 
@@ -144,7 +152,7 @@ export default function TasksPage() {
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>لوحة</button>
         </div>
         <div style={{ marginInlineStart: "auto" }} />
-        {!readOnly && <button className="btn primary" onClick={() => setEditing({})}>+ مهمة جديدة</button>}
+        {canAny("task.create") && <button className="btn primary" onClick={() => setEditing({})}>+ مهمة جديدة</button>}
       </div>
 
       <div className="toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 12 }}>
@@ -180,7 +188,7 @@ export default function TasksPage() {
                   {meta.ar}<span className="cnt">{col.length}</span>
                 </div>
                 {col.map((t) => (
-                  <div key={t.id} className="kb-card" draggable={!readOnly}
+                  <div key={t.id} className="kb-card" draggable={availableActions(t, viewer).length > 0}
                     onDragStart={() => (dragId.current = t.id)} onClick={() => setViewing(t)}>
                     <div className="kb-badges"><Badge map={PRIORITY_META} value={t.priority} /><StageBadge t={t} /></div>
                     <div className="kb-title">{t.task}</div>

@@ -7,6 +7,8 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
+import Guard from "@/components/Guard";
+import { canSeeMeeting } from "@/lib/permissions.mjs";
 import { PROJECTS, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf } from "@/lib/constants";
 
 const EMPTY = {
@@ -23,7 +25,11 @@ const STATUS_AR = {
 };
 
 export default function MeetingsPage() {
-  const { readOnly, scopeProjects, users, viewer } = useRole();
+  return <Guard perm="page.meetings"><Meetings /></Guard>;
+}
+
+function Meetings() {
+  const { users, viewer, access, can, canAny, projects } = useRole();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
@@ -37,8 +43,8 @@ export default function MeetingsPage() {
 
   const scoped = useMemo(() => {
     if (!items) return [];
-    return scopeProjects ? items.filter((m) => scopeProjects.includes(m.project)) : items;
-  }, [items, scopeProjects]);
+    return items.filter((m) => canSeeMeeting(m, access, viewer));
+  }, [items, access, viewer]);
 
   const { upcoming, past } = useMemo(() => {
     const now = new Date().toISOString();
@@ -59,27 +65,26 @@ export default function MeetingsPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{scoped.length} اجتماع</span>
         <div style={{ marginInlineStart: "auto" }} />
-        {!readOnly && <button className="btn primary" onClick={() => setEditing({})}>+ اجتماع جديد</button>}
+        {canAny("meeting.create") && <button className="btn primary" onClick={() => setEditing({})}>+ اجتماع جديد</button>}
       </div>
 
       <div className="section-title">القادمة ({upcoming.length})</div>
       {upcoming.length === 0 ? (
         <div className="empty">لا توجد اجتماعات قادمة.</div>
       ) : (
-        upcoming.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} />)
+        upcoming.map((m) => <MeetingCard key={m.id} m={m} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} />)
       )}
 
       {past.length > 0 && (
         <>
           <div className="section-title">السابقة / المنتهية ({past.length})</div>
-          {past.map((m) => <MeetingCard key={m.id} m={m} readOnly={readOnly} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} dim />)}
+          {past.map((m) => <MeetingCard key={m.id} m={m} onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload} dim />)}
         </>
       )}
 
       {minutesOf && (
         <MinutesModal
           meeting={minutesOf}
-          readOnly={readOnly}
           onClose={() => setMinutesOf(null)}
           onUpdated={reload}
           onEdit={(m) => { setMinutesOf(null); setEditing(m); }}
@@ -92,6 +97,8 @@ export default function MeetingsPage() {
             initial={editing.id ? editing : null}
             users={users}
             viewer={viewer}
+            projectOptions={(projects.length ? projects.map((p) => p.name) : PROJECTS).filter((n) => can("meeting.create", n) || n === editing.project)}
+            allowNoProject={can("meeting.create")}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await meetingsStore.update(editing.id, payload);
@@ -106,7 +113,10 @@ export default function MeetingsPage() {
   );
 }
 
-function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
+function MeetingCard({ m, onEdit, onMinutes, onChange, dim }) {
+  const { can } = useRole();
+  const canEdit = can("meeting.edit", m.project || undefined);
+  const canDelete = can("meeting.delete", m.project || undefined);
   const st = STATUS_AR[m.status] || STATUS_AR.Scheduled;
   const dt = m.start_at ? new Date(m.start_at) : null;
   const dateStr = dt
@@ -156,9 +166,9 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
           <button className="pill" onClick={onMinutes} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, color: m.minutes ? "var(--primary)" : "var(--text-2)", borderColor: m.minutes ? "#f3cfc9" : "var(--border)" }}>
             <Icon name="file" size={13} /> {m.minutes ? "عرض المحضر" : "المحضر"}
           </button>
-          <button className="pill" onClick={() => exportMinutes(m)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {can("report.export") && <button className="pill" onClick={() => exportMinutes(m)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
             <Icon name="upload" size={13} /> تصدير
-          </button>
+          </button>}
           {links.map((l, i) => (
             <a key={i} href={l.url} target="_blank" rel="noreferrer" className="pill" style={{ color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Icon name="link" size={13} /> {l.label || l.type || "رابط"}
@@ -166,10 +176,10 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
           ))}
         </div>
       </div>
-      {!readOnly && (
+      {(canEdit || canDelete) && (
         <div className="row-actions">
-          <button className="btn sm ghost icon" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>
-          <button className="btn sm danger icon" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>
+          {canEdit && <button className="btn sm ghost icon" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>}
+          {canDelete && <button className="btn sm danger icon" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>}
         </div>
       )}
     </div>
@@ -183,10 +193,11 @@ function iconForLink(l) {
   return "🔗";
 }
 
-function MeetingForm({ initial, users, viewer, onSave, onCancel }) {
+function MeetingForm({ initial, users, viewer, projectOptions = PROJECTS, allowNoProject = true, onSave, onCancel }) {
   const [f, setF] = useState({
     ...EMPTY,
     organizer: viewer?.name || "",
+    project: allowNoProject ? "" : projectOptions[0] || "",
     ...(initial || {}),
     attendees: Array.isArray(initial?.attendees) ? initial.attendees : [],
     attendance: initial?.attendance && typeof initial.attendance === "object" ? initial.attendance : {},
@@ -240,8 +251,8 @@ function MeetingForm({ initial, users, viewer, onSave, onCancel }) {
         <label className="field">
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
-            <option value="">—</option>
-            {PROJECTS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {allowNoProject && <option value="">—</option>}
+            {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
         <label className="field"><span>الحالة</span>

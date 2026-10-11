@@ -1,15 +1,17 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { usersStore, projectsStore, setActor } from "@/lib/store";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { usersStore, projectsStore, rolesStore, unitsStore, setActor, linkMyAccount } from "@/lib/store";
+import { buildAccess } from "@/lib/permissions.mjs";
 import { supabase, authRequired } from "@/lib/supabase";
-import { projManagers, projClients, projMembers } from "@/lib/constants";
 
 const RoleCtx = createContext(null);
 
 export function RoleProvider({ children }) {
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [units, setUnits] = useState([]);
   const [viewerId, setViewerId] = useState(null);
   const [ready, setReady] = useState(false);
   // undefined = جاري التحقق، null = لا جلسة
@@ -34,6 +36,13 @@ export function RoleProvider({ children }) {
     return list;
   }, []);
 
+  // قبل تشغيل ترحيل 002 لا توجد الجداول: تُستخدم الأدوار الافتراضية
+  const reloadAccess = useCallback(async () => {
+    const [r, u] = await Promise.all([rolesStore.list().catch(() => []), unitsStore.list().catch(() => [])]);
+    setRoles(r);
+    setUnits(u);
+  }, []);
+
   const sessionUid = session?.user?.id || null;
   useEffect(() => {
     if (authRequired && !session) {
@@ -41,15 +50,18 @@ export function RoleProvider({ children }) {
       return;
     }
     (async () => {
-      const [list] = await Promise.all([reloadUsers(), reloadProjects()]);
+      let [list] = await Promise.all([reloadUsers(), reloadProjects(), reloadAccess()]);
       if (authRequired) {
         // الهوية من حساب الدخول: بالمعرّف، ثم بالبريد عند أول دخول (ويُربط تلقائياً)
         const uid = session.user.id;
         const email = (session.user.email || "").toLowerCase();
         let me = list.find((u) => u.auth_id === uid);
         if (!me && email) {
-          me = list.find((u) => !u.auth_id && (u.email || "").trim().toLowerCase() === email);
-          if (me) await usersStore.update(me.id, { auth_id: uid }).catch(() => {});
+          const linked = await linkMyAccount().catch(() => null);
+          if (linked) {
+            list = await reloadUsers();
+            me = list.find((u) => u.id === linked.id);
+          }
         }
         setViewerId(me?.id || null);
         setReady(true);
@@ -64,7 +76,7 @@ export function RoleProvider({ children }) {
       setViewerId(def);
       setReady(true);
     })();
-  }, [reloadUsers, reloadProjects, sessionUid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reloadUsers, reloadProjects, reloadAccess, sessionUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setViewer = useCallback((id) => {
     if (authRequired) return; // مع تسجيل الدخول لا يمكن تبديل المستخدم
@@ -74,35 +86,27 @@ export function RoleProvider({ children }) {
     } catch {}
   }, []);
 
-  const viewer = users.find((u) => u.id === viewerId) || null;
+  const baseViewer = users.find((u) => u.id === viewerId) || null;
+  // الصلاحيات الفعلية: الدور العام + الدور في كل مشروع + الوحدات التي يديرها
+  const access = useMemo(() => buildAccess(baseViewer, { roles, projects, units }), [baseViewer, roles, projects, units]);
+  const viewer = useMemo(() => (baseViewer ? { ...baseViewer, access } : null), [baseViewer, access]);
   useEffect(() => setActor(viewer), [viewer]);
 
   const signOut = useCallback(async () => {
     if (authRequired) await supabase.auth.signOut();
   }, []);
-  const role = viewer?.role || "manager";
 
-  // المشاريع المرئية للمستخدم الحالي (null = كل المشاريع)
-  let scopeProjects = null;
-  if (viewer) {
-    if (role === "client") {
-      const mine = projects.filter((p) => projClients(p).includes(viewer.name)).map((p) => p.name);
-      scopeProjects = mine.length ? mine : (viewer.project ? [viewer.project] : []);
-    } else if (role === "member") {
-      const mine = projects
-        .filter((p) => projMembers(p).includes(viewer.name) || projManagers(p).includes(viewer.name))
-        .map((p) => p.name);
-      scopeProjects = mine.length ? mine : null; // غير مُسند لأي مشروع → يرى الكل (توافقية)
-    }
-  }
-
+  const role = viewer?.role || "member";
+  const can = access.can;
+  const canAny = access.canAny;
+  const scopeProjects = access.visibleProjects; // null = كل المشاريع
   const clientProject = role === "client" ? (scopeProjects && scopeProjects[0]) || viewer?.project || null : null;
-  const readOnly = role === "client";
-  const canManage = role === "manager";
+  const readOnly = !canAny("task.create") && !canAny("task.edit");
+  const canManage = can("users.manage");
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, ready, authRequired, session, signOut }}
+      value={{ users, projects, roles, units, viewer, viewerId, setViewer, reloadUsers, reloadProjects, reloadAccess, role, access, can, canAny, scopeProjects, clientProject, readOnly, canManage, ready, authRequired, session, signOut }}
     >
       {children}
     </RoleCtx.Provider>
@@ -111,8 +115,9 @@ export function RoleProvider({ children }) {
 
 export function useRole() {
   return useContext(RoleCtx) || {
-    users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
-    readOnly: false, canManage: true, ready: false, authRequired: false, session: null, signOut: async () => {},
-    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [],
+    users: [], projects: [], roles: [], units: [], viewer: null, role: "member", scopeProjects: [], clientProject: null,
+    access: buildAccess(null), can: () => false, canAny: () => false,
+    readOnly: true, canManage: false, ready: false, authRequired: false, session: null, signOut: async () => {},
+    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], reloadAccess: async () => {},
   };
 }

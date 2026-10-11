@@ -1,6 +1,7 @@
 "use client";
 
 import { WORKFLOWS, DEFAULT_WORKFLOW } from "@/lib/workflow.mjs";
+import Guard from "@/components/Guard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { projectsStore, tasksStore } from "@/lib/store";
@@ -29,7 +30,11 @@ function fileToDataUrl(file) {
 }
 
 export default function ProjectsPage() {
-  const { canManage, scopeProjects, users, reloadProjects } = useRole();
+  return <Guard perm="page.projects"><Projects /></Guard>;
+}
+
+function Projects() {
+  const { can, scopeProjects, users, units, reloadProjects } = useRole();
   const router = useRouter();
   const [projects, setProjects] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -90,7 +95,7 @@ export default function ProjectsPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{shown.length} مشروع</span>
         <div style={{ marginInlineStart: "auto" }} />
-        {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
+        {can("project.create") && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
       </div>
 
       <div className="pj-toolbar">
@@ -164,8 +169,8 @@ export default function ProjectsPage() {
                     <span className="pj-team-label">{extra ? `+${extra} أعضاء` : `${members.length} أعضاء`}</span>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
-                    {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={14} /></button>}
-                    {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={14} /></button>}
+                    {can("project.edit") && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={14} /></button>}
+                    {can("project.delete") && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={14} /></button>}
                     <button className="pj-open" onClick={() => router.push(`/projects/${p.id}`)}>فتح المشروع ‹</button>
                   </div>
                 </div>
@@ -181,12 +186,14 @@ export default function ProjectsPage() {
           <ProjectForm
             initial={editing.id ? editing : null}
             users={users}
+            units={units}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await projectsStore.update(editing.id, payload);
               else await projectsStore.create(payload);
               setEditing(null);
               await reload();
+              await reloadProjects();
             }}
           />
         </Modal>
@@ -195,11 +202,13 @@ export default function ProjectsPage() {
   );
 }
 
-function ProjectForm({ initial, users, onSave, onCancel }) {
+function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
   const [f, setF] = useState({
     name: "", description: "", logo: "", color: COLORS[0], status: "نشط", default_workflow: DEFAULT_WORKFLOW,
     ...(initial || {}),
     managers: projManagers(initial || {}),
+    ops_managers: Array.isArray(initial?.ops_managers) ? initial.ops_managers : [],
+    unit_id: initial?.unit_id || "",
     clients: projClients(initial || {}),
     members: projMembers(initial || {}),
   });
@@ -217,7 +226,7 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
 
   const managerOptions = users.filter((u) => u.role !== "client");
   const clientOptions = users.filter((u) => u.role === "client");
-  const memberOptions = users.filter((u) => u.role === "member" || u.role === "manager");
+  const memberOptions = users.filter((u) => u.role !== "client");
 
   async function submit(e) {
     e.preventDefault();
@@ -226,7 +235,7 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
     try {
       // تنظيف الحقول المفردة القديمة
       const { manager, client, ...rest } = f;
-      await onSave(rest);
+      await onSave({ ...rest, unit_id: rest.unit_id || null });
     } finally {
       setSaving(false);
     }
@@ -253,6 +262,16 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
           </span>
         </div>
 
+        <label className="field full"><span>الوحدة / النطاق التشغيلي</span>
+          <select value={f.unit_id || ""} onChange={set("unit_id")}>
+            <option value="">— بدون وحدة —</option>
+            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </label>
+        <div className="field full">
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>مديرو التشغيل المسؤولون عن المشروع (يرون هذا المشروع ويديرونه)</span>
+          <ChipMulti options={managerOptions} value={f.ops_managers} onChange={setArr("ops_managers")} empty="أضِف مستخدمين أولاً" />
+        </div>
         <div className="field full">
           <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>مدراء المشروع (يمكن اختيار أكثر من واحد)</span>
           <ChipMulti options={managerOptions} value={f.managers} onChange={setArr("managers")} empty="أضِف مستخدمين أولاً" />

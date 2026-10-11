@@ -2544,3 +2544,9 @@ tbody tr:last-child td {
 @media (max-width: 640px) {
   .task-cards { grid-template-columns: 1fr; }
 }
+
+/* ============ مصفوفة الصلاحيات ============ */
+.perm-matrix th { white-space: nowrap; vertical-align: bottom; }
+.perm-matrix td:first-child { min-width: 240px; }
+.perm-matrix .pm-group td { background: var(--surface-2); font-weight: 800; color: var(--ink); }
+.perm-matrix input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }

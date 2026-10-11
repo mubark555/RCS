@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { projectsStore, tasksStore, meetingsStore, filesStore, usersStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
+import Guard, { NoAccess } from "@/components/Guard";
+import { canSeeFile } from "@/lib/permissions.mjs";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskDetail from "@/components/TaskDetail";
@@ -12,8 +14,12 @@ import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import { STATUS_META, HEALTH_META, PRIORITY_META, projManagers, projClients, projMembers } from "@/lib/constants";
 
 export default function ProjectPage() {
+  return <Guard perm="page.projects"><ProjectView /></Guard>;
+}
+
+function ProjectView() {
   const { id } = useParams();
-  const { readOnly } = useRole();
+  const { access, can } = useRole();
   const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -27,6 +33,11 @@ export default function ProjectPage() {
   async function loadAll() {
     const projs = await projectsStore.list().catch(() => []);
     const p = projs.find((x) => x.id === id) || null;
+    // فتح رابط مشروع خارج نطاق المستخدم: لا تُحمَّل أي بيانات
+    if (p && !access.canSeeProject(p.name)) {
+      setProject("denied");
+      return;
+    }
     setProject(p);
     if (!p) return;
     const [ts, ms, fs, us] = await Promise.all([
@@ -37,12 +48,12 @@ export default function ProjectPage() {
     ]);
     setTasks(ts.filter((t) => t.project === p.name));
     setMeetings(ms.filter((m) => m.project === p.name));
-    setFiles(fs.filter((f) => f.project === p.name));
+    setFiles(fs.filter((f) => f.project === p.name && canSeeFile(f, access)));
     setUsers(us);
   }
   useEffect(() => {
     loadAll();
-  }, [id]);
+  }, [id, access]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -64,6 +75,7 @@ export default function ProjectPage() {
   async function delLink(f) { if (confirm(`حذف الرابط؟\n${f.name}`)) { await filesStore.remove(f); await loadAll(); } }
 
   if (project === undefined) return <div className="empty">جاري التحميل…</div>;
+  if (project === "denied") return <NoAccess text="لا تملك صلاحية الاطلاع على هذا المشروع." />;
   if (project === null) return (
     <div className="empty"><div style={{ marginBottom: 12 }}>المشروع غير موجود.</div><Link href="/projects" className="btn">→ العودة للمشاريع</Link></div>
   );
@@ -126,10 +138,10 @@ export default function ProjectPage() {
                   {f.category && <small className="muted">{f.category}</small>}
                 </div>
                 <button className="btn sm" onClick={() => openLink(f)}>فتح</button>
-                {!readOnly && <button className="btn sm danger icon" onClick={() => delLink(f)}><Icon name="trash" size={14} /></button>}
+                {can("file.delete", project.name) && <button className="btn sm danger icon" onClick={() => delLink(f)}><Icon name="trash" size={14} /></button>}
               </div>
             ))}
-            {!readOnly && (
+            {can("file.upload", project.name) && (
               <div className="inline-form" style={{ marginTop: 12 }}>
                 <input placeholder="الوصف (مثال: عرض تقديمي)" value={lnk.label} onChange={(e) => setLnk({ ...lnk, label: e.target.value })} />
                 <input placeholder="رابط Google Drive…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
@@ -195,7 +207,7 @@ export default function ProjectPage() {
           onDelete={async (t) => { if (!confirm(`حذف المهمة؟\n\n${t.task}`)) return; await tasksStore.remove(t.id, t); setViewingTask(null); await loadAll(); }}
         />
       )}
-      {minutesOf && <MinutesModal meeting={minutesOf} readOnly={readOnly} onClose={() => setMinutesOf(null)} onUpdated={loadAll} onEdit={() => setMinutesOf(null)} />}
+      {minutesOf && <MinutesModal meeting={minutesOf} onClose={() => setMinutesOf(null)} onUpdated={loadAll} onEdit={() => setMinutesOf(null)} />}
     </div>
   );
 }

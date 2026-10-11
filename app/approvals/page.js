@@ -22,7 +22,7 @@ const daysSince = (iso) => {
 };
 
 export default function ApprovalsPage() {
-  const { scopeProjects, projects, canApprove, canDeliver } = useRole();
+  const { scopeProjects, projects, canApprove, canDeliver, taskVisible, decisionBlockFor } = useRole();
   const [tasks, setTasks] = useState(null);
   const [tab, setTab] = useState("pending"); // pending | revision | log
   const [fProject, setFProject] = useState("");
@@ -36,8 +36,8 @@ export default function ApprovalsPage() {
 
   const scoped = useMemo(() => {
     if (!tasks) return [];
-    return tasks.filter((t) => (!scopeProjects || scopeProjects.includes(t.project)) && (!fProject || t.project === fProject));
-  }, [tasks, scopeProjects, fProject]);
+    return tasks.filter((t) => taskVisible(t) && (!fProject || t.project === fProject));
+  }, [tasks, fProject, taskVisible]);
 
   const pending = useMemo(() => scoped.filter((t) => t.status === "Pending Review")
     .sort((a, b) => String(a.ready_at || "").localeCompare(String(b.ready_at || ""))), [scoped]);
@@ -106,7 +106,9 @@ export default function ApprovalsPage() {
                     </small>
                     {lastNote(t, "submitted") && <div className="rv-note">«{lastNote(t, "submitted")}»</div>}
                   </div>
-                  {canApprove ? (
+                  {canApprove && decisionBlockFor(t) ? (
+                    <div className="rv-actions"><span className="pill" style={{ color: "#b45309" }} title={decisionBlockFor(t)}>عملك — يعتمده غيرك</span></div>
+                  ) : canApprove ? (
                     <div className="rv-actions">
                       <button className="btn primary" onClick={() => setDialog({ task: t, mode: "approve" })}><Icon name="check" size={16} /> اعتماد</button>
                       <button className="btn" style={{ color: "#b45309" }} onClick={() => setDialog({ task: t, mode: "revision" })}>طلب تعديل</button>

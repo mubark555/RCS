@@ -31,7 +31,7 @@ const MODES = {
 
 // نافذة اتخاذ قرار على تسليم: إرسال للمراجعة / اعتماد / طلب تعديل
 export default function ReviewDialog({ task, mode, onClose, onDone }) {
-  const { viewer, role } = useRole();
+  const { viewer, role, decisionBlockFor } = useRole();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -42,6 +42,8 @@ export default function ReviewDialog({ task, mode, onClose, onDone }) {
 
   async function go(e) {
     e.preventDefault();
+    // دفاع إضافي: لا قرار على عمل ذاتي ولا بلا صلاحية (حتى لو فُتحت النافذة من مكان آخر)
+    if (mode !== "submit") { const b = decisionBlockFor(task); if (b) { setErr(b); return; } }
     if (mode === "revision" && !note.trim()) { setErr("اكتب المطلوب تعديله حتى يعرف المسؤول ما يجب عمله."); return; }
     setBusy(true);
     setErr("");

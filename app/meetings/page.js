@@ -9,11 +9,12 @@ import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { minutesDocHtml } from "@/components/MinutesModal";
-import { parseAttendees, presentOf, MEETING_STATUS, isLocked } from "@/lib/meetings";
+import { parseAttendees, presentOf, MEETING_STATUS, isLocked, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf, organizerOf } from "@/lib/meetings";
+import { isMe } from "@/lib/mywork.mjs";
 
 const EMPTY = {
-  title: "", project: "", start_at: "", duration: 30, location: "",
-  attendees: [], links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
+  title: "", objective: "", organizer: "", project: "", start_at: "", duration: 30, location: "",
+  attendees: [], attendance: {}, links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
 };
 
 const LINK_TYPES = ["تسجيل", "مستند", "رابط"];
@@ -34,7 +35,7 @@ export default function MeetingsPage() {
   const [filter, setFilter] = useState("upcoming");
   const [ending, setEnding] = useState(null);     // اجتماع قيد الإنهاء (كتابة المحضر)
   const [approving, setApproving] = useState(null); // اعتماد المحضر وإرساله
-  const canApproveMinutes = (m) => !readOnly && (ability("approveMinutes") || (m.created_by && m.created_by === viewer?.name));
+  const canApproveMinutes = (m) => !readOnly && (ability("approveMinutes") || isMe(organizerOf(m), viewer));
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
@@ -49,7 +50,9 @@ export default function MeetingsPage() {
 
   const scoped = useMemo(() => {
     if (!items) return [];
-    let arr = scopeProjects ? items.filter((m) => scopeProjects.includes(m.project)) : items;
+    // ضمن مشاريع المستخدم، أو هو مدعو/منظّم الاجتماع
+    const involved = (m) => Boolean(viewer) && (parseAttendees(m.attendees).some((n) => isMe(n, viewer)) || isMe(organizerOf(m), viewer));
+    let arr = scopeProjects ? items.filter((m) => scopeProjects.includes(m.project) || involved(m)) : items;
     const s = q.trim().toLowerCase();
     if (s) {
       arr = arr.filter((m) =>
@@ -59,7 +62,7 @@ export default function MeetingsPage() {
       );
     }
     return arr;
-  }, [items, scopeProjects, q]);
+  }, [items, scopeProjects, q, viewer]);
 
   const groups = useMemo(() => {
     const now = new Date().toISOString();
@@ -178,7 +181,7 @@ export default function MeetingsPage() {
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await meetingsStore.update(editing.id, payload);
-              else await meetingsStore.create({ ...payload, created_by: viewer?.name || "" });
+              else await meetingsStore.create({ ...payload, created_by: viewer?.name || "", organizer: payload.organizer || viewer?.name || "" });
               setEditing(null);
               await reload();
             }}
@@ -219,8 +222,23 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
           </div>
           {m.status !== "Cancelled" && <Lifecycle m={m} />}
           <div className="mtg-meta">{metaBits.join(" · ")}</div>
+          {(organizerOf(m) || m.objective) && (
+            <div className="mtg-meta">
+              {organizerOf(m) && <>المنظّم: <b>{organizerOf(m)}</b></>}
+              {organizerOf(m) && m.objective ? " · " : ""}
+              {m.objective && <>الهدف: {m.objective}</>}
+            </div>
+          )}
           {attendees.length > 0 && (
-            <div className="mtg-att"><b>الحضور:</b> {attendees.join("، ")}</div>
+            <div className="mtg-att">
+              <b>الحضور:</b>{" "}
+              {Object.keys(ATTENDANCE_TYPES).flatMap((k) => attendees.filter((a) => attendanceOf(m, a) === k).map((a) => (
+                <span key={a} className="att-pill" title={ATTENDANCE_TYPES[k].desc}
+                  style={{ color: ATTENDANCE_TYPES[k].color, borderColor: `${ATTENDANCE_TYPES[k].color}55`, fontWeight: k === "mandatory" ? 800 : 600 }}>
+                  {a} · {ATTENDANCE_TYPES[k].ar}
+                </span>
+              )))}
+            </div>
           )}
           {agendaPreview && <div className="mtg-agenda">{agendaPreview}</div>}
           <div className="mtg-actions">
@@ -267,6 +285,8 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
       ...EMPTY,
       ...(initial || {}),
       attendees: att,
+      attendance: initial?.attendance && typeof initial.attendance === "object" && !Array.isArray(initial.attendance) ? initial.attendance : {},
+      organizer: initial?.organizer || initial?.created_by || "",
       present: Array.isArray(initial?.present) && initial.present.length ? initial.present : att,
       links: Array.isArray(initial?.links) ? initial.links : [],
     };
@@ -278,6 +298,7 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
 
   const toggleAtt = (name) =>
     setF((s) => ({ ...s, attendees: s.attendees.includes(name) ? s.attendees.filter((x) => x !== name) : [...s.attendees, name] }));
+  const setAttType = (name, type) => setF((s) => ({ ...s, attendance: { ...s.attendance, [name]: type } }));
 
   const addLink = () => setF((s) => ({ ...s, links: [...s.links, { type: "تسجيل", label: "", url: "" }] }));
   const setLink = (i, k, v) => setF((s) => ({ ...s, links: s.links.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
@@ -298,6 +319,8 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
         duration: Number(f.duration) || 30,
         links: f.links.filter((l) => l.url),
         action_items: ai.filter((a) => a.text && a.text.trim()),
+        // التصنيف للمدعوين فقط (الافتراضي: أساسي)
+        attendance: Object.fromEntries(f.attendees.map((a) => [a, ATTENDANCE_TYPES[f.attendance?.[a]] ? f.attendance[a] : DEFAULT_ATTENDANCE])),
       });
     } finally {
       setSaving(false);
@@ -325,6 +348,13 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
         )}
         {!ending && <>
         <label className="field full"><span>عنوان الاجتماع *</span><input value={f.title} onChange={set("title")} required /></label>
+        <label className="field full"><span>هدف الاجتماع</span><input value={f.objective || ""} onChange={set("objective")} placeholder="ما الذي يجب أن يحققه الاجتماع؟" /></label>
+        <label className="field"><span>المنظّم</span>
+          <select value={f.organizer || ""} onChange={set("organizer")}>
+            <option value="">—</option>
+            {users.filter((u) => u.role !== "client" || u.name === f.organizer).map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+          </select>
+        </label>
         <label className="field">
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
@@ -360,6 +390,24 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
               ))
             )}
           </div>
+          {f.attendees.length > 0 && (
+            <div className="att-types">
+              <small className="muted">تصنيف الحضور لكل مدعو:</small>
+              {f.attendees.map((a) => {
+                const cur = ATTENDANCE_TYPES[f.attendance?.[a]] ? f.attendance[a] : DEFAULT_ATTENDANCE;
+                return (
+                  <div className="att-type-row" key={a}>
+                    <b>{a}</b>
+                    <div className="seg">
+                      {Object.entries(ATTENDANCE_TYPES).map(([k, t]) => (
+                        <button type="button" key={k} className={cur === k ? "on" : ""} title={t.desc} onClick={() => setAttType(a, k)}>{t.ar}</button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         </>}

@@ -5,6 +5,7 @@ import { usersStore, projectsStore, appSettings } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
 import { projManagers, projClients, projMembers, userProjects, PROJECTS } from "@/lib/constants";
 import { resolvePerms, atLeast } from "@/lib/permissions";
+import { isMe, decisionBlock } from "@/lib/mywork.mjs";
 
 const RoleCtx = createContext(null);
 
@@ -142,7 +143,8 @@ export function RoleProvider({ children }) {
       const mine = projects
         .filter((p) => projMembers(p).includes(viewer.name) || projManagers(p).includes(viewer.name))
         .map((p) => p.name);
-      scopeProjects = mine.length ? mine : null; // غير مُسند لأي مشروع → يرى الكل (توافقية)
+      // غير المُسند لأي مشروع لا يرى مشاريع الآخرين — يرى فقط المهام والاجتماعات التي هو طرف فيها
+      scopeProjects = mine;
     }
   }
 
@@ -164,9 +166,17 @@ export function RoleProvider({ children }) {
   const canDeliver = ability("deliver");
   const canManagePerms = ability("permissions");
 
+  // المهمة مرئية: ضمن مشاريعه، أو هو طرف فيها (المسؤول، الحائز، المُسلِّم، صاحب خطوة في السلسلة)
+  const isInvolved = (t) => Boolean(viewer) && (
+    isMe(t?.assigned_to, viewer) || isMe(t?.holder, viewer) || isMe(t?.ready_by, viewer)
+    || (Array.isArray(t?.chain) && t.chain.some((st) => isMe(st?.person, viewer))));
+  const taskVisible = (t) => !scopeProjects || scopeProjects.includes(t?.project) || isInvolved(t);
+  // سبب منع قرار الاعتماد على مهمة (null = مسموح)
+  const decisionBlockFor = (t) => decisionBlock(t, viewer, perms.abilities);
+
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms, taskVisible, isInvolved, decisionBlockFor }}
     >
       {children}
     </RoleCtx.Provider>
@@ -178,6 +188,7 @@ export function useRole() {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
     readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false,
     perms: { sections: {}, abilities: {} }, permsOf: () => ({ sections: {}, abilities: {} }), can: () => true, ability: () => true, permOverrides: {}, savePermissions: async () => {}, canManagePerms: true,
+    taskVisible: () => true, isInvolved: () => false, decisionBlockFor: () => null,
     setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
 }

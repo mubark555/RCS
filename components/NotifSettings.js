@@ -1,5 +1,6 @@
 "use client";
 
+import { postNotify } from "@/lib/notifyClient";
 import { useState } from "react";
 import {
   useNotifications, renderTemplate, getNotif, buildEmailHtml, systemUrlFrom,
@@ -75,15 +76,11 @@ export default function NotifSettings() {
     if (!to.length) { pushToast("اختر مستخدماً واحداً على الأقل (له بريد) أو أضِف بريداً إضافياً.", "danger"); return; }
     setTesting(true);
     try {
-      const r = await fetch("/api/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to,
-          subject: "اختبار إشعار سيم برايم",
-          html: buildEmailHtml("اختبار إشعار سيم برايم", "هذه رسالة اختبار من نظام سيم برايم. الإعدادات تعمل بنجاح ✅", systemUrlFrom(p)),
-          fromName: (p.senderName || "").trim() || undefined,
-        }),
+      const r = await postNotify({
+        to,
+        subject: "اختبار إشعار سيم برايم",
+        html: buildEmailHtml("اختبار إشعار سيم برايم", "هذه رسالة اختبار من نظام سيم برايم. الإعدادات تعمل بنجاح ✅", systemUrlFrom(p)),
+        fromName: (p.senderName || "").trim() || undefined,
       });
       const data = await r.json().catch(() => ({}));
       if (r.ok) pushToast(`تم إرسال الاختبار إلى ${to.length} مستقبِل ✅`, "success");

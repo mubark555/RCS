@@ -17,7 +17,7 @@ import { taskStats, projectHealth, kpiAchievement, kpiPct } from "@/lib/metrics"
 
 export default function ProjectPage() {
   const { id } = useParams();
-  const { role, can } = useRole();
+  const { role, can, scopeProjects, ready } = useRole();
   const canManage = can("projects", "edit");
   const readOnly = !canManage;
   const [newDeliv, setNewDeliv] = useState("");
@@ -39,6 +39,8 @@ export default function ProjectPage() {
   async function loadAll() {
     const projs = await projectsStore.list().catch(() => []);
     const p = projs.find((x) => x.id === id) || null;
+    // فتح مشروع خارج نطاق المستخدم برابط مباشر: لا تُحمَّل أي بيانات
+    if (p && scopeProjects && !scopeProjects.includes(p.name)) { setProject("denied"); return; }
     setProject(p);
     if (!p) return;
     const [ts, ms, fs, us, ks] = await Promise.all([
@@ -57,9 +59,10 @@ export default function ProjectPage() {
     setKpis(role === "client" ? mine.filter(isPublicKpi) : mine);
   }
   useEffect(() => {
+    if (!ready) return;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, role]);
+  }, [id, role, ready, (scopeProjects || []).join("|")]);
 
   const stats = useMemo(() => {
     const st = taskStats(tasks);
@@ -114,6 +117,9 @@ export default function ProjectPage() {
   async function delLink(f) { if (confirm(`حذف الرابط؟\n${f.name}`)) { await filesStore.remove(f); await loadAll(); } }
 
   if (project === undefined) return <div className="empty">جاري التحميل…</div>;
+  if (project === "denied") return (
+    <div className="empty"><div style={{ marginBottom: 12 }}>🔒 لا تملك صلاحية الاطلاع على هذا المشروع.</div><Link href="/projects" className="btn">→ العودة للمشاريع</Link></div>
+  );
   if (project === null) return (
     <div className="empty"><div style={{ marginBottom: 12 }}>المشروع غير موجود.</div><Link href="/projects" className="btn">→ العودة للمشاريع</Link></div>
   );

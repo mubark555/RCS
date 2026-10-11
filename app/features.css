@@ -629,3 +629,41 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-tskip { margin-inline-start: auto; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; text-decoration: underline; }
 
 @media print { .amal-dock, .amal-panel, .amal-tour { display: none !important; } }
+
+/* ============ المطلوب منك الآن ============ */
+.mw { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-sm); margin-bottom: 14px; overflow: hidden; }
+.mw-h { display: flex; align-items: center; gap: 12px; padding: 14px 16px 8px; flex-wrap: wrap; }
+.mw-h h3 { margin: 0; font-size: 15px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.mw-h h3 .bar { width: 4px; height: 16px; border-radius: 4px; background: var(--primary); }
+.mw-sum { font-size: 13px; color: var(--text-2); }
+.mw-sum b { color: var(--primary); }
+.mw-tabs { display: flex; gap: 6px; padding: 0 12px 10px; overflow-x: auto; }
+.mw-tabs button { flex: none; border: 1px solid var(--border); background: var(--surface-2); font-family: inherit; font-size: 12.5px; font-weight: 700; color: var(--text-2); padding: 6px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.mw-tabs button .n { background: var(--c); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; line-height: 18px; }
+.mw-tabs button.on { border-color: var(--c); color: var(--ink); background: var(--surface); box-shadow: inset 0 -2px 0 var(--c); }
+.mw-list { border-top: 1px solid var(--border); }
+.mw-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.mw-row:hover { background: var(--surface-2); }
+.mw-dot { width: 9px; height: 9px; border-radius: 9px; }
+.mw-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mw-main b { font-size: 13.5px; color: var(--ink); }
+.mw-main small { font-size: 12px; color: var(--muted); }
+.mw-note { font-size: 12px; background: #fdf3e3; color: #92400e; border-radius: 8px; padding: 4px 8px; margin-top: 3px; }
+.mw-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.mw-meta .late { color: #dc2626; font-weight: 700; }
+.mw-act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.mw-act small { font-size: 11.5px; color: var(--muted); }
+.mw-act > :not(small) { display: inline-flex; }
+.mw-empty { padding: 18px 16px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+.mw-more { margin: 8px 16px; }
+@media (max-width: 760px) {
+  .mw-row { grid-template-columns: 10px minmax(0, 1fr); }
+  .mw-meta, .mw-act { grid-column: 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+}
+
+/* ============ تصنيف الحضور ============ */
+.att-pill { display: inline-flex; align-items: center; border: 1px solid; border-radius: 999px; padding: 1px 9px; margin: 2px 0 2px 4px; font-size: 12px; background: var(--surface); }
+.att-types { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.att-type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.att-type-row b { font-size: 13px; color: var(--ink); }
+.att-type-row .seg button { padding: 5px 12px; font-size: 12px; }

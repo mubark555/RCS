@@ -7,9 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "gen:seed": "node scripts/generate-seed.mjs",
-    "test": "node --test tests/*.test.mjs",
-    "test:sql": "scripts/test-sql.sh"
+    "gen:seed": "node scripts/generate-seed.mjs"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.3.0",

@@ -8,10 +8,43 @@ import TaskForm from "@/components/TaskForm";
 import TaskDetail from "@/components/TaskDetail";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, STATUSES, PROJECTS } from "@/lib/constants";
-import { STAGES, stageOf, actionForStatus, availableActions } from "@/lib/workflow.mjs";
-import { canSeeTask } from "@/lib/permissions.mjs";
-import Guard from "@/components/Guard";
+import ReviewDialog from "@/components/ReviewDialog";
+import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, normalizeChain, chainProgress, chainHolder, isDone, isOverdue, taskProgress } from "@/lib/constants";
+import { ensureDeliverable } from "@/lib/workflow";
+import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
+
+function ChainTag({ task }) {
+  const { projects } = useRole();
+  const { chains } = useProjectChains();
+  const chain = effectiveChain(templateFor(chains, projects, task.project), task.chain);
+  const prog = chainProgress(chain);
+  if (!prog) return null;
+  const holder = chainHolder(chain);
+  const color = prog.rejected ? "#dc2626" : prog.complete ? "#16a34a" : "var(--primary)";
+  const bg = prog.rejected ? "#fdecec" : prog.complete ? "#e6f5ec" : "var(--primary-soft)";
+  return (
+    <div className="chain-tagrow" onClick={(e) => e.stopPropagation()} style={{ pointerEvents: "none" }}>
+      <span className="ct-pill"><Icon name="link" size={12} /> سلسلة الاعتماد</span>
+      <span className="ct-prog" style={{ color, background: bg }}>{prog.rejected ? "رفض" : prog.complete ? "مكتملة" : `${prog.done}/${prog.total}`}</span>
+      {!prog.complete && !prog.rejected && holder && <span className="ct-holder">عند: {holder}</span>}
+    </div>
+  );
+}
+
+// شارة التعليق/التأخير/طلب التعديل على البطاقة — السبب والجهة وموعد المعالجة
+function TaskFlag({ task: t }) {
+  if (t.status === "Revision Needed") {
+    return <div className="kb-flag rev">↺ مطلوب تعديل{t.review_note ? `: ${t.review_note}` : ""}</div>;
+  }
+  const late = isOverdue(t);
+  if (!t.on_hold && !late) return null;
+  const parts = [t.blocker, t.waiting_on && `على: ${t.waiting_on}`, t.resolve_date && `المعالجة: ${t.resolve_date}`].filter(Boolean);
+  return (
+    <div className={`kb-flag ${t.on_hold ? "hold" : "late"}`}>
+      {t.on_hold ? "⏸ معلّقة" : "⚠ متأخرة"}{parts.length ? ` — ${parts.join(" · ")}` : ""}
+    </div>
+  );
+}
 
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
 const colorFor = (name) => {
@@ -26,18 +59,16 @@ const pad = (n) => String(n).padStart(2, "0");
 const WEEK = 7 * 86400000;
 // مؤرشفة: مهمة مكتملة مضى على إكمالها (أو تاريخها) أكثر من أسبوع
 function isArchived(t) {
-  if (t.status !== "Completed") return false;
+  if (!isDone(t)) return false;
   const r = t.completed_at || t.due_date || t.created_at;
   const d = r ? new Date(r).getTime() : NaN;
   return !isNaN(d) && d < Date.now() - WEEK;
 }
 
 export default function TasksPage() {
-  return <Guard perm="page.tasks"><Tasks /></Guard>;
-}
-
-function Tasks() {
-  const { scopeProjects, projects, viewer, access, canAny } = useRole();
+  const { readOnly, scopeProjects, projects, users, canApprove, canDeliver } = useRole();
+  const [quick, setQuick] = useState(""); // late | hold | review
+  const [dialog, setDialog] = useState(null); // { task, mode }
   const [tasks, setTasks] = useState(null);
   const [view, setView] = useState("board"); // board | list | calendar
   const [q, setQ] = useState("");
@@ -70,8 +101,7 @@ function Tasks() {
     return map;
   }, [projects]);
 
-  const allNames = projects.length ? projects.map((p) => p.name) : PROJECTS;
-  const projectOptions = scopeProjects || allNames;
+  const projectOptions = scopeProjects || (projects || []).map((p) => p.name);
   const assignees = useMemo(() => {
     if (!tasks) return [];
     return [...new Set(tasks.map((t) => (t.assigned_to || "").trim()).filter(Boolean))].sort();
@@ -80,30 +110,35 @@ function Tasks() {
   const visible = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
-      if (!canSeeTask(t, access, viewer)) return false;
+      if (scopeProjects && !scopeProjects.includes(t.project)) return false;
       if (fProjects.length && !fProjects.includes(t.project)) return false;
       if (fAssignee && (t.assigned_to || "").trim() !== fAssignee) return false;
+      if (quick === "late" && !isOverdue(t)) return false;
+      if (quick === "hold" && !t.on_hold) return false;
+      if (quick === "review" && t.status !== "Pending Review") return false;
       if (q) {
         const hay = `${t.task} ${t.activity} ${t.assigned_to} ${t.notes}`.toLowerCase();
         if (!hay.includes(q.toLowerCase())) return false;
       }
       return true;
     });
-  }, [tasks, q, fProjects, fAssignee, access, viewer]);
+  }, [tasks, q, fProjects, fAssignee, scopeProjects, quick]);
 
   const active = useMemo(() => visible.filter((t) => !isArchived(t)), [visible]);
   const archived = useMemo(() => visible.filter(isArchived), [visible]);
 
   async function handleSave(payload) {
-    if (editing && editing.id) await tasksStore.update(editing.id, payload, editing);
-    else await tasksStore.create(payload);
+    const p = { ...payload };
+    if (editing && editing.id) await tasksStore.update(editing.id, p);
+    else await tasksStore.create(p);
+    await ensureDeliverable(p.project, p.deliverable);
     setEditing(null);
     await reload();
   }
   async function handleDelete(t) {
     if (!confirm(`حذف المهمة؟\n\n${t.task}`)) return;
     setBusy(true);
-    try { await tasksStore.remove(t.id, t); await reload(); } finally { setBusy(false); }
+    try { await tasksStore.remove(t.id); await reload(); } finally { setBusy(false); }
   }
   async function moveTo(status) {
     const id = dragId.current;
@@ -112,33 +147,28 @@ function Tasks() {
     if (!id) return;
     const t = tasks.find((x) => x.id === id);
     if (!t || t.status === status) return;
-    // السحب يُترجم إلى إجراء سير عمل؛ لا يمكن تجاوز المراجعة أو الاعتماد
-    const action = actionForStatus(t, viewer, status);
-    if (!action) {
-      alert("لا يمكنك نقل هذه المهمة إلى هذه الحالة. الحالة تتغير عبر إجراءات سير العمل المتاحة لك في تفاصيل المهمة.");
+    // دورة العمل: الإرسال للمراجعة والاعتماد وطلب التعديل عبر نافذة القرار (تُسجَّل باسم المنفّذ وتاريخه)
+    if (status === "Pending Review") {
+      if (!canDeliver) return;
+      setDialog({ task: t, mode: "submit" });
       return;
     }
-    const def = availableActions(t, viewer).find((a) => a.action === action);
-    let note = "";
-    if (def?.needsNote) {
-      note = (prompt(def.notePrompt) || "").trim();
-      if (!note) return;
+    if (status === "Approved" || status === "Revision Needed") {
+      if (!canApprove) { alert("الاعتماد وطلب التعديل من صلاحية سيم فقط."); return; }
+      if (t.status !== "Pending Review") { alert("يجب أن تكون المهمة «بانتظار مراجعة سيم» أولاً."); return; }
+      setDialog({ task: t, mode: status === "Approved" ? "approve" : "revision" });
+      return;
     }
-    try {
-      await tasksStore.transition(t, action, note);
-    } catch (e) {
-      alert(e.message);
-    }
+    await tasksStore.update(id, { status });
     await reload();
   }
   const toggleProj = (p) => setFProjects((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
 
   if (!tasks) return <div className="empty">جاري التحميل…</div>;
-  const hasFilter = q || fProjects.length || fAssignee;
+  const hasFilter = q || fProjects.length || fAssignee || quick;
 
   // تجميع القائمة حسب المشروع
-  const groupNames = [...new Set([...projectOptions, ...active.map((t) => t.project || "")])];
-  const byProject = groupNames
+  const byProject = projectOptions
     .map((p) => ({ project: p, items: active.filter((t) => t.project === p) }))
     .filter((g) => g.items.length);
 
@@ -152,7 +182,7 @@ function Tasks() {
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>لوحة</button>
         </div>
         <div style={{ marginInlineStart: "auto" }} />
-        {canAny("task.create") && <button className="btn primary" onClick={() => setEditing({})}>+ مهمة جديدة</button>}
+        {!readOnly && <button className="btn primary" onClick={() => setEditing({})}>+ مهمة جديدة</button>}
       </div>
 
       <div className="toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 12 }}>
@@ -162,7 +192,13 @@ function Tasks() {
             <option value="">كل الموظفين</option>
             {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          {hasFilter && <button className="btn sm ghost" onClick={() => { setQ(""); setFProjects([]); setFAssignee(""); }}>مسح</button>}
+          {hasFilter && <button className="btn sm ghost" onClick={() => { setQ(""); setFProjects([]); setFAssignee(""); setQuick(""); }}>مسح</button>}
+        </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <span className="muted" style={{ fontSize: 12, fontWeight: 700 }}>عرض سريع:</span>
+          {[["", "الكل"], ["late", "المتأخرة"], ["hold", "المعلّقة"], ["review", "بانتظار سيم"]].map(([k, l]) => (
+            <span key={k || "all"} className={`att-chip ${quick === k ? "on" : ""}`} onClick={() => setQuick(k)}>{l}</span>
+          ))}
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
           <span className={`att-chip ${fProjects.length === 0 ? "on" : ""}`} onClick={() => setFProjects([])}>كل المشاريع</span>
@@ -188,12 +224,16 @@ function Tasks() {
                   {meta.ar}<span className="cnt">{col.length}</span>
                 </div>
                 {col.map((t) => (
-                  <div key={t.id} className="kb-card" draggable={availableActions(t, viewer).length > 0}
+                  <div key={t.id} className="kb-card" draggable={!readOnly}
                     onDragStart={() => (dragId.current = t.id)} onClick={() => setViewing(t)}>
-                    <div className="kb-badges"><Badge map={PRIORITY_META} value={t.priority} /><StageBadge t={t} /></div>
+                    <div className="kb-badges"><Badge map={PRIORITY_META} value={t.priority} /><Badge map={HEALTH_META} value={t.health} /></div>
                     <div className="kb-title">{t.task}</div>
                     <div className="kb-meta"><span>{t.project}</span>{t.assigned_to && <span>· {t.assigned_to}</span>}</div>
+                    {t.deliverable && <div className="kb-deliv">◆ {t.deliverable}</div>}
                     {t.due_date && <div className="kb-meta" style={{ marginTop: 3 }}>⏱ {t.due_date}</div>}
+                    <div className="kb-prog"><span style={{ width: `${taskProgress(t)}%`, background: STATUS_META[t.status]?.color || "var(--primary)" }} /></div>
+                    <TaskFlag task={t} />
+                    <ChainTag task={t} />
                   </div>
                 ))}
                 {col.length === 0 && <div className="kb-empty">—</div>}
@@ -218,10 +258,12 @@ function Tasks() {
                 <span className="lt-av" style={{ background: colorFor(t.assigned_to) }}>{(t.assigned_to || "؟").slice(0, 1)}</span>
                 <div className="lt-main">
                   <b>{t.task}</b>
-                  <small>{t.activity}{t.assigned_to ? ` · ${t.assigned_to}` : ""}</small>
+                  <small>{t.deliverable ? `◆ ${t.deliverable} · ` : ""}{t.activity}{t.assigned_to ? ` · ${t.assigned_to}` : ""} · {taskProgress(t)}%</small>
+                  <TaskFlag task={t} />
+                  <ChainTag task={t} />
                 </div>
                 <Badge map={PRIORITY_META} value={t.priority} />
-                <StageBadge t={t} />
+                <Badge map={STATUS_META} value={t.status} />
                 {t.due_date && <span className="lt-date">{fmtDay(t.due_date)}</span>}
                 <span className="lt-dot" style={{ background: STATUS_META[t.status]?.color || "#ccc" }} />
               </div>
@@ -242,7 +284,7 @@ function Tasks() {
             <Icon name="archive" size={17} />
             <span>المؤرشفة</span>
             <span className="arch-count">{archived.length}</span>
-            <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>مهام مكتملة مضى عليها أكثر من أسبوع</span>
+            <span className="muted" style={{ fontSize: 12, fontWeight: 500 }}>مهام معتمدة مضى عليها أكثر من أسبوع</span>
             <span style={{ marginInlineStart: "auto", transition: ".2s", transform: showArchive ? "rotate(90deg)" : "none" }}>‹</span>
           </button>
           {showArchive && (
@@ -254,7 +296,7 @@ function Tasks() {
                     <b>{t.task}</b>
                     <small>{t.project}{t.assigned_to ? ` · ${t.assigned_to}` : ""}{t.due_date ? ` · ${t.due_date}` : ""}</small>
                   </div>
-                  <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>مكتملة</span>
+                  <span className="pill" style={{ color: "#16a34a", borderColor: "#bfe6cd" }}>معتمدة</span>
                 </div>
               ))}
             </div>
@@ -264,23 +306,19 @@ function Tasks() {
 
       {viewing && (
         <TaskDetail task={viewing} onClose={() => setViewing(null)}
-          onUpdate={async (id, patch, prev) => { await tasksStore.update(id, patch, prev); await reload(); }}
+          onUpdate={async (id, patch) => { await tasksStore.update(id, patch); await reload(); }}
           onChanged={reload}
           onEdit={(t) => { setViewing(null); setEditing(t); }}
           onDelete={async (t) => { setViewing(null); await handleDelete(t); }} />
       )}
       {editing && (
-        <Modal title={editing.id ? "تعديل المهمة" : "مهمة جديدة"} onClose={() => setEditing(null)}>
-          <TaskForm initial={editing.id ? editing : null} onSave={handleSave} onCancel={() => setEditing(null)} />
+        <Modal wide title={editing.id ? "تعديل المهمة" : "مهمة جديدة"} onClose={() => setEditing(null)}>
+          <TaskForm initial={editing.id ? editing : null} users={users} projects={(projects || []).filter((p) => !scopeProjects || scopeProjects.includes(p.name))} defaultProject={fProjects[0] || ""} onSave={handleSave} onCancel={() => setEditing(null)} />
         </Modal>
       )}
+      {dialog && <ReviewDialog task={dialog.task} mode={dialog.mode} onClose={() => setDialog(null)} onDone={reload} />}
     </div>
   );
-}
-
-function StageBadge({ t }) {
-  const st = STAGES[stageOf(t)];
-  return <span className="badge" style={{ background: `${st.color}1f`, color: st.color }}>{st.ar}</span>;
 }
 
 function fmtDay(iso) {

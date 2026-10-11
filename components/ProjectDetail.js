@@ -6,7 +6,7 @@ import { useRole } from "@/components/RoleProvider";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
-import { STATUS_META, HEALTH_META, projManagers, projClients, projMembers } from "@/lib/constants";
+import { STATUS_META, HEALTH_META, projManagers, projClients, projMembers, isDone } from "@/lib/constants";
 
 export default function ProjectDetail({ project, onClose }) {
   const { readOnly } = useRole();
@@ -61,7 +61,7 @@ export default function ProjectDetail({ project, onClose }) {
 
   const stats = useMemo(() => {
     const total = tasks.length;
-    const done = tasks.filter((t) => t.status === "Completed").length;
+    const done = tasks.filter((t) => isDone(t)).length;
     const delayed = tasks.filter((t) => t.health === "Delayed").length;
     return { total, done, pct: total ? Math.round((done / total) * 100) : 0, delayed };
   }, [tasks]);

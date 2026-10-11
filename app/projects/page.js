@@ -1,7 +1,5 @@
 "use client";
 
-import { WORKFLOWS, DEFAULT_WORKFLOW } from "@/lib/workflow.mjs";
-import Guard from "@/components/Guard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { projectsStore, tasksStore } from "@/lib/store";
@@ -10,6 +8,7 @@ import Modal from "@/components/Modal";
 import ChipMulti from "@/components/ChipMulti";
 import Icon from "@/components/Icon";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
+import { taskStats, projectHealth } from "@/lib/metrics";
 
 const COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#d97706", "#7c3aed", "#0d9488"];
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
@@ -30,11 +29,8 @@ function fileToDataUrl(file) {
 }
 
 export default function ProjectsPage() {
-  return <Guard perm="page.projects"><Projects /></Guard>;
-}
-
-function Projects() {
-  const { can, scopeProjects, users, units, reloadProjects } = useRole();
+  const { can, scopeProjects, users, reloadProjects } = useRole();
+  const canManage = can("projects", "edit");
   const router = useRouter();
   const [projects, setProjects] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -54,8 +50,8 @@ function Projects() {
 
   function statOf(name) {
     const items = tasks.filter((t) => t.project === name);
-    const done = items.filter((t) => t.status === "Completed").length;
-    return { total: items.length, done, pct: items.length ? Math.round((done / items.length) * 100) : 0 };
+    const st = taskStats(items);
+    return { ...st, pct: st.progress };
   }
 
   const shown = useMemo(() => {
@@ -95,7 +91,7 @@ function Projects() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{shown.length} مشروع</span>
         <div style={{ marginInlineStart: "auto" }} />
-        {can("project.create") && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
+        {canManage && <button className="btn primary" onClick={() => setEditing({})}>+ مشروع جديد</button>}
       </div>
 
       <div className="pj-toolbar">
@@ -125,7 +121,7 @@ function Projects() {
             const managers = projManagers(p);
             const clients = projClients(p);
             const members = projMembers(p);
-            const statusColor = p.status === "مكتمل" ? { bg: "#e0f2ec", fg: "#0d9488" } : p.status === "معلّق" ? { bg: "#fdf0dd", fg: "#b45309" } : { bg: "#e7f4ec", fg: "#3f9d6d" };
+            const health = projectHealth(st, p.status);
             const extra = members.length > 3 ? members.length - 3 : 0;
             return (
               <div className="pj-card" key={p.id} onClick={() => router.push(`/projects/${p.id}`)}>
@@ -137,26 +133,32 @@ function Projects() {
                     <div className="pj-name">{p.name}</div>
                     <div className="pj-sub">{p.status || "نشط"} · {st.total} مهمة</div>
                   </div>
-                  <span className="pj-status" style={{ background: statusColor.bg, color: statusColor.fg }}>{p.status || "نشط"}</span>
+                  <span className="pj-status" style={{ background: health.bg, color: health.color }}>{health.label}</span>
                 </div>
 
                 <p className="pj-desc">{p.description || "—"}</p>
+                {(st.overdue.length > 0 || st.pendingReview.length > 0) && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                    {st.overdue.length > 0 && <span className="pill" style={{ fontSize: 11.5, color: "#e0574e" }}>{st.overdue.length} متأخرة</span>}
+                    {st.pendingReview.length > 0 && <span className="pill" style={{ fontSize: 11.5, color: "#7c3aed" }}>{st.pendingReview.length} بانتظار سيم</span>}
+                  </div>
+                )}
 
                 <div className="pj-prog">
-                  <div className="pj-prog-row"><span className="l">الإنجاز</span><span className="v">{st.done}/{st.total} · {st.pct}%</span></div>
+                  <div className="pj-prog-row"><span className="l">الإنجاز</span><span className="v">{st.pct}% · {st.done}/{st.total} معتمدة</span></div>
                   <div className="progress"><span style={{ width: `${st.pct}%`, background: p.color || "#e05a50" }} /></div>
                 </div>
 
                 <div className="pj-split">
                   <div>
-                    <div className="k">مدير المشروع</div>
+                    <div className="k">المسؤول من ڤيوليت</div>
                     <div className="pj-mini-user">
                       <span className="pj-mini-av" style={{ background: colorFor(managers[0]) }}>{(managers[0] || "؟").slice(0, 1)}</span>
                       <b>{managers[0] || "—"}{managers.length > 1 ? ` +${managers.length - 1}` : ""}</b>
                     </div>
                   </div>
                   <div>
-                    <div className="k">العميل</div>
+                    <div className="k">ممثل سيم</div>
                     <b style={{ display: "block", paddingTop: 5 }}>{clients[0] || "—"}{clients.length > 1 ? ` +${clients.length - 1}` : ""}</b>
                   </div>
                 </div>
@@ -169,8 +171,8 @@ function Projects() {
                     <span className="pj-team-label">{extra ? `+${extra} أعضاء` : `${members.length} أعضاء`}</span>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
-                    {can("project.edit") && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={14} /></button>}
-                    {can("project.delete") && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={14} /></button>}
+                    {canManage && <button className="btn sm ghost icon" title="تعديل" onClick={() => setEditing(p)}><Icon name="edit" size={14} /></button>}
+                    {canManage && <button className="btn sm danger icon" title="حذف" onClick={() => del(p)}><Icon name="trash" size={14} /></button>}
                     <button className="pj-open" onClick={() => router.push(`/projects/${p.id}`)}>فتح المشروع ‹</button>
                   </div>
                 </div>
@@ -186,14 +188,12 @@ function Projects() {
           <ProjectForm
             initial={editing.id ? editing : null}
             users={users}
-            units={units}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await projectsStore.update(editing.id, payload);
               else await projectsStore.create(payload);
               setEditing(null);
               await reload();
-              await reloadProjects();
             }}
           />
         </Modal>
@@ -202,13 +202,11 @@ function Projects() {
   );
 }
 
-function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
+function ProjectForm({ initial, users, onSave, onCancel }) {
   const [f, setF] = useState({
-    name: "", description: "", logo: "", color: COLORS[0], status: "نشط", default_workflow: DEFAULT_WORKFLOW,
+    name: "", description: "", scope: "", logo: "", color: COLORS[0], status: "نشط",
     ...(initial || {}),
     managers: projManagers(initial || {}),
-    ops_managers: Array.isArray(initial?.ops_managers) ? initial.ops_managers : [],
-    unit_id: initial?.unit_id || "",
     clients: projClients(initial || {}),
     members: projMembers(initial || {}),
   });
@@ -226,7 +224,7 @@ function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
 
   const managerOptions = users.filter((u) => u.role !== "client");
   const clientOptions = users.filter((u) => u.role === "client");
-  const memberOptions = users.filter((u) => u.role !== "client");
+  const memberOptions = users.filter((u) => u.role === "member" || u.role === "manager");
 
   async function submit(e) {
     e.preventDefault();
@@ -235,7 +233,7 @@ function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
     try {
       // تنظيف الحقول المفردة القديمة
       const { manager, client, ...rest } = f;
-      await onSave({ ...rest, unit_id: rest.unit_id || null });
+      await onSave(rest);
     } finally {
       setSaving(false);
     }
@@ -246,6 +244,7 @@ function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
       <div className="form-grid">
         <label className="field full"><span>اسم المشروع *</span><input value={f.name} onChange={set("name")} required /></label>
         <label className="field full"><span>الوصف</span><textarea rows={2} value={f.description} onChange={set("description")} placeholder="نبذة عن المشروع…" /></label>
+        <label className="field full"><span>نطاق العمل</span><textarea rows={4} value={f.scope || ""} onChange={set("scope")} placeholder={"بند في كل سطر، مثال:\nالهوية البصرية\nإدارة حسابات التواصل الاجتماعي"} /></label>
 
         <label className="field">
           <span>شعار المشروع (رفع صورة أو رابط)</span>
@@ -262,22 +261,12 @@ function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
           </span>
         </div>
 
-        <label className="field full"><span>الوحدة / النطاق التشغيلي</span>
-          <select value={f.unit_id || ""} onChange={set("unit_id")}>
-            <option value="">— بدون وحدة —</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
         <div className="field full">
-          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>مديرو التشغيل المسؤولون عن المشروع (يرون هذا المشروع ويديرونه)</span>
-          <ChipMulti options={managerOptions} value={f.ops_managers} onChange={setArr("ops_managers")} empty="أضِف مستخدمين أولاً" />
-        </div>
-        <div className="field full">
-          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>مدراء المشروع (يمكن اختيار أكثر من واحد)</span>
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>المسؤول من ڤيوليت (يمكن اختيار أكثر من واحد)</span>
           <ChipMulti options={managerOptions} value={f.managers} onChange={setArr("managers")} empty="أضِف مستخدمين أولاً" />
         </div>
         <div className="field full">
-          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>حسابات العملاء (موظفو العميل — أكثر من حساب)</span>
+          <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>ممثل سيم (حسابات سيم — أكثر من حساب)</span>
           <ChipMulti options={clientOptions} value={f.clients} onChange={setArr("clients")} empty="أضِف حسابات عملاء من قسم الفريق" />
         </div>
         <div className="field full">
@@ -285,11 +274,6 @@ function ProjectForm({ initial, users, units = [], onSave, onCancel }) {
           <ChipMulti options={memberOptions} value={f.members} onChange={setArr("members")} empty="أضِف موظفين من قسم الفريق" />
         </div>
 
-        <label className="field full"><span>مسار الاعتماد الافتراضي لمهام المشروع (يمكن تغييره لكل مهمة)</span>
-          <select value={WORKFLOWS[f.default_workflow] ? f.default_workflow : DEFAULT_WORKFLOW} onChange={set("default_workflow")}>
-            {Object.entries(WORKFLOWS).map(([k, w]) => <option key={k} value={k}>{w.ar}</option>)}
-          </select>
-        </label>
         <label className="field"><span>الحالة</span>
           <select value={f.status} onChange={set("status")}>
             <option value="نشط">نشط</option>

@@ -1,28 +1,26 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
-import { usersStore, projectsStore, rolesStore, unitsStore, setActor, setNotifyContext, linkMyAccount } from "@/lib/store";
-import { buildAccess } from "@/lib/permissions.mjs";
-import { supabase, authRequired } from "@/lib/supabase";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { usersStore, projectsStore, appSettings } from "@/lib/store";
+import { useAuth } from "@/components/AuthProvider";
+import { projManagers, projClients, projMembers, userProjects, PROJECTS } from "@/lib/constants";
+import { resolvePerms, atLeast } from "@/lib/permissions";
 
 const RoleCtx = createContext(null);
 
 export function RoleProvider({ children }) {
+  const { isCloud, authed, authEmail } = useAuth();
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [units, setUnits] = useState([]);
   const [viewerId, setViewerId] = useState(null);
   const [ready, setReady] = useState(false);
-  // undefined = جاري التحقق، null = لا جلسة
-  const [session, setSession] = useState(authRequired ? undefined : null);
-
-  useEffect(() => {
-    if (!authRequired) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s || null));
-    return () => sub.subscription.unsubscribe();
-  }, []);
+  const [noAccess, setNoAccess] = useState(false);
+  // قائمة الحسابات المخوّلة بقسم المالية (معرّفات مستخدمين) — يعيّنها مالك النظام
+  const [financeUsers, setFinanceUsers] = useState([]);   // اطلاع
+  const [financeEditors, setFinanceEditors] = useState([]); // اطلاع وتعديل
+  // مصفوفة الصلاحيات المخصّصة لكل مستخدم (تتجاوز افتراضيات الدور)
+  const [permOverrides, setPermOverrides] = useState({});
+  const boundRef = useRef(false);
 
   const reloadUsers = useCallback(async () => {
     const list = await usersStore.list().catch(() => []);
@@ -36,81 +34,139 @@ export function RoleProvider({ children }) {
     return list;
   }, []);
 
-  // قبل تشغيل ترحيل 002 لا توجد الجداول: تُستخدم الأدوار الافتراضية
-  const reloadAccess = useCallback(async () => {
-    const [r, u] = await Promise.all([rolesStore.list().catch(() => []), unitsStore.list().catch(() => [])]);
-    setRoles(r);
-    setUnits(u);
-  }, []);
-
-  const sessionUid = session?.user?.id || null;
-  useEffect(() => {
-    if (authRequired && !session) {
-      setReady(false);
+  // ربط الهوية المسجّلة (سحابياً) بسجلّ المستخدم عبر البريد الإلكتروني
+  const resolveCloudViewer = useCallback(async (list) => {
+    const email = (authEmail || "").trim().toLowerCase();
+    const matched = list.find((u) => (u.email || "").trim().toLowerCase() === email && email);
+    if (matched && matched.status === "suspended") {
+      // حساب موقوف من قسم الفريق → لا دخول
+      setNoAccess(true);
+      setViewerId(null);
       return;
     }
-    (async () => {
-      let [list] = await Promise.all([reloadUsers(), reloadProjects(), reloadAccess()]);
-      if (authRequired) {
-        // الهوية من حساب الدخول: بالمعرّف، ثم بالبريد عند أول دخول (ويُربط تلقائياً)
-        const uid = session.user.id;
-        const email = (session.user.email || "").toLowerCase();
-        let me = list.find((u) => u.auth_id === uid);
-        if (!me && email) {
-          const linked = await linkMyAccount().catch(() => null);
-          if (linked) {
-            list = await reloadUsers();
-            me = list.find((u) => u.id === linked.id);
-          }
-        }
-        setViewerId(me?.id || null);
-        setReady(true);
+    if (matched) {
+      setNoAccess(false);
+      setViewerId(matched.id);
+      return;
+    }
+    // تمهيد الأدمن الأول: إذا لم يُربط أي بريد بعد، اربط أول مدير بهذا الحساب
+    const anyEmail = list.some((u) => (u.email || "").trim());
+    if (!anyEmail && email && !boundRef.current) {
+      const admin = list.find((u) => u.role === "manager") || list[0];
+      if (admin) {
+        boundRef.current = true;
+        try { await usersStore.update(admin.id, { email }); } catch {}
+        const fresh = await reloadUsers();
+        const nowMatched = fresh.find((u) => u.id === admin.id);
+        setNoAccess(false);
+        setViewerId(nowMatched ? nowMatched.id : admin.id);
         return;
       }
-      let saved = null;
-      try {
-        saved = window.localStorage.getItem("sp_viewer");
-      } catch {}
-      const exists = list.find((u) => u.id === saved);
-      const def = exists ? saved : (list.find((u) => u.role === "manager") || list[0])?.id || null;
-      setViewerId(def);
+    }
+    // مسجّل الدخول لكن بريده غير مضاف كمستخدم → لا صلاحية
+    setNoAccess(true);
+    setViewerId(null);
+  }, [authEmail, reloadUsers]);
+
+  useEffect(() => {
+    (async () => {
+      setReady(false);
+      const [list] = await Promise.all([reloadUsers(), reloadProjects()]);
+      if (isCloud) {
+        if (authed) await resolveCloudViewer(list);
+      } else {
+        let saved = null;
+        try { saved = window.localStorage.getItem("sp_viewer"); } catch {}
+        const exists = list.find((u) => u.id === saved);
+        const def = exists ? saved : (list.find((u) => u.role === "manager") || list[0])?.id || null;
+        setViewerId(def);
+      }
       setReady(true);
     })();
-  }, [reloadUsers, reloadProjects, reloadAccess, sessionUid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reloadUsers, reloadProjects, isCloud, authed, authEmail, resolveCloudViewer]);
+
+  // تحميل قائمة صلاحية المالية (مشتركة سحابياً عبر app_settings)
+  useEffect(() => {
+    appSettings.get("finance_access").then((v) => {
+      setFinanceUsers(Array.isArray(v?.users) ? v.users : []);
+      setFinanceEditors(Array.isArray(v?.editors) ? v.editors : []);
+    }).catch(() => {});
+    appSettings.get("permissions").then((v) => {
+      setPermOverrides(v && typeof v === "object" ? v : {});
+    }).catch(() => {});
+  }, [authEmail, ready]);
+
+  // حفظ تخصيص صلاحيات مستخدم واحد (null = الرجوع لافتراضي الدور)
+  const savePermissions = useCallback(async (userId, value) => {
+    const cur = (await appSettings.get("permissions").catch(() => null)) || {};
+    const next = { ...cur };
+    if (value) next[userId] = value; else delete next[userId];
+    setPermOverrides(next);
+    await appSettings.set("permissions", next);
+    // توافق: صلاحية المالية القديمة لم تعد مصدر الحقيقة لهذا المستخدم
+    return next;
+  }, []);
+
+  // users: صلاحية اطلاع فقط — editors: اطلاع وتعديل (مستقلة عن صلاحية إدارة المشاريع)
+  const saveFinanceUsers = useCallback(async (ids, editors = []) => {
+    const view = Array.isArray(ids) ? ids : [];
+    const edit = Array.isArray(editors) ? editors : [];
+    setFinanceUsers(view);
+    setFinanceEditors(edit);
+    try { await appSettings.set("finance_access", { users: view, editors: edit }); } catch {}
+  }, []);
+
+  // في الوضع السحابي: منع التبديل اليدوي إلا للمدير (لأغراض الدعم)
+  const allowSwitch = !isCloud;
 
   const setViewer = useCallback((id) => {
-    if (authRequired) return; // مع تسجيل الدخول لا يمكن تبديل المستخدم
     setViewerId(id);
     try {
       window.localStorage.setItem("sp_viewer", id);
     } catch {}
   }, []);
 
-  const baseViewer = users.find((u) => u.id === viewerId) || null;
-  // الصلاحيات الفعلية: الدور العام + الدور في كل مشروع + الوحدات التي يديرها
-  const access = useMemo(() => buildAccess(baseViewer, { roles, projects, units }), [baseViewer, roles, projects, units]);
-  const viewer = useMemo(() => (baseViewer ? { ...baseViewer, access } : null), [baseViewer, access]);
-  useEffect(() => setActor(viewer), [viewer]);
-  // لمعرفة من يُبلَّغ (مثلاً كل من يحق له المراجعة في مشروع المهمة)
-  useEffect(() => {
-    setNotifyContext({ users, withAccess: (u) => ({ ...u, access: buildAccess(u, { roles, projects, units }) }) });
-  }, [users, roles, projects, units]);
+  const viewer = users.find((u) => u.id === viewerId) || null;
+  // في السحابة، المستخدم غير المعروف ليس مديراً افتراضياً
+  const role = viewer?.role || (isCloud ? "client" : "manager");
 
-  const signOut = useCallback(async () => {
-    if (authRequired) await supabase.auth.signOut();
-  }, []);
+  // المشاريع المرئية للمستخدم الحالي (null = كل المشاريع)
+  let scopeProjects = null;
+  if (viewer) {
+    if (role === "client") {
+      // مشاريع العميل = ما هو مُدرَج فيها كعميل + المشاريع المُسندة في سجلّه (تدعم التعدد)
+      const fromProjects = projects.filter((p) => projClients(p).includes(viewer.name)).map((p) => p.name);
+      const fromUser = userProjects(viewer);
+      scopeProjects = [...new Set([...fromProjects, ...fromUser])];
+    } else if (role === "member") {
+      const mine = projects
+        .filter((p) => projMembers(p).includes(viewer.name) || projManagers(p).includes(viewer.name))
+        .map((p) => p.name);
+      scopeProjects = mine.length ? mine : null; // غير مُسند لأي مشروع → يرى الكل (توافقية)
+    }
+  }
 
-  const role = viewer?.role || "member";
-  const can = access.can;
-  const canAny = access.canAny;
-  const scopeProjects = access.visibleProjects; // null = كل المشاريع
   const clientProject = role === "client" ? (scopeProjects && scopeProjects[0]) || viewer?.project || null : null;
-  const readOnly = !canAny("task.create") && !canAny("task.edit");
-  const canManage = can("users.manage");
+
+  // الصلاحيات الفعلية (افتراضي الدور + تخصيص الشخص)
+  const legacyFinance = { users: financeUsers, editors: financeEditors };
+  const perms = resolvePerms(viewer || { role }, permOverrides, legacyFinance);
+  const permsOf = useCallback((u) => resolvePerms(u, permOverrides, legacyFinance), [permOverrides, financeUsers, financeEditors]); // eslint-disable-line react-hooks/exhaustive-deps
+  const can = (section, need = "view") => atLeast(perms.sections[section] || "none", need);
+  const ability = (k) => !!perms.abilities[k];
+
+  const readOnly = !can("tasks", "edit");
+  const canManage = role === "manager";
+  const canFinanceEdit = can("finance", "edit");
+  const canFinance = can("finance", "view");
+  // الاعتماد لسيم (العميل) والمدير نيابةً عنها؛ التسليم لفريق ڤيوليت — قابلة للتخصيص لكل شخص
+  const canApprove = ability("approve");
+  const canDeliver = ability("deliver");
+  const canManagePerms = ability("permissions");
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, roles, units, viewer, viewerId, setViewer, reloadUsers, reloadProjects, reloadAccess, role, access, can, canAny, scopeProjects, clientProject, readOnly, canManage, ready, authRequired, session, signOut }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms }}
     >
       {children}
     </RoleCtx.Provider>
@@ -119,9 +175,17 @@ export function RoleProvider({ children }) {
 
 export function useRole() {
   return useContext(RoleCtx) || {
-    users: [], projects: [], roles: [], units: [], viewer: null, role: "member", scopeProjects: [], clientProject: null,
-    access: buildAccess(null), can: () => false, canAny: () => false,
-    readOnly: true, canManage: false, ready: false, authRequired: false, session: null, signOut: async () => {},
-    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], reloadAccess: async () => {},
+    users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null,
+    readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false,
+    perms: { sections: {}, abilities: {} }, permsOf: () => ({ sections: {}, abilities: {} }), can: () => true, ability: () => true, permOverrides: {}, savePermissions: async () => {}, canManagePerms: true,
+    setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},
   };
+}
+
+// أسماء المشاريع المتاحة للمستخدم الحالي — من قاعدة البيانات (مصدر واحد)
+export function useProjectNames() {
+  const { projects, scopeProjects } = useRole();
+  if (scopeProjects) return scopeProjects;
+  const names = (projects || []).map((p) => p.name).filter(Boolean);
+  return names.length ? names : PROJECTS;
 }

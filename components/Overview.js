@@ -9,6 +9,7 @@ import { useRole } from "@/components/RoleProvider";
 import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
 import { actionForStatus } from "@/lib/workflow.mjs";
 import { canSeeMeeting } from "@/lib/permissions.mjs";
+import ManagementPanel from "@/components/ManagementPanel";
 
 const DAY = 86400000;
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -17,7 +18,7 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).g
 // لوحة القيادة العامة (للإدارة) — والرئيسية للعميل
 export default function Overview() {
   const router = useRouter();
-  const { viewer, clientProject, access } = useRole();
+  const { viewer, clientProject, access, can } = useRole();
   const [allTasks, setAllTasks] = useState(null);
   const [allMeetings, setAllMeetings] = useState([]);
 
@@ -190,6 +191,7 @@ export default function Overview() {
           </div>
         </div>
       </div>
+      {can("report.overview") && <ManagementPanel tasks={tasks} meetings={meetings} onChanged={reload} />}
     </div>
   );
 }

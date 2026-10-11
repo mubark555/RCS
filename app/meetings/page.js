@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
 import Guard from "@/components/Guard";
+import useQueryParam, { clearQueryParam } from "@/components/useQueryParam";
 import { canSeeMeeting } from "@/lib/permissions.mjs";
 import { PROJECTS, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf } from "@/lib/constants";
 
@@ -45,6 +46,15 @@ function Meetings() {
     if (!items) return [];
     return items.filter((m) => canSeeMeeting(m, access, viewer));
   }, [items, access, viewer]);
+
+  // رابط الإشعار: /meetings?m=<id> يفتح الاجتماع
+  const mParam = useQueryParam("m");
+  useEffect(() => {
+    if (!mParam || !items) return;
+    const m = scoped.find((x) => x.id === mParam);
+    if (m) setMinutesOf(m);
+    clearQueryParam("m");
+  }, [mParam, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { upcoming, past } = useMemo(() => {
     const now = new Date().toISOString();
@@ -101,7 +111,7 @@ function Meetings() {
             allowNoProject={can("meeting.create")}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
-              if (editing.id) await meetingsStore.update(editing.id, payload);
+              if (editing.id) await meetingsStore.update(editing.id, payload, editing);
               else await meetingsStore.create(payload);
               setEditing(null);
               await reload();

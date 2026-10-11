@@ -9,6 +9,7 @@ import TaskDetail from "@/components/TaskDetail";
 import Modal from "@/components/Modal";
 import TaskForm from "@/components/TaskForm";
 import Icon from "@/components/Icon";
+import useQueryParam, { clearQueryParam } from "@/components/useQueryParam";
 import { ATTENDANCE_TYPES, attendanceOf } from "@/lib/constants";
 import { myAction, isWaitingOnOthers, isAssignee, stageOf } from "@/lib/workflow.mjs";
 import { canSeeTask, canSeeMeeting } from "@/lib/permissions.mjs";
@@ -45,6 +46,16 @@ function MyWork() {
     reload();
     meetingsStore.list().then(setMeetings).catch(() => setMeetings([]));
   }, []);
+
+  // رابط الإشعار: /?task=<id> يفتح المهمة مباشرة (إن كانت ضمن نطاق المستخدم)
+  const taskParam = useQueryParam("task");
+  useEffect(() => {
+    if (!taskParam || !tasks) return;
+    const t = tasks.find((x) => x.id === taskParam);
+    if (t && canSeeTask(t, access, viewer)) setViewing(t);
+    else alert("المهمة غير متاحة لك أو لم تعد موجودة.");
+    clearQueryParam("task");
+  }, [taskParam, tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // كل مهمة تظهر مرة واحدة في أعلى قسم ينطبق عليها
   const g = useMemo(() => {

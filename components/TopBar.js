@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { tasksStore } from "@/lib/store";
 import Icon from "@/components/Icon";
-import { useRole } from "@/components/RoleProvider";
-import { myAction } from "@/lib/workflow.mjs";
+import NotificationBell from "@/components/NotificationBell";
 
 const TITLES = {
   "/": { t: "مهامي", s: "ما المطلوب منك الآن — مرتّب حسب الأولوية" },
@@ -28,18 +26,6 @@ export default function TopBar() {
   const meta = TITLES[key] || TITLES["/"];
 
   const [q, setQ] = useState("");
-  const [alerts, setAlerts] = useState(0);
-  const { viewer } = useRole();
-
-  // الجرس: عدد المهام التي تنتظر إجراءً من المستخدم الحالي
-  useEffect(() => {
-    if (!viewer) return;
-    tasksStore
-      .list()
-      .then((ts) => setAlerts(ts.filter((t) => myAction(t, viewer)).length))
-      .catch(() => {});
-  }, [path, viewer]);
-
   function submit(e) {
     e.preventDefault();
     router.push(`/tasks?q=${encodeURIComponent(q)}`);
@@ -60,14 +46,7 @@ export default function TopBar() {
           onChange={(e) => setQ(e.target.value)}
         />
       </form>
-      <div
-        className="bell"
-        title="مهام تنتظر إجراءً منك"
-        onClick={() => router.push("/")}
-      >
-        <Icon name="bell" size={18} />
-        {alerts > 0 && <span className="cnt">{alerts}</span>}
-      </div>
+      <NotificationBell />
     </div>
   );
 }

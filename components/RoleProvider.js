@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
-import { usersStore, projectsStore, rolesStore, unitsStore, setActor, linkMyAccount } from "@/lib/store";
+import { usersStore, projectsStore, rolesStore, unitsStore, setActor, setNotifyContext, linkMyAccount } from "@/lib/store";
 import { buildAccess } from "@/lib/permissions.mjs";
 import { supabase, authRequired } from "@/lib/supabase";
 
@@ -91,6 +91,10 @@ export function RoleProvider({ children }) {
   const access = useMemo(() => buildAccess(baseViewer, { roles, projects, units }), [baseViewer, roles, projects, units]);
   const viewer = useMemo(() => (baseViewer ? { ...baseViewer, access } : null), [baseViewer, access]);
   useEffect(() => setActor(viewer), [viewer]);
+  // لمعرفة من يُبلَّغ (مثلاً كل من يحق له المراجعة في مشروع المهمة)
+  useEffect(() => {
+    setNotifyContext({ users, withAccess: (u) => ({ ...u, access: buildAccess(u, { roles, projects, units }) }) });
+  }, [users, roles, projects, units]);
 
   const signOut = useCallback(async () => {
     if (authRequired) await supabase.auth.signOut();

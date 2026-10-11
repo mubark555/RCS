@@ -7,6 +7,7 @@ import "./globals.css";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { RoleProvider } from "@/components/RoleProvider";
 import Sidebar from "@/components/Sidebar";
+import AuthGate from "@/components/AuthGate";
 import TopBar from "@/components/TopBar";
 
 export const metadata = {
@@ -21,13 +22,15 @@ export default function RootLayout({ children }) {
       <body>
         <SettingsProvider>
           <RoleProvider>
-            <div className="app">
-              <Sidebar />
-              <div className="main">
-                <TopBar />
-                <div className="content">{children}</div>
+            <AuthGate>
+              <div className="app">
+                <Sidebar />
+                <div className="main">
+                  <TopBar />
+                  <div className="content">{children}</div>
+                </div>
               </div>
-            </div>
+            </AuthGate>
           </RoleProvider>
         </SettingsProvider>
       </body>

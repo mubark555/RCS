@@ -189,9 +189,10 @@ export default function ProjectPage() {
         <TaskDetail
           task={viewingTask}
           onClose={() => setViewingTask(null)}
-          onUpdate={async (tid, patch) => { await tasksStore.update(tid, patch); await loadAll(); }}
+          onUpdate={async (tid, patch, prev) => { await tasksStore.update(tid, patch, prev); await loadAll(); }}
+          onChanged={loadAll}
           onEdit={() => setViewingTask(null)}
-          onDelete={async (t) => { await tasksStore.remove(t.id); setViewingTask(null); await loadAll(); }}
+          onDelete={async (t) => { if (!confirm(`حذف المهمة؟\n\n${t.task}`)) return; await tasksStore.remove(t.id, t); setViewingTask(null); await loadAll(); }}
         />
       )}
       {minutesOf && <MinutesModal meeting={minutesOf} readOnly={readOnly} onClose={() => setMinutesOf(null)} onUpdated={loadAll} onEdit={() => setMinutesOf(null)} />}

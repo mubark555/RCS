@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { tasksStore } from "@/lib/store";
 import Icon from "@/components/Icon";
+import { useRole } from "@/components/RoleProvider";
+import { myAction } from "@/lib/workflow.mjs";
 
 const TITLES = {
-  "/": { t: "الرئيسية", s: "لوحة القيادة — أهم ما يجب متابعته هذا الأسبوع" },
+  "/": { t: "مهامي", s: "ما المطلوب منك الآن — مرتّب حسب الأولوية" },
+  "/overview": { t: "لوحة القيادة", s: "أهم ما يجب متابعته هذا الأسبوع" },
+  "/audit": { t: "سجل الإجراءات", s: "من نفّذ كل إجراء ومتى" },
+  "/settings": { t: "تخصيص النظام", s: "هوية النظام وألوانه" },
   "/tasks": { t: "المهام", s: "متابعة وتحديث مهام جميع المشاريع" },
   "/projects": { t: "المشاريع", s: "إدارة المشاريع وفريق العمل والعملاء" },
   "/kpis": { t: "الأداء والمستهدفات", s: "متابعة مؤشرات الأداء الرئيسية ومقارنتها بالمستهدفات" },
@@ -23,15 +28,16 @@ export default function TopBar() {
 
   const [q, setQ] = useState("");
   const [alerts, setAlerts] = useState(0);
+  const { viewer } = useRole();
 
+  // الجرس: عدد المهام التي تنتظر إجراءً من المستخدم الحالي
   useEffect(() => {
+    if (!viewer) return;
     tasksStore
       .list()
-      .then((ts) =>
-        setAlerts(ts.filter((t) => t.health === "Delayed" || t.health === "At Risk").length)
-      )
+      .then((ts) => setAlerts(ts.filter((t) => myAction(t, viewer)).length))
       .catch(() => {});
-  }, [path]);
+  }, [path, viewer]);
 
   function submit(e) {
     e.preventDefault();
@@ -55,8 +61,8 @@ export default function TopBar() {
       </form>
       <div
         className="bell"
-        title="مهام تحتاج انتباه"
-        onClick={() => router.push("/tasks")}
+        title="مهام تنتظر إجراءً منك"
+        onClick={() => router.push("/")}
       >
         <Icon name="bell" size={18} />
         {alerts > 0 && <span className="cnt">{alerts}</span>}

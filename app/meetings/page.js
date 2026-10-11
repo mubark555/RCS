@@ -7,11 +7,11 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
-import { PROJECTS } from "@/lib/constants";
+import { PROJECTS, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf } from "@/lib/constants";
 
 const EMPTY = {
-  title: "", project: "", start_at: "", duration: 30, location: "",
-  attendees: [], links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
+  title: "", objective: "", organizer: "", project: "", start_at: "", duration: 30, location: "",
+  attendees: [], attendance: {}, links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
 };
 
 const LINK_TYPES = ["تسجيل", "مستند", "رابط"];
@@ -23,7 +23,7 @@ const STATUS_AR = {
 };
 
 export default function MeetingsPage() {
-  const { readOnly, scopeProjects, users } = useRole();
+  const { readOnly, scopeProjects, users, viewer } = useRole();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
@@ -91,6 +91,7 @@ export default function MeetingsPage() {
           <MeetingForm
             initial={editing.id ? editing : null}
             users={users}
+            viewer={viewer}
             onCancel={() => setEditing(null)}
             onSave={async (payload) => {
               if (editing.id) await meetingsStore.update(editing.id, payload);
@@ -134,8 +135,21 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
           {m.project && <span>{m.project}</span>}
           {m.location && <span>{m.location}</span>}
         </div>
+        {(m.organizer || m.objective) && (
+          <div className="meta" style={{ marginTop: 6 }}>
+            {m.organizer && <span>المنظّم: {m.organizer}</span>}
+            {m.objective && <span>الهدف: {m.objective}</span>}
+          </div>
+        )}
         {attendees.length > 0 && (
-          <div className="meta" style={{ marginTop: 6 }}>الحضور: {attendees.join("، ")}</div>
+          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {Object.keys(ATTENDANCE_TYPES).map((k) => attendees.filter((a) => attendanceOf(m, a) === k).map((a) => (
+              <span key={a} className="pill" title={ATTENDANCE_TYPES[k].desc}
+                style={{ color: ATTENDANCE_TYPES[k].color, borderColor: `${ATTENDANCE_TYPES[k].color}55`, fontWeight: k === "mandatory" ? 800 : 600 }}>
+                {a} · {ATTENDANCE_TYPES[k].ar}
+              </span>
+            )))}
+          </div>
         )}
         {m.agenda && <div style={{ marginTop: 8, fontSize: 13, color: "var(--text-2)" }}>{m.agenda}</div>}
         <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -169,11 +183,13 @@ function iconForLink(l) {
   return "🔗";
 }
 
-function MeetingForm({ initial, users, onSave, onCancel }) {
+function MeetingForm({ initial, users, viewer, onSave, onCancel }) {
   const [f, setF] = useState({
     ...EMPTY,
+    organizer: viewer?.name || "",
     ...(initial || {}),
     attendees: Array.isArray(initial?.attendees) ? initial.attendees : [],
+    attendance: initial?.attendance && typeof initial.attendance === "object" ? initial.attendance : {},
     links: Array.isArray(initial?.links) ? initial.links : [],
   });
   const [saving, setSaving] = useState(false);
@@ -181,6 +197,7 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
 
   const toggleAtt = (name) =>
     setF((s) => ({ ...s, attendees: s.attendees.includes(name) ? s.attendees.filter((x) => x !== name) : [...s.attendees, name] }));
+  const setAttType = (name, type) => setF((s) => ({ ...s, attendance: { ...s.attendance, [name]: type } }));
 
   const addLink = () => setF((s) => ({ ...s, links: [...s.links, { type: "تسجيل", label: "", url: "" }] }));
   const setLink = (i, k, v) => setF((s) => ({ ...s, links: s.links.map((l, j) => (j === i ? { ...l, [k]: v } : l)) }));
@@ -200,6 +217,8 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
         ...f,
         duration: Number(f.duration) || 30,
         links: f.links.filter((l) => l.url),
+        // تصنيف الحضور للمدعوين فقط (الافتراضي: أساسي)
+        attendance: Object.fromEntries(f.attendees.map((a) => [a, ATTENDANCE_TYPES[f.attendance[a]] ? f.attendance[a] : DEFAULT_ATTENDANCE])),
         action_items: ai.filter((a) => a.text && a.text.trim()),
       });
     } finally {
@@ -211,6 +230,13 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
     <form onSubmit={submit}>
       <div className="form-grid">
         <label className="field full"><span>عنوان الاجتماع *</span><input value={f.title} onChange={set("title")} required /></label>
+        <label className="field full"><span>هدف الاجتماع</span><input value={f.objective} onChange={set("objective")} placeholder="ما الذي يجب أن يحققه الاجتماع؟" /></label>
+        <label className="field"><span>المنظّم</span>
+          <select value={f.organizer} onChange={set("organizer")}>
+            <option value="">—</option>
+            {users.filter((u) => u.role !== "client" || u.name === f.organizer).map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+          </select>
+        </label>
         <label className="field">
           <span>المشروع</span>
           <select value={f.project} onChange={set("project")}>
@@ -246,6 +272,23 @@ function MeetingForm({ initial, users, onSave, onCancel }) {
               ))
             )}
           </div>
+          {f.attendees.length > 0 && (
+            <div className="att-types">
+              {f.attendees.map((a) => {
+                const cur = ATTENDANCE_TYPES[f.attendance[a]] ? f.attendance[a] : DEFAULT_ATTENDANCE;
+                return (
+                  <div className="att-type-row" key={a}>
+                    <b>{a}</b>
+                    <div className="seg">
+                      {Object.entries(ATTENDANCE_TYPES).map(([k, t]) => (
+                        <button type="button" key={k} className={cur === k ? "on" : ""} title={t.desc} onClick={() => setAttType(a, k)}>{t.ar}</button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="field full">

@@ -1,5 +1,6 @@
 "use client";
 
+import { WORKFLOWS, DEFAULT_WORKFLOW } from "@/lib/workflow.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { projectsStore, tasksStore } from "@/lib/store";
@@ -196,7 +197,7 @@ export default function ProjectsPage() {
 
 function ProjectForm({ initial, users, onSave, onCancel }) {
   const [f, setF] = useState({
-    name: "", description: "", logo: "", color: COLORS[0], status: "نشط",
+    name: "", description: "", logo: "", color: COLORS[0], status: "نشط", default_workflow: DEFAULT_WORKFLOW,
     ...(initial || {}),
     managers: projManagers(initial || {}),
     clients: projClients(initial || {}),
@@ -265,6 +266,11 @@ function ProjectForm({ initial, users, onSave, onCancel }) {
           <ChipMulti options={memberOptions} value={f.members} onChange={setArr("members")} empty="أضِف موظفين من قسم الفريق" />
         </div>
 
+        <label className="field full"><span>مسار الاعتماد الافتراضي لمهام المشروع (يمكن تغييره لكل مهمة)</span>
+          <select value={WORKFLOWS[f.default_workflow] ? f.default_workflow : DEFAULT_WORKFLOW} onChange={set("default_workflow")}>
+            {Object.entries(WORKFLOWS).map(([k, w]) => <option key={k} value={k}>{w.ar}</option>)}
+          </select>
+        </label>
         <label className="field"><span>الحالة</span>
           <select value={f.status} onChange={set("status")}>
             <option value="نشط">نشط</option>

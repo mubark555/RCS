@@ -8,12 +8,15 @@ import { useSettings } from "@/components/SettingsProvider";
 import Icon from "@/components/Icon";
 
 const ALL_LINKS = [
-  { href: "/", label: "الرئيسية", ico: "home", roles: ["manager", "member", "client"] },
+  { href: "/", label: "مهامي", ico: "home", roles: ["manager", "member"] },
+  { href: "/", label: "الرئيسية", ico: "home", roles: ["client"] },
+  { href: "/overview", label: "لوحة القيادة", ico: "flag", roles: ["manager"] },
   { href: "/tasks", label: "المهام", ico: "tasks", roles: ["manager", "member", "client"] },
   { href: "/projects", label: "المشاريع", ico: "projects", roles: ["manager", "member", "client"] },
   { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
+  { href: "/audit", label: "سجل الإجراءات", ico: "clock", roles: ["manager"] },
   { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
 ];
 
@@ -21,7 +24,7 @@ const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
 export default function Sidebar() {
   const path = usePathname();
-  const { users, viewer, viewerId, setViewer, role } = useRole();
+  const { users, viewer, viewerId, setViewer, role, authRequired, signOut } = useRole();
   const { settings } = useSettings();
   const links = ALL_LINKS.filter((l) => l.roles.includes(role));
 
@@ -42,7 +45,7 @@ export default function Sidebar() {
         {links.map((l) => {
           const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
           return (
-            <Link key={l.href} href={l.href} className={`side-link ${active ? "active" : ""}`}>
+            <Link key={l.href + l.label} href={l.href} className={`side-link ${active ? "active" : ""}`}>
               <span className="ico"><Icon name={l.ico} size={19} /></span>
               <span>{l.label}</span>
             </Link>
@@ -51,8 +54,8 @@ export default function Sidebar() {
       </nav>
 
       <div className="side-foot">
-        {/* تبديل الدور (وضع تجريبي) */}
-        <div className="role-switch">
+        {/* تبديل الدور (وضع تجريبي — يختفي عند تفعيل تسجيل الدخول) */}
+        {!authRequired && <div className="role-switch">
           <div className="rs-label">عرض النظام كـ</div>
           <select value={viewerId || ""} onChange={(e) => setViewer(e.target.value)}>
             {users.map((u) => (
@@ -68,7 +71,7 @@ export default function Sidebar() {
               {viewer.project ? ` · ${viewer.project}` : ""}
             </div>
           )}
-        </div>
+        </div>}
 
         <div className="side-user">
           <span className="av">{(viewer?.name || "ف").slice(0, 1)}</span>
@@ -77,6 +80,7 @@ export default function Sidebar() {
             <small>{viewer?.title || "إدارة مشاريع سيم برايم"}</small>
           </span>
         </div>
+        {authRequired && <button className="btn sm ghost" style={{ width: "100%", marginTop: 8 }} onClick={signOut}>تسجيل الخروج</button>}
         <div className="side-mode">
           <span className="d" style={{ background: isCloud ? "#3f8e7f" : "#e0a23a" }} />
           {isCloud ? "متصل بالسحابة" : "الوضع المحلي (تجريبي)"}

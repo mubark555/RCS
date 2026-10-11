@@ -4,6 +4,9 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { tasksStore, meetingsStore } from "@/lib/store";
+import { useRole } from "@/components/RoleProvider";
+import { ATTENDANCE_TYPES, attendanceOf, projManagers } from "@/lib/constants";
+import { DEFAULT_WORKFLOW, WORKFLOWS, findUserByName } from "@/lib/workflow.mjs";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
 
@@ -75,7 +78,7 @@ export function exportMinutes(m) {
     <div class="kv"><span class="k">المكان</span><span>${esc(m.location || "—")}</span></div>
     <div class="kv"><span class="k">الحالة</span><span>${esc(STATUS_AR[m.status] || m.status || "—")}</span></div>
   </div>
-  ${attendees.length ? `<section><h2>الحضور</h2><div class="chips">${attendees.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}</div></section>` : ""}
+  ${attendees.length ? `<section><h2>الحضور</h2><div class="chips">${attendees.map((a) => `<span class="chip">${esc(a)} · ${esc(ATTENDANCE_TYPES[attendanceOf(m, a)].ar)}</span>`).join("")}</div></section>` : ""}
 
   <section><h2>جدول الأعمال</h2>${bullets(m.agenda)}</section>
   <section><h2>محضر الاجتماع</h2>${bullets(m.minutes)}</section>
@@ -113,6 +116,7 @@ export function exportMinutes(m) {
 }
 
 export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, readOnly }) {
+  const { users, projects } = useRole();
   const [m, setM] = useState(meeting);
   const [busy, setBusy] = useState(false);
   const attendees = Array.isArray(m.attendees) ? m.attendees : [];
@@ -121,12 +125,19 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
   const agenda = toLines(m.agenda);
   const minutes = toLines(m.minutes);
 
+  // القرار يتحول إلى مهمة مرتبطة بالاجتماع وبالمسؤول، وتتبع مسار الاعتماد الافتراضي للمشروع
   async function mkTask(it) {
+    const assignee = findUserByName(it.assignee, users);
+    const project = projects.find((p) => p.name === m.project);
+    const reviewer = findUserByName(projManagers(project)[0], users);
     return tasksStore.create({
       activity: "قرار اجتماع", project: m.project || "", task: it.text,
-      priority: "Medium", status: "Not Started", assigned_to: it.assignee || "",
-      due_date: it.due || null, waiting_on: "", blocker: "", approval_status: "",
+      priority: "Medium", assigned_to: it.assignee || "", assignee_id: assignee?.id || null,
+      due_date: it.due || null, waiting_on: "", blocker: "",
       notes: `مهمة ناتجة عن اجتماع: ${m.title}`, health: "On Track", holder: it.assignee || "",
+      meeting_id: m.id,
+      workflow: WORKFLOWS[project?.default_workflow] ? project.default_workflow : DEFAULT_WORKFLOW,
+      reviewer_id: reviewer && reviewer.id !== assignee?.id ? reviewer.id : null,
     });
   }
 
@@ -169,7 +180,10 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
 
       {attendees.length > 0 && (
         <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {attendees.map((a) => <span key={a} className="pill">{a}</span>)}
+          {attendees.map((a) => {
+            const at = ATTENDANCE_TYPES[attendanceOf(m, a)];
+            return <span key={a} className="pill" style={{ color: at.color, borderColor: `${at.color}55` }}>{a} · {at.ar}</span>;
+          })}
         </div>
       )}
 

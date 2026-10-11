@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
-import { filesStore } from "@/lib/store";
+import { filesStore, eventsStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
+import WorkflowActions from "@/components/WorkflowActions";
+import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
+import { STAGES, STEPS, WORKFLOWS, ACTION_AR, stageOf, stepsOf, workflowOf, waitingOn, myAction } from "@/lib/workflow.mjs";
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
-export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }) {
-  const { users, readOnly } = useRole();
+export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
+  const { users, readOnly, viewer } = useRole();
+  const [events, setEvents] = useState([]);
   const [files, setFiles] = useState([]);
   const [t, setT] = useState(task);
   const [handTo, setHandTo] = useState("");
@@ -25,6 +28,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
     }
     window.addEventListener("keydown", onKey);
     filesStore.list().then((all) => setFiles(all.filter((f) => f.project === task.project))).catch(() => {});
+    eventsStore.forTask(task.id).then(setEvents).catch(() => setEvents([]));
     return () => window.removeEventListener("keydown", onKey);
   }, [task, onClose]);
 
@@ -32,10 +36,24 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
   const handoffs = useMemo(() => (Array.isArray(t.handoffs) ? t.handoffs : []), [t]);
   const links = useMemo(() => (Array.isArray(t.links) ? t.links : []), [t]);
   const holder = t.holder || t.waiting_on || t.assigned_to || "—";
+  const stageKey = stageOf(t);
+  const stage = STAGES[stageKey];
+  const steps = stepsOf(t);
+  const wait = waitingOn(t, users);
+  const mine = myAction(t, viewer);
+  const nameOf = (id) => users.find((u) => u.id === id)?.name;
+  const assignee = nameOf(t.assignee_id) || t.assigned_to || "غير محدد";
+  // مسار المهمة: تنفيذ ثم الخطوات المطلوبة ثم الإغلاق
+  const track = [
+    { key: "exec", label: "التنفيذ", who: assignee, stages: ["not_started", "in_progress", "changes_requested", "on_hold"] },
+    ...steps.map((st) => ({ key: st, label: STEPS[st].ar, who: nameOf(t[STEPS[st].field]) || "الإدارة", stages: [STEPS[st].stage] })),
+    { key: "closed", label: "الإغلاق", who: "", stages: ["closed"] },
+  ];
+  const curIdx = track.findIndex((x) => x.stages.includes(stageKey));
 
   async function persist(patch) {
     setT((s) => ({ ...s, ...patch }));
-    if (onUpdate) await onUpdate(t.id, patch);
+    if (onUpdate) await onUpdate(t.id, patch, t);
   }
 
   async function doHandoff() {
@@ -68,14 +86,37 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
           <h3>{t.task}</h3>
           <div className="drawer-badges">
             <Badge map={PRIORITY_META} value={t.priority} />
-            <Badge map={STATUS_META} value={t.status} />
-            <Badge map={HEALTH_META} value={t.health} />
-            {t.approval_status && <Badge map={APPROVAL_META} value={t.approval_status} />}
+            <span className="badge" style={{ background: `${stage.color}1f`, color: stage.color }}>{stage.ar}</span>
+            {stageKey !== "closed" && <Badge map={HEALTH_META} value={t.health} />}
           </div>
         </div>
 
         <div className="drawer-body">
-          <div className="d-section"><span className="st-ic"><Icon name="arrow" size={15} /></span>سير عمل المهمة</div>
+          <div className="d-section"><span className="st-ic"><Icon name="check" size={15} /></span>مسار الاعتماد — {WORKFLOWS[workflowOf(t)].ar}</div>
+          <div className="wf-track">
+            {track.map((x, i) => (
+              <div key={x.key} className={`wf-step ${i < curIdx ? "done" : i === curIdx ? "cur" : ""}`}>
+                <span className="wf-dot">{i < curIdx ? "✓" : i + 1}</span>
+                <b>{x.label}</b>
+                {x.who && <small>{x.who}</small>}
+              </div>
+            ))}
+          </div>
+          {wait && (
+            <div className="holder-box" style={{ marginTop: 10 }}>
+              <Icon name="pin" size={17} />
+              <span>بانتظار: <b>{wait.who}</b> — {wait.what}</span>
+            </div>
+          )}
+          {stageKey === "changes_requested" && t.review_note && (
+            <div className="detail-block warn" style={{ marginTop: 10 }}>ملاحظات التعديل: {t.review_note}</div>
+          )}
+          {mine && <div className="tc-need" style={{ marginTop: 10 }}>المطلوب منك: <b>{mine.label}</b></div>}
+          <div style={{ marginTop: 10 }}>
+            <WorkflowActions task={t} onDone={async () => { onChanged && (await onChanged()); onClose(); }} />
+          </div>
+
+          <div className="d-section"><span className="st-ic"><Icon name="arrow" size={15} /></span>تحويل يدوي (متابعة غير رسمية)</div>
           <div className="holder-box">
             <Icon name="pin" size={17} />
             <span>حالياً عند: <b>{holder}</b></span>
@@ -112,8 +153,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
 
           <div className="d-section">التفاصيل الأساسية</div>
           <div className="detail-grid">
-            <Field k="المسؤول" v={val(t.assigned_to)} />
-            <Field k="تاريخ الاستحقاق" v={val(t.due_date)} />
+            <Field k="المسؤول" v={assignee} />
+            <Field k="الموعد النهائي" v={val(t.due_date)} />
+            <Field k="تاريخ الإنشاء" v={t.created_at ? new Date(t.created_at).toLocaleDateString("ar-SA-u-ca-gregory") : "—"} />
+            <Field k="أنشأها" v={val(nameOf(t.created_by))} />
             <Field k="بانتظار" v={val(t.waiting_on)} />
             <Field k="النشاط" v={val(t.activity)} />
           </div>
@@ -177,6 +220,25 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
                   {f.category && <span className="pill">{f.category}</span>}
                 </div>
               ))
+            )}
+          </div>
+          <div className="d-section"><span className="st-ic"><Icon name="clock" size={15} /></span>سجل الإجراءات ({events.length})</div>
+          <div className="detail-block">
+            {events.length === 0 ? <span className="muted">لا إجراءات مسجلة بعد.</span> : (
+              <div className="flow">
+                {events.map((e, i) => (
+                  <div className="flow-item" key={e.id || i}>
+                    <span className="flow-dot">{i + 1}</span>
+                    <div className="flow-body">
+                      <b>{e.actor_name || "غير معروف"} — {ACTION_AR[e.action] || e.action}{e.to_stage && e.from_stage !== e.to_stage ? ` ← ${STAGES[e.to_stage]?.ar || e.to_stage}` : ""}</b>
+                      <small>
+                        {e.created_at ? new Date(e.created_at).toLocaleString("ar-SA-u-ca-gregory", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                        {e.note ? ` · ${e.note}` : ""}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

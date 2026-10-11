@@ -8,7 +8,8 @@ import TaskForm from "@/components/TaskForm";
 import TaskDetail from "@/components/TaskDetail";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, PROJECTS } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, STATUSES, PROJECTS } from "@/lib/constants";
+import { STAGES, stageOf, actionForStatus, availableActions } from "@/lib/workflow.mjs";
 
 const AV_COLORS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777"];
 const colorFor = (name) => {
@@ -30,7 +31,7 @@ function isArchived(t) {
 }
 
 export default function TasksPage() {
-  const { readOnly, scopeProjects, projects } = useRole();
+  const { readOnly, scopeProjects, projects, viewer } = useRole();
   const [tasks, setTasks] = useState(null);
   const [view, setView] = useState("board"); // board | list | calendar
   const [q, setQ] = useState("");
@@ -87,17 +88,15 @@ export default function TasksPage() {
   const archived = useMemo(() => visible.filter(isArchived), [visible]);
 
   async function handleSave(payload) {
-    const p = { ...payload };
-    if (p.status === "Completed" && !p.completed_at) p.completed_at = new Date().toISOString();
-    if (editing && editing.id) await tasksStore.update(editing.id, p);
-    else await tasksStore.create(p);
+    if (editing && editing.id) await tasksStore.update(editing.id, payload, editing);
+    else await tasksStore.create(payload);
     setEditing(null);
     await reload();
   }
   async function handleDelete(t) {
     if (!confirm(`حذف المهمة؟\n\n${t.task}`)) return;
     setBusy(true);
-    try { await tasksStore.remove(t.id); await reload(); } finally { setBusy(false); }
+    try { await tasksStore.remove(t.id, t); await reload(); } finally { setBusy(false); }
   }
   async function moveTo(status) {
     const id = dragId.current;
@@ -106,9 +105,23 @@ export default function TasksPage() {
     if (!id) return;
     const t = tasks.find((x) => x.id === id);
     if (!t || t.status === status) return;
-    const patch = { status };
-    if (status === "Completed") patch.completed_at = new Date().toISOString();
-    await tasksStore.update(id, patch);
+    // السحب يُترجم إلى إجراء سير عمل؛ لا يمكن تجاوز المراجعة أو الاعتماد
+    const action = actionForStatus(t, viewer, status);
+    if (!action) {
+      alert("لا يمكنك نقل هذه المهمة إلى هذه الحالة. الحالة تتغير عبر إجراءات سير العمل المتاحة لك في تفاصيل المهمة.");
+      return;
+    }
+    const def = availableActions(t, viewer).find((a) => a.action === action);
+    let note = "";
+    if (def?.needsNote) {
+      note = (prompt(def.notePrompt) || "").trim();
+      if (!note) return;
+    }
+    try {
+      await tasksStore.transition(t, action, note);
+    } catch (e) {
+      alert(e.message);
+    }
     await reload();
   }
   const toggleProj = (p) => setFProjects((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
@@ -169,7 +182,7 @@ export default function TasksPage() {
                 {col.map((t) => (
                   <div key={t.id} className="kb-card" draggable={!readOnly}
                     onDragStart={() => (dragId.current = t.id)} onClick={() => setViewing(t)}>
-                    <div className="kb-badges"><Badge map={PRIORITY_META} value={t.priority} /><Badge map={HEALTH_META} value={t.health} /></div>
+                    <div className="kb-badges"><Badge map={PRIORITY_META} value={t.priority} /><StageBadge t={t} /></div>
                     <div className="kb-title">{t.task}</div>
                     <div className="kb-meta"><span>{t.project}</span>{t.assigned_to && <span>· {t.assigned_to}</span>}</div>
                     {t.due_date && <div className="kb-meta" style={{ marginTop: 3 }}>⏱ {t.due_date}</div>}
@@ -200,7 +213,7 @@ export default function TasksPage() {
                   <small>{t.activity}{t.assigned_to ? ` · ${t.assigned_to}` : ""}</small>
                 </div>
                 <Badge map={PRIORITY_META} value={t.priority} />
-                <Badge map={STATUS_META} value={t.status} />
+                <StageBadge t={t} />
                 {t.due_date && <span className="lt-date">{fmtDay(t.due_date)}</span>}
                 <span className="lt-dot" style={{ background: STATUS_META[t.status]?.color || "#ccc" }} />
               </div>
@@ -243,7 +256,8 @@ export default function TasksPage() {
 
       {viewing && (
         <TaskDetail task={viewing} onClose={() => setViewing(null)}
-          onUpdate={async (id, patch) => { await tasksStore.update(id, patch); await reload(); }}
+          onUpdate={async (id, patch, prev) => { await tasksStore.update(id, patch, prev); await reload(); }}
+          onChanged={reload}
           onEdit={(t) => { setViewing(null); setEditing(t); }}
           onDelete={async (t) => { setViewing(null); await handleDelete(t); }} />
       )}
@@ -254,6 +268,11 @@ export default function TasksPage() {
       )}
     </div>
   );
+}
+
+function StageBadge({ t }) {
+  const st = STAGES[stageOf(t)];
+  return <span className="badge" style={{ background: `${st.color}1f`, color: st.color }}>{st.ar}</span>;
 }
 
 function fmtDay(iso) {

@@ -1,189 +1,169 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { tasksStore, meetingsStore } from "@/lib/store";
-import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
+import Overview from "@/components/Overview";
+import TaskCard, { isOverdue } from "@/components/TaskCard";
+import TaskDetail from "@/components/TaskDetail";
+import Modal from "@/components/Modal";
+import TaskForm from "@/components/TaskForm";
+import Icon from "@/components/Icon";
+import { ATTENDANCE_TYPES, attendanceOf } from "@/lib/constants";
+import { myAction, isWaitingOnOthers, isAssignee, stageOf } from "@/lib/workflow.mjs";
 
-const DAY = 86400000;
-const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+const PRI = { High: 0, Medium: 1, Low: 2 };
+const dayKey = (d) => {
+  const x = new Date(d);
+  return isNaN(x) ? null : new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+};
+const byUrgency = (a, b) =>
+  (a.due_date || "9999").localeCompare(b.due_date || "9999") || (PRI[a.priority] ?? 3) - (PRI[b.priority] ?? 3);
 
-export default function Dashboard() {
-  const router = useRouter();
-  const { viewer, clientProject, scopeProjects } = useRole();
-  const [allTasks, setAllTasks] = useState(null);
-  const [allMeetings, setAllMeetings] = useState([]);
+// الصفحة الرئيسية: العميل يرى متابعة مشروعه، وبقية المستخدمين يرون «مهامي»
+export default function Home() {
+  const { role, ready } = useRole();
+  if (!ready) return <div className="empty">جاري التحميل…</div>;
+  return role === "client" ? <Overview /> : <MyWork />;
+}
+
+function MyWork() {
+  const { viewer } = useRole();
+  const [tasks, setTasks] = useState(null);
+  const [meetings, setMeetings] = useState([]);
+  const [viewing, setViewing] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [showDone, setShowDone] = useState(false);
 
   async function reload() {
-    setAllTasks(await tasksStore.list().catch(() => []));
+    const list = await tasksStore.list().catch(() => []);
+    setTasks(list);
+    setViewing((v) => (v ? list.find((x) => x.id === v.id) || null : null));
   }
   useEffect(() => {
     reload();
-    meetingsStore.list().then(setAllMeetings).catch(() => setAllMeetings([]));
+    meetingsStore.list().then(setMeetings).catch(() => setMeetings([]));
   }, []);
 
-  const tasks = scopeProjects && allTasks ? allTasks.filter((t) => scopeProjects.includes(t.project)) : allTasks;
-  const meetings = scopeProjects ? (allMeetings || []).filter((m) => scopeProjects.includes(m.project)) : allMeetings;
+  // كل مهمة تظهر مرة واحدة في أعلى قسم ينطبق عليها
+  const g = useMemo(() => {
+    const out = { returned: [], overdue: [], approvals: [], today: [], upcoming: [], waiting: [], done: [] };
+    if (!tasks || !viewer) return out;
+    const today = dayKey(new Date());
+    for (const t of tasks) {
+      const a = myAction(t, viewer);
+      if (a) {
+        if (a.kind === "fix") out.returned.push(t);
+        else if (isOverdue(t)) out.overdue.push(t);
+        else if (["review", "approval", "final"].includes(a.kind)) out.approvals.push(t);
+        else if (t.due_date && dayKey(t.due_date) === today) out.today.push(t);
+        else out.upcoming.push(t);
+      } else if (isWaitingOnOthers(t, viewer)) out.waiting.push(t);
+      else if (isAssignee(t, viewer) && stageOf(t) === "closed") out.done.push(t);
+    }
+    for (const k of Object.keys(out)) out[k].sort(byUrgency);
+    out.done.sort((a, b) => String(b.completed_at || b.due_date || "").localeCompare(String(a.completed_at || a.due_date || "")));
+    return out;
+  }, [tasks, viewer]);
 
-  const s = useMemo(() => {
-    if (!tasks) return null;
-    const total = tasks.length;
-    const completed = tasks.filter((t) => t.status === "Completed").length;
-    const pct = total ? Math.round((completed / total) * 100) : 0;
-    const delayed = tasks.filter((t) => t.health === "Delayed").length;
-    const attentionN = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").length;
-
-    const today = startOfDay(new Date());
-    const horizon = today + 14 * DAY;
-    const deadlines = tasks
-      .filter((t) => t.status !== "Completed" && t.due_date)
-      .map((t) => ({ t, due: startOfDay(new Date(t.due_date)) }))
-      .filter((x) => !isNaN(x.due) && x.due <= horizon)
-      .sort((a, b) => a.due - b.due)
-      .slice(0, 7)
-      .map(({ t, due }) => {
-        let st = due < today ? "متأخر" : due === today ? "اليوم" : "قادم";
-        return { t, due, status: st };
-      });
-    const weekCount = tasks.filter((t) => {
-      if (t.status === "Completed" || !t.due_date) return false;
-      const d = startOfDay(new Date(t.due_date));
-      return !isNaN(d) && d >= today && d <= today + 7 * DAY;
-    }).length;
-
-    const attention = tasks.filter((t) => t.health === "Delayed" || t.health === "At Risk").slice(0, 4);
-    return { total, completed, pct, delayed, attentionN, deadlines, weekCount, attention };
-  }, [tasks]);
-
-  const nextMeetings = useMemo(() => {
+  const myMeetings = useMemo(() => {
     const now = new Date().toISOString();
     return (meetings || [])
-      .filter((m) => m.status !== "Cancelled" && m.start_at >= now)
+      .filter((m) => m.status !== "Cancelled" && m.start_at >= now && Array.isArray(m.attendees) && m.attendees.includes(viewer?.name))
       .sort((a, b) => a.start_at.localeCompare(b.start_at))
-      .slice(0, 3);
-  }, [meetings]);
+      .slice(0, 5);
+  }, [meetings, viewer]);
 
-  async function markDone(t) {
-    await tasksStore.update(t.id, { status: "Completed" });
-    await reload();
-  }
+  if (!tasks) return <div className="empty">جاري التحميل…</div>;
+  if (!viewer) return <div className="empty">لا يوجد مستخدم محدد.</div>;
 
-  if (!s) return <div className="empty">جاري التحميل…</div>;
-
-  const DL_COLORS = { "متأخر": ["#fdeceb", "#e0574e"], "اليوم": ["#fbf0de", "#c88a2e"], "قادم": ["#eaf6ef", "#3f9d6d"] };
+  const needAction = g.returned.length + g.overdue.length + g.approvals.length + g.today.length;
+  const SECTIONS = [
+    { key: "returned", title: "أُعيدت إليك للتعديل", color: "#d97706" },
+    { key: "overdue", title: "متأخرة عن موعدها", color: "#dc2626" },
+    { key: "approvals", title: "بانتظار مراجعتك / موافقتك / اعتمادك", color: "#7c3aed" },
+    { key: "today", title: "مستحقة اليوم", color: "#c88a2e" },
+    { key: "upcoming", title: "مهامك القادمة وقيد التنفيذ", color: "#2563eb" },
+    { key: "waiting", title: "سلّمتها وتنتظر الآخرين", color: "#64748b" },
+  ];
 
   return (
     <div>
-      {/* الهيرو */}
       <div className="dash-hero">
-        <span className="hav">{(viewer?.name || "ف").slice(0, 1)}</span>
+        <span className="hav">{viewer.name.slice(0, 1)}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2>مرحباً {viewer?.name || "بفريق ڤيوليت"} 👋</h2>
+          <h2>مرحباً {viewer.name} 👋</h2>
           <p>
-            {clientProject ? `متابعة مشروع ${clientProject} — ` : "لديك "}
-            <b>{s.weekCount} استحقاقات</b> تحتاج المتابعة و<b>{s.delayed} مهام متعثرة</b> هذا الأسبوع
+            {needAction ? <>لديك <b>{needAction} مهام</b> تتطلب إجراءً منك الآن</> : "لا توجد مهام تتطلب إجراءً منك الآن"}
+            {g.upcoming.length ? <> و<b>{g.upcoming.length}</b> قيد التنفيذ</> : null}
           </p>
         </div>
-        <button className="hero-btn" onClick={() => router.push("/tasks")}>عرض مهامي</button>
+        <button className="btn primary" onClick={() => setEditing({})}><Icon name="plus" size={16} /> مهمة جديدة</button>
       </div>
 
-      {/* المؤشرات */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <span className="kpi-ic" style={{ background: "#eaf1fd", color: "#2e77e5" }}><Icon name="tasks" size={24} /></span>
-          <div><div className="num">{s.total}</div><div className="lbl">إجمالي المهام</div></div>
-        </div>
-        <div className="kpi-card">
-          <span className="ring" style={{ background: `conic-gradient(#3f9d6d ${s.pct}%, #ede7da 0)` }}>
-            <span className="inner">{s.pct}%</span>
-          </span>
-          <div><div className="num">{s.pct}%</div><div className="lbl">نسبة الإنجاز</div></div>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-ic" style={{ background: "#fdeceb", color: "#e0574e" }}><Icon name="alert" size={24} /></span>
-          <div><div className="num">{s.attentionN}</div><div className="lbl">تحتاج انتباه</div></div>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-ic" style={{ background: "#fbf0de", color: "#c88a2e" }}><Icon name="clock" size={24} /></span>
-          <div><div className="num">{s.weekCount}</div><div className="lbl">استحقاقات الأسبوع</div></div>
-        </div>
+      <div className="mw-stats">
+        {SECTIONS.slice(0, 4).map((s) => (
+          <a key={s.key} href={`#mw-${s.key}`} className="mw-stat" style={{ "--c": s.color }}>
+            <b>{g[s.key].length}</b><span>{s.title}</span>
+          </a>
+        ))}
       </div>
 
-      <div className="dash-cols">
-        {/* استحقاقات ومحطات */}
-        <div className="card" style={{ borderRadius: 24 }}>
-          <div className="section-title" style={{ justifyContent: "space-between", marginBottom: 4 }}>
-            <span>استحقاقات ومحطات</span>
-            <Link href="/tasks" className="pill">عرض الكل</Link>
-          </div>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 16, paddingInlineStart: 15 }}>هذا الأسبوع · {s.deadlines.length} بند</div>
-          {s.deadlines.length === 0 ? <div className="empty" style={{ padding: "30px 0" }}>لا استحقاقات قريبة</div> :
-            s.deadlines.map(({ t, due, status }) => {
-              const [bg, c] = DL_COLORS[status];
-              return (
-                <div className="dl-item" key={t.id}>
-                  <button className="dl-check" title="وضع علامة مكتمل" onClick={() => markDone(t)} />
-                  <div className="dl-body" onClick={() => router.push("/tasks")} style={{ cursor: "pointer" }}>
-                    <b>{t.task}</b>
-                    <small>{t.project} · {fmtDay(due)}</small>
-                  </div>
-                  <span className="dl-pill" style={{ background: bg, color: c }}>{status}</span>
-                </div>
-              );
-            })}
+      {myMeetings.length > 0 && (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="section-title" style={{ marginTop: 0 }}><Icon name="calendar" size={17} /> اجتماعاتك القادمة</div>
+          {myMeetings.map((m) => {
+            const at = ATTENDANCE_TYPES[attendanceOf(m, viewer.name)];
+            return (
+              <div className="mw-meet" key={m.id}>
+                <span className="badge" style={{ background: `${at.color}1a`, color: at.color }}>{at.ar}</span>
+                <b>{m.title}</b>
+                <small>{new Date(m.start_at).toLocaleString("ar-SA-u-ca-gregory", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{m.project ? ` · ${m.project}` : ""}</small>
+              </div>
+            );
+          })}
         </div>
+      )}
 
-        {/* العمود الجانبي */}
-        <div className="dash-side">
-          <div className="card" style={{ borderRadius: 24 }}>
-            <div className="section-title" style={{ justifyContent: "space-between" }}>
-              <span>مهام تحتاج انتباه</span>
-              <Link href="/tasks" style={{ color: "var(--primary)", fontWeight: 700, fontSize: 13 }}>الكل</Link>
+      {SECTIONS.map((s) =>
+        g[s.key].length === 0 ? null : (
+          <div key={s.key} id={`mw-${s.key}`}>
+            <div className="section-title"><span className="dot" style={{ background: s.color, width: 9, height: 9, borderRadius: 9 }} /> {s.title} <span className="hint">({g[s.key].length})</span></div>
+            <div className="task-cards">
+              {g[s.key].map((t) => <TaskCard key={t.id} task={t} onOpen={setViewing} onChanged={reload} />)}
             </div>
-            {s.attention.length === 0 ? <div className="empty" style={{ padding: "24px 0" }}>لا مهام متعثرة</div> :
-              s.attention.map((t) => {
-                const pm = PRIORITY_META[t.priority] || PRIORITY_META.High;
-                const hm = HEALTH_META[t.health] || HEALTH_META["At Risk"];
-                return (
-                  <div className="att-box" key={t.id}>
-                    <div className="top">
-                      <span className="miniflag" style={{ background: `${pm.color}1e`, color: pm.color }}>{pm.ar}</span>
-                      <span className="miniflag" style={{ background: `${hm.color}1e`, color: hm.color }}>{hm.ar}</span>
-                    </div>
-                    <div className="att-title">{t.task}</div>
-                    <div className="att-sub">{t.project} · {t.assigned_to || "غير مُسند"}</div>
-                  </div>
-                );
-              })}
           </div>
+        )
+      )}
 
-          <div className="card" style={{ borderRadius: 24 }}>
-            <div className="section-title"><span>اجتماعات العملاء القادمة</span></div>
-            {nextMeetings.length === 0 ? <div className="empty" style={{ padding: "24px 0" }}>لا اجتماعات قادمة</div> :
-              nextMeetings.map((m) => {
-                const d = new Date(m.start_at);
-                return (
-                  <div className="mtg-item" key={m.id}>
-                    <div className="date-box"><span className="mo">{MONTHS[d.getMonth()]}</span><span className="dy">{d.getDate()}</span></div>
-                    <div className="mbody">
-                      <b>{m.title}</b>
-                      <small>{d.toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}{m.location ? ` · ${m.location}` : ""}</small>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
+      {SECTIONS.every((s) => g[s.key].length === 0) && (
+        <div className="empty"><div className="big">✓</div>لا توجد مهام مسندة إليك حالياً.</div>
+      )}
+
+      {g.done.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <button className="arch-bar" onClick={() => setShowDone((v) => !v)}>
+            <Icon name="check" size={17} />
+            <span>إنجازاتك المكتملة</span>
+            <span className="arch-count">{g.done.length}</span>
+            <span style={{ marginInlineStart: "auto", transition: ".2s", transform: showDone ? "rotate(90deg)" : "none" }}>‹</span>
+          </button>
+          {showDone && <div className="task-cards" style={{ marginTop: 10 }}>{g.done.map((t) => <TaskCard key={t.id} task={t} onOpen={setViewing} />)}</div>}
         </div>
-      </div>
+      )}
+
+      {viewing && (
+        <TaskDetail task={viewing} onClose={() => setViewing(null)} onChanged={reload}
+          onUpdate={async (id, patch) => { await tasksStore.update(id, patch, viewing); await reload(); }}
+          onEdit={(t) => { setViewing(null); setEditing(t); }}
+          onDelete={async (t) => { if (!confirm(`حذف المهمة؟\n\n${t.task}`)) return; setViewing(null); await tasksStore.remove(t.id, t); await reload(); }} />
+      )}
+      {editing && (
+        <Modal title={editing.id ? "تعديل المهمة" : "مهمة جديدة"} onClose={() => setEditing(null)}>
+          <TaskForm initial={editing.id ? editing : null} onCancel={() => setEditing(null)}
+            onSave={async (p) => { if (editing.id) await tasksStore.update(editing.id, p, editing); else await tasksStore.create(p); setEditing(null); await reload(); }} />
+        </Modal>
+      )}
     </div>
   );
-}
-
-function fmtDay(ts) {
-  const d = new Date(ts);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }

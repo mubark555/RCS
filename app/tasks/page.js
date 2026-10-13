@@ -8,6 +8,7 @@ import TaskForm from "@/components/TaskForm";
 import TaskDetail from "@/components/TaskDetail";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
+import { dragRule } from "@/lib/mywork.mjs";
 import ReviewDialog from "@/components/ReviewDialog";
 import { STATUS_META, PRIORITY_META, HEALTH_META, STATUSES, normalizeChain, chainProgress, chainHolder, isDone, isOverdue, taskProgress } from "@/lib/constants";
 import { ensureDeliverable } from "@/lib/workflow";
@@ -66,7 +67,7 @@ function isArchived(t) {
 }
 
 export default function TasksPage() {
-  const { readOnly, scopeProjects, projects, users, canApprove, canDeliver } = useRole();
+  const { readOnly, scopeProjects, projects, users, canDeliver, canManage, viewer, taskVisible, decisionBlockFor } = useRole();
   const [quick, setQuick] = useState(""); // late | hold | review
   const [dialog, setDialog] = useState(null); // { task, mode }
   const [tasks, setTasks] = useState(null);
@@ -110,7 +111,7 @@ export default function TasksPage() {
   const visible = useMemo(() => {
     if (!tasks) return [];
     return tasks.filter((t) => {
-      if (scopeProjects && !scopeProjects.includes(t.project)) return false;
+      if (!taskVisible(t)) return false;
       if (fProjects.length && !fProjects.includes(t.project)) return false;
       if (fAssignee && (t.assigned_to || "").trim() !== fAssignee) return false;
       if (quick === "late" && !isOverdue(t)) return false;
@@ -122,7 +123,7 @@ export default function TasksPage() {
       }
       return true;
     });
-  }, [tasks, q, fProjects, fAssignee, scopeProjects, quick]);
+  }, [tasks, q, fProjects, fAssignee, scopeProjects, quick, taskVisible]);
 
   const active = useMemo(() => visible.filter((t) => !isArchived(t)), [visible]);
   const archived = useMemo(() => visible.filter(isArchived), [visible]);
@@ -147,19 +148,29 @@ export default function TasksPage() {
     if (!id) return;
     const t = tasks.find((x) => x.id === id);
     if (!t || t.status === status) return;
-    // دورة العمل: الإرسال للمراجعة والاعتماد وطلب التعديل عبر نافذة القرار (تُسجَّل باسم المنفّذ وتاريخه)
-    if (status === "Pending Review") {
-      if (!canDeliver) return;
-      setDialog({ task: t, mode: "submit" });
-      return;
+    // دورة العمل: السحب لا يتجاوز المراجعة — الإرسال والاعتماد وطلب التعديل عبر نافذة القرار،
+    // وإعادة فتح المعتمد للمدير فقط، وسحب التسليم يُسجَّل في سجل القرارات.
+    const rule = dragRule(t, status, { canDeliver, decideBlock: decisionBlockFor(t), isManager: canManage });
+    if (rule.kind === "deny") { alert(rule.msg); return; }
+    if (rule.kind === "dialog") { setDialog({ task: t, mode: rule.mode }); return; }
+    const reviews = Array.isArray(t.reviews) ? t.reviews : [];
+    const at = new Date().toISOString();
+    if (rule.kind === "reopen") {
+      const note = (prompt("سبب إعادة فتح المهمة المعتمدة:") || "").trim();
+      if (!note) return;
+      await tasksStore.update(id, {
+        status, approval_status: "", completed_at: null, health: "On Track", progress: status === "Not Started" ? 0 : t.progress,
+        reviews: [...reviews, { decision: "reopened", by: viewer?.name || "", at, note }],
+      }, { action: "update", entity: "تسليم" });
+    } else if (rule.kind === "withdraw") {
+      if (!confirm("سحب التسليم من المراجعة وإعادته للتنفيذ؟")) return;
+      await tasksStore.update(id, {
+        status, holder: t.assigned_to || "", waiting_on: "",
+        reviews: [...reviews, { decision: "withdrawn", by: viewer?.name || "", at, note: "" }],
+      });
+    } else if (rule.kind === "direct") {
+      await tasksStore.update(id, { status });
     }
-    if (status === "Approved" || status === "Revision Needed") {
-      if (!canApprove) { alert("الاعتماد وطلب التعديل من صلاحية سيم فقط."); return; }
-      if (t.status !== "Pending Review") { alert("يجب أن تكون المهمة «بانتظار مراجعة سيم» أولاً."); return; }
-      setDialog({ task: t, mode: status === "Approved" ? "approve" : "revision" });
-      return;
-    }
-    await tasksStore.update(id, { status });
     await reload();
   }
   const toggleProj = (p) => setFProjects((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));

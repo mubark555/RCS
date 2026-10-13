@@ -21,7 +21,9 @@ function writeAlerted(obj) {
 
 export default function DeadlineAlerts() {
   const { pushToast, reload: reloadNotifs } = useNotifications();
-  const { role, canFinance, canApprove, scopeProjects, ready, viewer } = useRole();
+  const { role, canFinance, canApprove, scopeProjects, ready, viewer, decisionBlockFor } = useRole();
+  const blockRef = useRef(decisionBlockFor);
+  blockRef.current = decisionBlockFor;
   const ran = useRef(false);
   // scopeProjects مصفوفة جديدة في كل رسم — نعتمد على مفتاح نصّي ثابت حتى لا يُعاد ضبط المؤقّت باستمرار
   const scopeKey = scopeProjects ? scopeProjects.join("|") : "*";
@@ -57,7 +59,7 @@ export default function DeadlineAlerts() {
         const me = meName;
         // دورة الاعتماد: طلبات المراجعة (لسيم) وقرارات الاعتماد (لڤيوليت)
         (tasks || []).filter((t) => inScope(t.project)).forEach((t) => {
-          if (canApprove && t.status === "Pending Review") {
+          if (canApprove && t.status === "Pending Review" && !blockRef.current(t)) {
             push(`review:${t.id}:${t.ready_at || ""}`, "info", `بانتظار اعتمادك: ${t.task}`);
           }
           if (!isClient && t.reviewed_at && (!me || t.assigned_to === me || t.ready_by === me || role === "manager")) {

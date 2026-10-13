@@ -1,5 +1,6 @@
 "use client";
 
+import { postNotify } from "@/lib/notifyClient";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { onDataChange, notificationsStore, activityStore, appSettings } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
@@ -214,11 +215,7 @@ export function NotificationsProvider({ children }) {
     const to = [...set].filter((e) => e.includes("@"));
     if (!to.length) return;
     try {
-      await fetch("/api/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject, html: buildEmailHtml(subject, body, systemUrlFrom(p) + "/approvals"), fromName: (p.senderName || "").trim() || undefined }),
-      });
+      await postNotify({ to, subject, html: buildEmailHtml(subject, body, systemUrlFrom(p) + "/approvals"), fromName: (p.senderName || "").trim() || undefined });
     } catch {}
   }, []);
 
@@ -258,11 +255,7 @@ export function NotificationsProvider({ children }) {
     const bodyText = renderTemplate(nx.body, evt);
     const html = buildEmailHtml(subject, bodyText, systemUrlFrom(p));
     try {
-      await fetch("/api/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject, html, fromName: (p.senderName || "").trim() || undefined }),
-      });
+      await postNotify({ to, subject, html, fromName: (p.senderName || "").trim() || undefined });
     } catch {}
   }, []);
 
@@ -292,11 +285,7 @@ export function NotificationsProvider({ children }) {
     const list = [...new Set((to || []).map((e) => String(e || "").trim()).filter((e) => e.includes("@")))];
     if (!list.length) return { ok: false, error: "لا يوجد بريد إلكتروني للمستقبلين." };
     try {
-      const r = await fetch("/api/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: list, subject, html: html || buildEmailHtml(subject, body || "", systemUrlFrom(p) + path), fromName: (p.senderName || "").trim() || undefined }),
-      });
+      const r = await postNotify({ to: list, subject, html: html || buildEmailHtml(subject, body || "", systemUrlFrom(p) + path), fromName: (p.senderName || "").trim() || undefined });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) return { ok: false, error: data?.error || "فشل الإرسال." };
       return { ok: true, count: list.length };

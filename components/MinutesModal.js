@@ -7,7 +7,7 @@ import { STATUS_META } from "@/lib/constants";
 import { tasksStore, meetingsStore } from "@/lib/store";
 import { brandHeaderHtml, currentBrand, brandTitle } from "@/components/SettingsProvider";
 
-import { parseAttendees, presentOf, MEETING_STATUS, isLocked } from "@/lib/meetings";
+import { parseAttendees, presentOf, MEETING_STATUS, isLocked, ATTENDANCE_TYPES, attendanceOf } from "@/lib/meetings";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Approved: "معتمد", Cancelled: "ملغى" };
 
@@ -80,7 +80,7 @@ export function minutesDocHtml(m) {
     ${m.approved_at ? `<div class="kv"><span class="k">اعتمده</span><span>${esc(m.approved_by || "—")} · ${esc(fmtDate(m.approved_at))}</span></div>` : ""}
     ${m.ended_at ? `<div class="kv"><span class="k">انتهى</span><span>${esc(fmtDate(m.ended_at))}</span></div>` : ""}
   </div>
-  ${attendees.length ? `<section><h2>الحضور</h2><div class="chips">${attendees.map((a) => `<span class="chip">${esc(a)}</span>`).join("")}</div></section>` : ""}
+  ${attendees.length ? `<section><h2>الحضور</h2><div class="chips">${attendees.map((a) => `<span class="chip">${esc(a)} · ${esc(ATTENDANCE_TYPES[attendanceOf(m, a)].ar)}</span>`).join("")}</div></section>` : ""}
 
   <section><h2>جدول الأعمال</h2>${bullets(m.agenda)}</section>
   <section><h2>محضر الاجتماع</h2>${bullets(m.minutes)}</section>
@@ -211,7 +211,10 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
 
       {attendees.length > 0 && (
         <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {attendees.map((a) => <span key={a} className="pill">{a}</span>)}
+          {attendees.map((a) => {
+            const at = ATTENDANCE_TYPES[attendanceOf(m, a)];
+            return <span key={a} className="pill" style={{ color: at.color, borderColor: `${at.color}55` }}>{a} · {at.ar}</span>;
+          })}
           {absent.map((a) => <span key={a} className="pill" style={{ opacity: 0.55, textDecoration: "line-through" }} title="لم يحضر">{a}</span>)}
         </div>
       )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { NAME_ALIASES, isMe } from "@/lib/mywork.mjs";
 import { useEffect, useMemo, useState } from "react";
 import { usersStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
@@ -63,28 +64,14 @@ function loadInfo(open) {
 }
 const pct = (open) => Math.max(6, Math.min(100, Math.round((open / 8) * 100)));
 
-// جسر أسماء: المهام المستوردة تستخدم أسماء لاتينية بينما المستخدمون بالعربية
-const NAME_ALIASES = {
-  "عهود": ["ohood"],
-  "لجين": ["lujain"],
-  "وجد": ["wajd"],
-  "أمل": ["amal"],
-  "مبارك": ["mubarak", "mubrak"],
-  "رائد": ["raed"],
-  "أحمد": ["ahmad"],
-  "عاصم": ["asem"],
-  "سامي الشبيلي": ["sami"],
-  "فاطمة": ["fatimah"],
-};
-
 // هل هذه المهمة مسندة لهذا المستخدم؟
-function taskFor(t, name) {
+function taskFor(t, name, user) {
   const a = (t.assigned_to || "").trim().toLowerCase();
   const n = (name || "").trim().toLowerCase();
   if (!a || !n) return false;
   if (a === n || a.includes(n) || n.includes(a)) return true;
   const aliases = NAME_ALIASES[name] || [];
-  return aliases.some((tok) => a.includes(tok));
+  return aliases.some((tok) => a.includes(tok)) || isMe(t.assigned_to, user || name);
 }
 
 export default function TeamPage() {
@@ -118,7 +105,7 @@ export default function TeamPage() {
   const stat = useMemo(() => {
     const map = {};
     (users || []).forEach((u) => {
-      const mine = tasks.filter((t) => taskFor(t, u.name));
+      const mine = tasks.filter((t) => taskFor(t, u.name, u));
       const open = mine.filter((t) => !isDone(t)).length;
       const done = mine.filter((t) => isDone(t)).length;
       const projs = (projects || [])
@@ -519,6 +506,7 @@ function UserForm({ initial, projectNames = [], people = [], onSave, onCancel })
     name: "", role: "member", title: "", email: "", phone: "", department: "", reports_to: "", start_date: "", notes: "", status: "active",
     ...(initial || {}),
     projects: userProjects(initial || {}),
+    aliasesText: Array.isArray(initial?.aliases) ? initial.aliases.join("، ") : "",
   });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -532,7 +520,9 @@ function UserForm({ initial, projectNames = [], people = [], onSave, onCancel })
     try {
       const isClient = f.role === "client";
       const projects = isClient ? f.projects : [];
-      await onSave({ ...f, projects, project: isClient ? (projects[0] || "") : "" });
+      const { aliasesText, ...rest } = f;
+      const aliases = String(aliasesText || "").split(/[,،\n]/).map((x) => x.trim()).filter(Boolean);
+      await onSave({ ...rest, aliases, projects, project: isClient ? (projects[0] || "") : "" });
     } finally {
       setSaving(false);
     }
@@ -567,6 +557,10 @@ function UserForm({ initial, projectNames = [], people = [], onSave, onCancel })
           <span>القسم / الفريق</span>
           <input value={f.department || ""} onChange={set("department")} placeholder="مثال: التسويق، التطوير" list="dept-list" />
           <datalist id="dept-list">{["الإدارة", "إدارة المشاريع", "التسويق", "المحتوى", "التصميم", "التطوير (IT)", "المالية"].map((d) => <option key={d} value={d} />)}</datalist>
+        </label>
+        <label className="field full">
+          <span>أسماء بديلة (كما تظهر في المهام القديمة، مفصولة بفاصلة)</span>
+          <input value={f.aliasesText} onChange={set("aliasesText")} placeholder="مثال: Ohood، Ohood (IT)" />
         </label>
         <label className="field">
           <span>المسؤول المباشر</span>

@@ -11,7 +11,7 @@ const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "ف�
 
 export default function ArchivePage() {
   const projectNames = useProjectNames();
-  const { can, clientProject, canFinance } = useRole();
+  const { can, clientProject, canFinance, scopeProjects } = useRole();
   const readOnly = !can("archive", "edit");
   const [files, setFiles] = useState(null);
   const [fProject, setFProject] = useState("");
@@ -30,14 +30,15 @@ export default function ArchivePage() {
   const filtered = useMemo(() => {
     if (!files) return [];
     return files.filter((f) => {
-      if (clientProject && f.project !== clientProject) return false;
+      // ملفات المشاريع خارج نطاق المستخدم لا تظهر (الملفات بلا مشروع للنطاق الكامل فقط)
+      if (scopeProjects && !scopeProjects.includes(f.project)) return false;
       if (!canFinance && isFinanceFile(f)) return false;
       if (fProject && f.project !== fProject) return false;
       if (fCat && f.category !== fCat) return false;
       if (q && !`${f.name} ${f.note}`.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [files, fProject, fCat, q, clientProject, canFinance]);
+  }, [files, fProject, fCat, q, scopeProjects, canFinance]);
 
   async function open(rec) {
     setBusyId(rec.id);

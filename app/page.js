@@ -8,6 +8,7 @@ import Icon from "@/components/Icon";
 import TaskDetail from "@/components/TaskDetail";
 import ReviewDialog from "@/components/ReviewDialog";
 import StatReport from "@/components/StatReport";
+import MyWorkPanel from "@/components/MyWorkPanel";
 import { useRole } from "@/components/RoleProvider";
 import { CURRENCY, projManagers, isPublicKpi, STATUS_META, isDone, taskProgress } from "@/lib/constants";
 import {
@@ -34,7 +35,7 @@ function greetWord() {
 // الرئيسية = التقرير الشامل: كل المؤشرات في شاشة واحدة بدون نزول
 export default function Dashboard() {
   const router = useRouter();
-  const { viewer, role, clientProject, scopeProjects, canApprove, canDeliver, canFinance, can } = useRole();
+  const { viewer, role, clientProject, scopeProjects, canApprove, canDeliver, canFinance, can, taskVisible, decisionBlockFor } = useRole();
   const [data, setData] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -62,7 +63,7 @@ export default function Dashboard() {
 
   const s = useMemo(() => {
     if (!data) return null;
-    const tasks = data.tasks.filter((t) => inScope(t.project));
+    const tasks = data.tasks.filter((t) => taskVisible(t));
     const projects = data.projects.filter((p) => inScope(p.name));
     const kpis = data.kpis.filter((k) => k.project && inScope(k.project) && (role !== "client" || isPublicKpi(k)));
     const all = taskStats(tasks);
@@ -116,7 +117,7 @@ export default function Dashboard() {
   }, [data, scopeProjects, role, canFinance]);
 
   function quickAction(t) {
-    if (t.status === "Pending Review") { if (canApprove) setDialog({ task: t, mode: "approve" }); else router.push("/approvals"); return; }
+    if (t.status === "Pending Review") { if (canApprove && !decisionBlockFor(t)) setDialog({ task: t, mode: "approve" }); else router.push("/approvals"); return; }
     if (canDeliver) setDialog({ task: t, mode: "submit" });
   }
 
@@ -133,6 +134,11 @@ export default function Dashboard() {
   ];
 
   return (
+    <>
+    {/* المطلوب منك الآن — قبل التقرير الشامل */}
+    <MyWorkPanel tasks={s.tasks} onOpen={setViewing}
+      onDecide={(t, mode) => setDialog({ task: t, mode })}
+      onSubmit={(t) => setDialog({ task: t, mode: "submit" })} />
     <div className="cc">
       {/* الشريط العلوي: الترحيب + الملخّص + التاريخ */}
       <div className="cc-hero">
@@ -352,6 +358,7 @@ export default function Dashboard() {
       )}
       {dialog && <ReviewDialog task={dialog.task} mode={dialog.mode} onClose={() => setDialog(null)} onDone={reload} />}
     </div>
+    </>
   );
 }
 

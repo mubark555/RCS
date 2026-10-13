@@ -8,6 +8,7 @@ import { filesStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import ReviewDialog from "@/components/ReviewDialog";
 import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
+import { stepBlock } from "@/lib/mywork.mjs";
 import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile } from "@/lib/constants";
 
 const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
@@ -24,7 +25,7 @@ const colorFor = (name) => {
 };
 
 export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
-  const { users, readOnly, canApprove, canDeliver, projects, viewer, canManage } = useRole();
+  const { users, readOnly, canDeliver, projects, viewer, canManage, perms, decisionBlockFor } = useRole();
   const { chains } = useProjectChains();
   const [files, setFiles] = useState([]);
   const [taskFiles, setTaskFiles] = useState([]);
@@ -74,9 +75,20 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   }
 
   // تنفيذ إجراء على خطوة السلسلة (إنجاز عمل / اعتماد / رفض)
+  // الرفض يتطلب سبباً، وكل إجراء يُسجَّل في سجل القرارات
   async function actStep(i, decision) {
-    const next = chain.map((s, j) => (j === i ? { ...s, status: decision, at: new Date().toISOString(), by: viewer?.name || "" } : s));
-    const patch = { chain: next };
+    const block = stepBlock(t, chain[i], viewer, perms.abilities, canManage);
+    if (block) { alert(block); return; }
+    let note = "";
+    if (decision === "rejected") {
+      note = (prompt("سبب الرفض (يصل لصاحب المهمة):") || "").trim();
+      if (!note) return;
+    }
+    const at = new Date().toISOString();
+    const next = chain.map((s, j) => (j === i ? { ...s, status: decision, at, by: viewer?.name || "", note } : s));
+    const reviews = Array.isArray(t.reviews) ? t.reviews : [];
+    const label = [chain[i]?.person, chain[i]?.action].filter(Boolean).join(" — ");
+    const patch = { chain: next, reviews: [...reviews, { decision: `step_${decision}`, by: viewer?.name || "", at, note: [label, note].filter(Boolean).join(": ") }] };
     const p = chainProgress(next);
     if (p && p.complete) {
       patch.approval_status = "Approved";
@@ -131,7 +143,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const reviews = Array.isArray(t.reviews) ? t.reviews : [];
   const lastRevision = [...reviews].reverse().find((r) => r.decision === "revision");
   const canSubmitNow = canDeliver && ["Not Started", "In Progress", "Revision Needed"].includes(t.status);
-  const canDecideNow = canApprove && t.status === "Pending Review";
+  const decideBlock = t.status === "Pending Review" ? decisionBlockFor(t) : null;
+  const canDecideNow = t.status === "Pending Review" && !decideBlock;
   const flowIdx = FLOW.indexOf(t.status === "Revision Needed" ? "In Progress" : t.status);
 
   return (
@@ -212,6 +225,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
             </div>
           )}
 
+          {decideBlock && perms.abilities.approve && (
+            <div className="rv-behalf" style={{ marginTop: 10 }}>{decideBlock}</div>
+          )}
+
           {reviews.length > 0 && (
             <details className="wf-history">
               <summary>سجل التسليم والاعتماد ({reviews.length})</summary>
@@ -281,7 +298,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                         <small className="cv-time">{new Date(s.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
                       )}
                       {s.by && (done || rejected) && s.by !== s.person && <small className="cv-time">بواسطة {s.by}</small>}
-                      {!readOnly && isActive && !done && !rejected && (canManage || viewer?.name === s.person) && (
+                      {!readOnly && isActive && !done && !rejected && !stepBlock(t, s, viewer, perms.abilities, canManage) && (
                         <div className="cv-actions">
                           {s.type === "approve" ? (
                             <>

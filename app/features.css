@@ -390,7 +390,7 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-char-btn, .amal-mini { touch-action: none; }
 
 /* الشخصية */
-.amal-char { position: relative; width: 168px; height: 182px; --rx: 0deg; --ry: 0deg; perspective: 700px; }
+.amal-char { position: relative; width: 168px; height: 182px; contain: layout style; }
 .amal-char-btn {
   position: absolute; inset: 0; border: 0; background: none; padding: 0; cursor: pointer;
   display: flex; align-items: flex-end; justify-content: center;
@@ -398,9 +398,8 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-body {
   width: 100%; height: 100%; object-fit: contain; object-position: bottom center;
   transform-origin: 50% 100%;
-  transform: rotateX(var(--rx)) rotateY(var(--ry));
-  transition: transform .35s cubic-bezier(.2,.8,.2,1), filter .6s ease;
-  filter: drop-shadow(0 10px 18px rgba(44, 30, 60, .22));
+  will-change: transform;
+  backface-visibility: hidden;
   animation: amal-breathe 4.2s ease-in-out infinite;
   user-select: none; -webkit-user-drag: none;
 }
@@ -431,9 +430,9 @@ th.pm-sticky { background: var(--surface-2); }
 .amal-char.mood-thinking .amal-body { animation: amal-think 1.6s ease-in-out infinite; }
 .amal-char.mood-talk .amal-body { animation: amal-talk .45s ease-in-out infinite; }
 .amal-char.mood-listen .amal-body { animation: amal-breathe 1.6s ease-in-out infinite; }
-.amal-char.mood-sleep .amal-body { filter: grayscale(.35) brightness(.92) drop-shadow(0 6px 10px rgba(44,30,60,.15)); animation: amal-sleep 5s ease-in-out infinite; }
+.amal-char.mood-sleep .amal-body { opacity: .82; animation: amal-sleep 5s ease-in-out infinite; }
 
-@keyframes amal-breathe { 0%, 100% { transform: rotateX(var(--rx)) rotateY(var(--ry)) scale(1, 1); } 50% { transform: rotateX(var(--rx)) rotateY(var(--ry)) scale(1.012, 1.018); } }
+@keyframes amal-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 1.018); } }
 @keyframes amal-wave { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
 @keyframes amal-hop { 0%, 100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-14px) scale(1.02, .99); } 70% { transform: translateY(0) scale(1.01, .98); } }
 @keyframes amal-concern { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-3deg) translateX(-2px); } 60% { transform: rotate(2deg) translateX(2px); } }
@@ -600,9 +599,7 @@ th.pm-sticky { background: var(--surface-2); }
   position: fixed; border-radius: 14px; pointer-events: none;
   box-shadow: 0 0 0 9999px rgba(24, 16, 34, .58), 0 0 0 3px #a78bfa, 0 0 24px 6px rgba(167, 139, 250, .55);
   transition: top .35s ease, left .35s ease, width .35s ease, height .35s ease;
-  animation: amal-glow 1.8s ease-in-out infinite;
 }
-@keyframes amal-glow { 0%, 100% { box-shadow: 0 0 0 9999px rgba(24,16,34,.58), 0 0 0 3px #a78bfa, 0 0 18px 4px rgba(167,139,250,.45); } 50% { box-shadow: 0 0 0 9999px rgba(24,16,34,.58), 0 0 0 3px #c4b5fd, 0 0 30px 8px rgba(167,139,250,.7); } }
 .amal-tcard {
   position: fixed; background: var(--surface); border-radius: 18px; padding: 14px 16px;
   border: 1px solid #e3d6fb; box-shadow: 0 24px 60px rgba(24, 16, 34, .35);

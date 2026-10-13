@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sameName, isOwnWork, decisionBlock, stepBlock, dragRule, myBuckets } from "../lib/mywork.mjs";
+import { sameName, isOwnWork, decisionBlock, stepBlock, dragRule, myBuckets, teamOf } from "../lib/mywork.mjs";
 
 const anwar = { name: "أنور" };
 const T = (o = {}) => ({ id: "t", task: "مهمة", assigned_to: "أنور", status: "In Progress", ...o });
@@ -98,4 +98,16 @@ test("جسر الأسماء الجاهز يعمل دون إعداد", () => {
   assert.ok(isMe("Lujain(PM)", { name: "لجين" }));
   assert.ok(isMe("Mubrak (IT)", { name: "مبارك" }));
   assert.ok(!isMe("Lujain(PM)", { name: "وجد" }));
+});
+
+test("فريق مدير الوحدة: من يتبعه مباشرة وعبر السلسلة، بلا الموقوفين", () => {
+  const users = [
+    { id: "1", name: "حسن مرعي" },
+    { id: "2", name: "أنور", reports_to: "حسن مرعي" },
+    { id: "3", name: "عهود", reports_to: "انور" },
+    { id: "4", name: "لجين", reports_to: "حسن مرعي", status: "suspended" },
+    { id: "5", name: "وجد", reports_to: "مبارك" },
+  ];
+  assert.deepEqual(teamOf(users[0], users).map((u) => u.name), ["أنور", "عهود"]);
+  assert.deepEqual(teamOf(users[4], users), []);
 });

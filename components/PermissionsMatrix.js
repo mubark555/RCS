@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRole } from "@/components/RoleProvider";
 import Icon from "@/components/Icon";
-import { SECTIONS, ABILITIES, LEVELS, ROLE_DEFAULTS, resolvePerms } from "@/lib/permissions";
+import { SECTIONS, ABILITIES, LEVELS, ROLE_DEFAULTS, SCOPES, PRESETS, resolvePerms } from "@/lib/permissions";
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 const LVL_STYLE = {
@@ -19,8 +19,9 @@ function diffFromRole(role, perms) {
   const abilities = {};
   Object.entries(perms.sections).forEach(([k, v]) => { if (base.sections[k] !== v) sections[k] = v; });
   Object.entries(perms.abilities).forEach(([k, v]) => { if (!!base.abilities[k] !== !!v) abilities[k] = v; });
-  if (!Object.keys(sections).length && !Object.keys(abilities).length) return null;
-  return { sections, abilities };
+  const scope = perms.scope && perms.scope !== base.scope ? perms.scope : undefined;
+  if (!Object.keys(sections).length && !Object.keys(abilities).length && !scope) return null;
+  return scope ? { scope, sections, abilities } : { sections, abilities };
 }
 
 // محرّر صلاحيات شخص واحد (كل الأقسام + الصلاحيات الخاصة)
@@ -33,6 +34,7 @@ export function PermissionsEditor({ user, onDone }) {
 
   const setSec = (k, v) => setP((s) => ({ ...s, sections: { ...s.sections, [k]: v } }));
   const setAb = (k, v) => setP((s) => ({ ...s, abilities: { ...s.abilities, [k]: v } }));
+  const applyPreset = (pr) => setP({ scope: pr.perms.scope, sections: { ...pr.perms.sections }, abilities: { ...pr.perms.abilities } });
 
   function applyCopy(id) {
     setCopyFrom(id);
@@ -68,6 +70,33 @@ export function PermissionsEditor({ user, onDone }) {
           </div>
         )}
       </div>
+
+      {canManagePerms && (
+        <>
+          <div className="pm-h">قوالب جاهزة</div>
+          <div className="pm-presets" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {PRESETS.map((pr) => (
+              <button key={pr.key} type="button" className="btn sm ghost" title={pr.desc} onClick={() => applyPreset(pr)}>{pr.ar}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="pm-h">نطاق البيانات</div>
+      <div className="pm-secs">
+        <div className="pm-sec">
+          <span className="pm-sec-n"><Icon name="projects" size={16} /> ما يراه من المشاريع والمهام</span>
+          <div className="seg sm">
+            {SCOPES.map((x) => (
+              <button key={x.key} type="button" disabled={!canManagePerms} title={x.desc} className={p.scope === x.key ? "on" : ""}
+                onClick={() => setP((s) => ({ ...s, scope: x.key }))}>{x.ar}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {p.scope === "own" && (
+        <div className="pm-note"><Icon name="info" size={15} /> يرى المشاريع المُضاف فيها (مديراً أو عضواً أو عميلاً)، ومهام من يتبعونه في «المسؤول المباشر»، وأي مهمة أو اجتماع هو طرف فيه.</div>
+      )}
 
       <div className="pm-h">صلاحيات الأقسام</div>
       <div className="pm-secs">

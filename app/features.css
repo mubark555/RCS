@@ -664,3 +664,6 @@ th.pm-sticky { background: var(--surface-2); }
 .att-type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .att-type-row b { font-size: 13px; color: var(--ink); }
 .att-type-row .seg button { padding: 5px 12px; font-size: 12px; }
+
+/* الترحيب والمؤشرات أعلى الرئيسية (قبل «المطلوب منك الآن») */
+.cc-top { --gap: 14px; display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }

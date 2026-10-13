@@ -135,11 +135,8 @@ export default function Dashboard() {
 
   return (
     <>
-    {/* المطلوب منك الآن — قبل التقرير الشامل */}
-    <MyWorkPanel tasks={s.tasks} onOpen={setViewing}
-      onDecide={(t, mode) => setDialog({ task: t, mode })}
-      onSubmit={(t) => setDialog({ task: t, mode: "submit" })} />
-    <div className="cc">
+    {/* أول ما يظهر: الترحيب + المؤشرات */}
+    <div className="cc-top">
       {/* الشريط العلوي: الترحيب + الملخّص + التاريخ */}
       <div className="cc-hero">
         <span className="cc-av">{(viewer?.name || "س").slice(0, 1)}</span>
@@ -180,7 +177,13 @@ export default function Dashboard() {
             sub={fin.overdueTotal ? <span style={{ color: "#e0574e" }}>{money(fin.overdueTotal)} متأخرة</span> : fin.open[0] ? `الأقرب ${relDays(fin.open[0].days)}` : "لا مستحقات"} />
         )}
       </div>
+    </div>
 
+    {/* المطلوب منك الآن — قبل التقرير الشامل */}
+    <MyWorkPanel tasks={s.tasks} onOpen={setViewing}
+      onDecide={(t, mode) => setDialog({ task: t, mode })}
+      onSubmit={(t) => setDialog({ task: t, mode: "submit" })} />
+    <div className="cc">
       {/* الشبكة الرئيسية: تملأ بقية الشاشة */}
       <div className="cc-grid">
         {/* حالة المشاريع */}

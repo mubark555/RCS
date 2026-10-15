@@ -4,6 +4,7 @@ import { postNotify } from "@/lib/notifyClient";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { onDataChange, notificationsStore, activityStore, appSettings } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
+import { eventRecipients, announceRecipients } from "@/lib/notifyTargets.mjs";
 
 const NotifCtx = createContext(null);
 
@@ -148,13 +149,13 @@ export function NotificationsProvider({ children }) {
   useEffect(() => { projectsRef.current = projects || []; }, [projects]);
   useEffect(() => { viewerRef.current = viewer; }, [viewer]);
 
+  // الجرس يعرض إشعارات المستخدم الحالي فقط
   const reload = useCallback(async () => {
-    const list = await notificationsStore.list().catch(() => []);
-    list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    setItems(list.slice(0, 50));
+    const list = await notificationsStore.listFor(viewerRef.current).catch(() => []);
+    setItems(list);
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); }, [reload, viewer?.id]);
 
   // تحميل إعدادات إشعارات البريد (مع ترحيل الحقل القديم recipients)
   useEffect(() => {
@@ -265,9 +266,9 @@ export function NotificationsProvider({ children }) {
       const tone = (ACTION_AR[evt.action] || {}).tone || "info";
       const title = renderTemplate(prefsRef.current.titleTemplate, evt) || `${ACTION_PHRASE[evt.action] || ""} ${evt.entity}`;
       pushToast(title, tone);
+      // جرس أطراف السجل فقط (المسؤول عن المهمة ومديره…)، لا لكل الموظفين
       try {
-        const rec = await notificationsStore.create({ kind: evt.action, entity: evt.entity, title, body: "", read: false });
-        if (rec) setItems((prev) => [rec, ...prev].slice(0, 50));
+        await notificationsStore.send(eventRecipients(evt, usersRef.current, viewerRef.current), { kind: evt.action, entity: evt.entity, title, body: "", read: false });
       } catch {}
       // توثيق دائم في سجل الأنشطة مع اسم المنفِّذ
       try {
@@ -295,11 +296,11 @@ export function NotificationsProvider({ children }) {
   }, []);
 
   // إعلان حدث خارج جداول البيانات (إجازة، اعتماد محضر…): توست + جرس + سجل الأنشطة + بريد اختياري للفريق
-  const announce = useCallback(async ({ title, tone = "info", entity = "", label = "", action = "update", emailTo = null, emailBody = "", path = "" }) => {
+  // people: أسماء المعنيين بالإعلان؛ audience: "managers" (افتراضي) | "team" | "none"
+  const announce = useCallback(async ({ title, tone = "info", entity = "", label = "", action = "update", emailTo = null, emailBody = "", path = "", people = [], audience = "managers" }) => {
     pushToast(title, tone);
     try {
-      const rec = await notificationsStore.create({ kind: action, entity, title, body: "", read: false });
-      if (rec) setItems((prev) => [rec, ...prev].slice(0, 50));
+      await notificationsStore.send(announceRecipients({ people, audience }, usersRef.current, viewerRef.current), { kind: action, entity, title, body: "", read: false });
     } catch {}
     try { activityStore.log({ actor: viewerRef.current?.name || "", action, entity, label: label || title }); } catch {}
     if (emailTo && prefsRef.current.emailEnabled) sendEmail({ to: emailTo, subject: title, body: emailBody || title, path });

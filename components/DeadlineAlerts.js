@@ -30,6 +30,7 @@ export default function DeadlineAlerts() {
   const scopeRef = useRef(scopeProjects);
   scopeRef.current = scopeProjects;
   const meName = viewer?.name || "";
+  const meId = viewer?.id || "";
 
   useEffect(() => {
     // ننتظر جهوزية الأدوار. ممثل سيم (العميل) يتلقّى تنبيهات الاعتماد فقط
@@ -113,7 +114,8 @@ export default function DeadlineAlerts() {
       // اعرض التوست + سجّل في مركز الإشعارات
       fresh.slice(0, 8).forEach((f) => pushToast(f.message, f.tone));
       for (const f of fresh) {
-        await notificationsStore.create({ kind: "info", entity: "تنبيه", title: f.message, body: "", read: false }).catch(() => {});
+        // تنبيهات محسوبة لهذا المستخدم → تُحفظ له وحده
+        await notificationsStore.send([meId], { kind: "info", entity: "تنبيه", title: f.message, body: "", read: false }).catch(() => {});
       }
       // حدّث مركز الإشعارات (الجرس) ليعكس التنبيهات الجديدة فوراً
       if (reloadNotifs) reloadNotifs().catch(() => {});
@@ -123,7 +125,7 @@ export default function DeadlineAlerts() {
     const t0 = setTimeout(() => { if (!ran.current) { ran.current = true; scan(); } }, 2500);
     const iv = setInterval(scan, 30 * 60 * 1000);
     return () => { cancelled = true; clearTimeout(t0); clearInterval(iv); };
-  }, [ready, role, canFinance, canApprove, scopeKey, meName, pushToast, reloadNotifs]);
+  }, [ready, role, canFinance, canApprove, scopeKey, meName, meId, pushToast, reloadNotifs]);
 
   return null;
 }

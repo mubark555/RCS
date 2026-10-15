@@ -94,7 +94,7 @@ export default function MeetingsPage() {
       await meetingsStore.update(m.id, mail, { action: "update", entity: "" });
       rec = { ...rec, ...mail };
     }
-    announce({ title: `اعتُمد محضر «${m.title}»${result?.ok ? ` وأُرسل لـ ${result.count} من الحضور` : ""}`, tone: "success", entity: "اجتماع", action: "approve" });
+    announce({ title: `اعتُمد محضر «${m.title}»${result?.ok ? ` وأُرسل لـ ${result.count} من الحضور` : ""}`, tone: "success", entity: "اجتماع", action: "approve", people: [...presentOf(m), organizerOf(m)], audience: "none" });
     await reload();
     return result;
   }

@@ -48,9 +48,9 @@ export default function LeavesPage() {
     await reload();
     const t = LEAVE_TYPES[rec.type]?.ar || "إجازة";
     if (autoApprove) {
-      announce({ title: `${rec.person} في ${t} (${range(rec)})`, tone: "info", entity: "إجازة", action: "create", emailTo: teamEmails, emailBody: `للعلم: ${rec.person} في ${t} من ${rec.start} إلى ${rec.end}.${rec.note ? `\nملاحظة: ${rec.note}` : ""}`, path: "/leaves" });
+      announce({ title: `${rec.person} في ${t} (${range(rec)})`, tone: "info", entity: "إجازة", action: "create", people: [rec.person], audience: "team", emailTo: teamEmails, emailBody: `للعلم: ${rec.person} في ${t} من ${rec.start} إلى ${rec.end}.${rec.note ? `\nملاحظة: ${rec.note}` : ""}`, path: "/leaves" });
     } else {
-      announce({ title: `طلب ${t} جديد من ${rec.person}`, tone: "info", entity: "إجازة", action: "create", emailTo: approverEmails, emailBody: `قدّم ${rec.person} طلب ${t} من ${rec.start} إلى ${rec.end} (${leaveDays(rec)} يوم).${rec.note ? `\nالسبب: ${rec.note}` : ""}\n\nافتح قسم «الإجازات» للموافقة أو الرفض.`, path: "/leaves" });
+      announce({ title: `طلب ${t} جديد من ${rec.person}`, tone: "info", entity: "إجازة", action: "create", people: [rec.person], emailTo: approverEmails, emailBody: `قدّم ${rec.person} طلب ${t} من ${rec.start} إلى ${rec.end} (${leaveDays(rec)} يوم).${rec.note ? `\nالسبب: ${rec.note}` : ""}\n\nافتح قسم «الإجازات» للموافقة أو الرفض.`, path: "/leaves" });
     }
   }
 
@@ -62,12 +62,12 @@ export default function LeavesPage() {
     const requester = (users || []).find((u) => u.name === l.person)?.email;
     if (approve) {
       announce({
-        title: `تمت الموافقة: ${l.person} في ${t} (${range(l)})`, tone: "success", entity: "إجازة", action: "approve",
+        title: `تمت الموافقة: ${l.person} في ${t} (${range(l)})`, tone: "success", entity: "إجازة", action: "approve", people: [l.person], audience: "team",
         emailTo: [...teamEmails, requester].filter(Boolean),
         emailBody: `تمت الموافقة على ${t} لـ ${l.person} من ${l.start} إلى ${l.end}.\nنرجو مراعاة ذلك في توزيع المهام والمتابعة.${note ? `\nملاحظة: ${note}` : ""}`, path: "/leaves",
       });
     } else {
-      announce({ title: `رُفض طلب ${t} لـ ${l.person}`, tone: "danger", entity: "إجازة", action: "revision", emailTo: requester ? [requester] : null, emailBody: `نعتذر، لم تتم الموافقة على طلب ${t} من ${l.start} إلى ${l.end}.${note ? `\nالسبب: ${note}` : ""}`, path: "/leaves" });
+      announce({ title: `رُفض طلب ${t} لـ ${l.person}`, tone: "danger", entity: "إجازة", action: "revision", people: [l.person], audience: "none", emailTo: requester ? [requester] : null, emailBody: `نعتذر، لم تتم الموافقة على طلب ${t} من ${l.start} إلى ${l.end}.${note ? `\nالسبب: ${note}` : ""}`, path: "/leaves" });
     }
     return upd;
   }

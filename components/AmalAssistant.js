@@ -66,8 +66,9 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 }
 
 // ================= الصوت النسائي من الإنترنت (/api/tts) =================
-// يقسّم النص لمقاطع ≤ 180 حرف عند نهايات الجمل ويشغّلها بالتتابع
-function chunkText(text, max = 180) {
+// يقسّم النص لمقاطع ≤ 900 حرف عند نهايات الجمل ويشغّلها بالتتابع
+// (مقاطع طويلة حتى يحافظ الصوت العصبي على نغمة الجملة كاملة؛ الخادم يقسّمها لـ Google عند الحاجة)
+function chunkText(text, max = 900) {
   const parts = String(text).split(/(?<=[.!؟،,:\n])\s+/);
   const out = [];
   let cur = "";
@@ -89,7 +90,7 @@ function stopOnline() { try { if (_audio) { _audio.pause(); _audio.src = ""; } }
 // يرجع Promise: تنجح عند انتهاء النطق، وتُرفض بـ "blocked" (منع المتصفح قبل التفاعل) أو "failed"
 function playOnline(text, { onStart } = {}) {
   return new Promise((resolve, reject) => {
-    const chunks = chunkText(text).slice(0, 6);
+    const chunks = chunkText(text).slice(0, 3);
     let i = 0;
     stopOnline();
     const next = () => {

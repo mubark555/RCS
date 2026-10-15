@@ -97,6 +97,8 @@ create table if not exists public.notifications (
   created_at  timestamptz default now()
 );
 create index if not exists notifications_created_idx on public.notifications (created_at desc);
+alter table public.notifications add column if not exists recipient text;  -- معرّف المستخدم المستلم (الجرس لكل موظف)
+create index if not exists notifications_recipient_idx on public.notifications (recipient, created_at desc);
 
 -- ------------------------- إعدادات النظام (مفتاح/قيمة) -------------------------
 create table if not exists public.app_settings (

@@ -9,6 +9,7 @@ import { SettingsProvider } from "@/components/SettingsProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleProvider } from "@/components/RoleProvider";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
+import { ChatProvider } from "@/components/ChatProvider";
 import AppShell from "@/components/AppShell";
 
 export const metadata = {
@@ -25,7 +26,9 @@ export default function RootLayout({ children }) {
           <AuthProvider>
             <RoleProvider>
               <NotificationsProvider>
-                <AppShell>{children}</AppShell>
+                <ChatProvider>
+                  <AppShell>{children}</AppShell>
+                </ChatProvider>
               </NotificationsProvider>
             </RoleProvider>
           </AuthProvider>

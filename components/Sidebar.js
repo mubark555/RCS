@@ -9,6 +9,7 @@ import { useSettings, brandTitle } from "@/components/SettingsProvider";
 import { BrandLogos } from "@/components/BrandMark";
 import Icon from "@/components/Icon";
 import { SECTIONS } from "@/lib/permissions";
+import { useChat } from "@/components/ChatProvider";
 
 // روابط القائمة = الأقسام التي يملك المستخدم صلاحية الاطلاع عليها (مصفوفة الصلاحيات)
 const ALL_LINKS = SECTIONS.filter((x) => x.nav !== false).map((x) => ({ href: x.href, label: x.ar, ico: x.ico, section: x.key }));
@@ -22,6 +23,7 @@ export default function Sidebar() {
   const { settings } = useSettings();
   // كل قسم يظهر فقط لمن يملك صلاحية الاطلاع عليه
   const links = ALL_LINKS.filter((l) => can(l.section, "view"));
+  const { unreadTotal } = useChat();
 
   return (
     <aside className="sidebar">
@@ -41,6 +43,7 @@ export default function Sidebar() {
             <Link key={l.href} href={l.href} className={`side-link ${active ? "active" : ""}`}>
               <span className="ico"><Icon name={l.ico} size={19} /></span>
               <span>{l.label}</span>
+              {l.section === "chat" && unreadTotal > 0 && <span className="side-badge" title="رسائل غير مقروءة">{unreadTotal > 99 ? "99+" : unreadTotal}</span>}
             </Link>
           );
         })}

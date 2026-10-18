@@ -16,7 +16,7 @@ import {
   invoiceRows, receivables, money, kpiAchievement,
 } from "@/lib/metrics";
 import { leavesApi, awayOn, upcomingLeaves, LEAVE_TYPES } from "@/lib/leaves";
-import { mergeEvents, EVENT_TYPES } from "@/lib/calendar-seed";
+import { mergeEvents, occurrenceIn, EVENT_TYPES } from "@/lib/calendar-seed";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -94,7 +94,7 @@ export default function Dashboard() {
     const tk = `${y}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
     const occ = (data.events || []).flatMap((e) => {
       if (!e.date) return [];
-      if (e.yearly) return [`${y}-${e.date.slice(5)}`, `${y + 1}-${e.date.slice(5)}`].map((d) => ({ ...e, day: d }));
+      if (e.yearly) return [occurrenceIn(e, y), occurrenceIn(e, y + 1)].filter(Boolean).map((d) => ({ ...e, day: d }));
       return [{ ...e, day: e.date }];
     }).filter((e) => e.day >= tk && e.type !== "internal").sort((a, b) => a.day.localeCompare(b.day)).slice(0, 3);
 

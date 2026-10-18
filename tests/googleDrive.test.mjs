@@ -13,12 +13,21 @@ const files = new Map([
   ["OUT", { id: "OUT", name: "خارج", mimeType: FOLDER, parents: ["ELSE"] }],
   ["ELSE", { id: "ELSE", name: "else", mimeType: FOLDER, parents: [] }],
 ]);
-let n = 0, lastUploadInit = null, sawJwt = null;
+let n = 0, lastUploadInit = null, sawJwt = null, lastToken = null, revoked = null;
 const srv = http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
   let body = ""; for await (const c of req) body += c;
   const json = (code, o, h = {}) => { res.writeHead(code, { "Content-Type": "application/json", ...h }); res.end(JSON.stringify(o)); };
-  if (u.pathname === "/token") { sawJwt = new URLSearchParams(body).get("assertion"); return json(200, { access_token: "TOK", expires_in: 3600 }); }
+  if (u.pathname === "/token") {
+    const f = new URLSearchParams(body);
+    lastToken = Object.fromEntries(f);
+    if (f.get("grant_type") === "authorization_code") return f.get("code") === "GOODCODE" ? json(200, { access_token: "TOK", refresh_token: "REFRESH-1", expires_in: 3600 }) : json(400, { error: "invalid_grant" });
+    if (f.get("grant_type") === "refresh_token") return f.get("refresh_token") === "REFRESH-1" ? json(200, { access_token: "TOK", expires_in: 3600 }) : json(400, { error: "invalid_grant" });
+    sawJwt = f.get("assertion");
+    return json(200, { access_token: "TOK", expires_in: 3600 });
+  }
+  if (u.pathname === "/revoke") { revoked = new URLSearchParams(body).get("token"); res.writeHead(200); return res.end(); }
+  if (u.pathname === "/drive/v3/about") return req.headers.authorization === "Bearer TOK" ? json(200, { user: { emailAddress: "owner@gmail.com", displayName: "Owner" } }) : json(401, {});
   if (req.headers.authorization !== "Bearer TOK") return json(401, { error: { message: "no auth" } });
   assert.equal(u.searchParams.get("supportsAllDrives"), "true");
   if (u.pathname === "/drive/v3/files" && req.method === "GET") {
@@ -102,4 +111,65 @@ test("الحذف ينقل لسلة المحذوفات", async () => {
   await D.trash(cfg, t);
   assert.equal(files.get(t).trashed, true);
   assert.equal((await D.listChildren(cfg, files.get(t).parents[0])).length, 0);
+});
+
+// ================= ربط حساب Google (OAuth) =================
+const oauth = D.driveConfig({ GOOGLE_OAUTH_CLIENT_ID: "cid.apps.googleusercontent.com", GOOGLE_OAUTH_CLIENT_SECRET: "secret" });
+
+test("ربط حساب Google: الإعداد غير جاهز قبل الربط وجاهز بعده", () => {
+  assert.equal(oauth.mode, "oauth");
+  assert.equal(D.driveReady(oauth), false);
+  assert.equal(D.driveReady({ ...oauth, refreshToken: "x" }), false, "يحتاج مجلداً رئيسياً");
+  assert.equal(D.driveReady({ ...oauth, refreshToken: "x", root: "ROOT" }), true);
+  assert.equal(D.driveReady(cfg), true);
+  assert.equal(D.driveConfig({ GOOGLE_OAUTH_CLIENT_ID: "x" }), null);
+});
+
+test("رابط موافقة Google يطلب رمز تحديث وصلاحية Drive", () => {
+  const u = new URL(D.authUrl(oauth, { redirectUri: "https://app.example/drive", state: "S" }));
+  const p = Object.fromEntries(u.searchParams);
+  assert.equal(p.client_id, "cid.apps.googleusercontent.com");
+  assert.equal(p.redirect_uri, "https://app.example/drive");
+  assert.equal(p.access_type, "offline");
+  assert.equal(p.prompt, "consent");
+  assert.equal(p.scope, "https://www.googleapis.com/auth/drive");
+  assert.equal(p.state, "S");
+});
+
+test("حالة الربط موقّعة: ترفض التلاعب والانتهاء", () => {
+  const st = D.signState(oauth, { uid: "u1", root: "R", exp: Date.now() + 60000 });
+  assert.equal(D.readState(oauth, st).uid, "u1");
+  assert.equal(D.readState(oauth, st.replace(/.$/, (c) => (c === "A" ? "B" : "A"))), null);
+  assert.equal(D.readState({ clientSecret: "other" }, st), null);
+  assert.equal(D.readState(oauth, D.signState(oauth, { uid: "u1", exp: Date.now() - 1 })), null);
+  assert.equal(D.readState(oauth, "garbage"), null);
+});
+
+test("رمز التحديث يُحفظ مشفّراً ولا يُفك بمفتاح آخر", () => {
+  const enc = D.seal(oauth, "REFRESH-1");
+  assert.ok(!enc.includes("REFRESH"));
+  assert.equal(D.unseal(oauth, enc), "REFRESH-1");
+  assert.throws(() => D.unseal({ clientSecret: "other" }, enc));
+});
+
+test("استخراج معرّف المجلد من رابط Drive", () => {
+  assert.equal(D.folderIdFrom("https://drive.google.com/drive/folders/1AbCdEfGhIjK_lmn-OP?usp=sharing"), "1AbCdEfGhIjK_lmn-OP");
+  assert.equal(D.folderIdFrom("https://drive.google.com/drive/u/0/folders/1AbCdEfGhIjK"), "1AbCdEfGhIjK");
+  assert.equal(D.folderIdFrom("1AbCdEfGhIjK_lmn"), "1AbCdEfGhIjK_lmn");
+  assert.equal(D.folderIdFrom("https://example.com"), "");
+});
+
+test("إكمال الربط ثم العمل برمز التحديث، ورسالة واضحة لو أُلغي", async () => {
+  const rt = await D.exchangeCode(oauth, { code: "GOODCODE", redirectUri: "https://app.example/drive" });
+  assert.equal(rt, "REFRESH-1");
+  assert.equal(lastToken.redirect_uri, "https://app.example/drive");
+  await assert.rejects(D.exchangeCode(oauth, { code: "BAD", redirectUri: "x" }), /تعذّر إكمال الربط/);
+  const linked = { ...oauth, refreshToken: rt, root: "ROOT" };
+  assert.equal((await D.accountOf(linked)).emailAddress, "owner@gmail.com");
+  assert.equal(lastToken.grant_type, "refresh_token");
+  assert.equal((await D.folderInfo(linked, "P1")).name, "Homera (قديم)");
+  assert.deepEqual((await D.listChildren(linked, "root")).map((x) => x.name), ["Homera (قديم)"]);
+  await assert.rejects(D.accountOf({ ...linked, refreshToken: "REVOKED" }), /أعد الربط/);
+  await D.revokeToken(rt);
+  assert.equal(revoked, "REFRESH-1");
 });

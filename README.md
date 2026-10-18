@@ -120,20 +120,36 @@ npm run dev
 
 ## ربط Google Drive
 
-صفحة **Google Drive** ترفع الملفات لمجلد Drive المشترك وترتبها تلقائياً:
-`<المشروع>/<التصنيف>` أو `<المشروع>/المهام/<اسم المهمة>`. بدون المفاتيح تعمل كبيئة اختبار داخل المتصفح فقط.
+صفحة **Google Drive** ترفع الملفات لمجلد Drive وترتبها تلقائياً:
+`<المشروع>/<التصنيف>` أو `<المشروع>/المهام/<اسم المهمة>`. بدون ربط تعمل كبيئة اختبار داخل المتصفح فقط.
 
-1. في Google Cloud (مشروعكم الحالي): فعّل **Google Drive API**، وأنشئ **Service Account**، ونزّل مفتاحه (JSON).
-2. في Google Drive: شارك المجلد الرئيسي (أو الـ Shared Drive) مع بريد حساب الخدمة (`...@...iam.gserviceaccount.com`)
-   بصلاحية **Editor** (أو **Content manager** في الـ Shared Drive).
-3. في Vercel ← Settings ← Environment Variables أضف:
-   - `GOOGLE_SERVICE_ACCOUNT_JSON` = محتوى ملف المفتاح كاملاً
-   - `GOOGLE_DRIVE_ROOT_ID` = معرّف المجلد الرئيسي (آخر جزء في رابطه: `drive.google.com/drive/folders/<المعرّف>`)
-4. أعد النشر (Redeploy). ستظهر في الصفحة شارة «مربوط بـ Google Drive».
-5. من الصفحة: **«ربط المشاريع بالمجلدات»** لربط كل مشروع بمجلده الموجود، ثم **«تجهيز مجلدات المشاريع»** لإنشاء التصنيفات الناقصة فقط.
+### الطريقة 1 — حساب Google عادي (Gmail) ✅ الموصى بها لكم
+
+1. **Google Cloud Console** (مشروعكم): **APIs & Services ← Library ← Google Drive API ← Enable**.
+2. **APIs & Services ← OAuth consent screen**: نوع **External**، اسم التطبيق وبريدكم، ثم احفظ.
+   بعدها في **Audience** (أو Publishing status) اضغط **Publish app** ليصير **In production**
+   — وإلا ينتهي الربط تلقائياً كل 7 أيام. (ما يحتاج مراجعة Google لأنكم المستخدم الوحيد للربط؛
+   بيطلع لكم تحذير «Google hasn't verified this app» ← **Advanced ← Go to … (unsafe)**.)
+3. **APIs & Services ← Credentials ← Create credentials ← OAuth client ID**:
+   النوع **Web application**، وفي **Authorized redirect URIs** أضف: `https://<دومين النظام>/drive`
+   (الصفحة تعرض الرابط الصحيح في نافذة الربط).
+4. **Vercel ← Settings ← Environment Variables**: أضف `GOOGLE_OAUTH_CLIENT_ID` و `GOOGLE_OAUTH_CLIENT_SECRET`، ثم **Redeploy**.
+5. في النظام (مدير): **Google Drive ← «ربط حساب Google»** ← الصق رابط المجلد الرئيسي ← سجّل دخول
+   **بحساب Google اللي يملك المجلد** ووافق. الملفات ترتفع باسم هذا الحساب وعلى مساحته.
+6. **«ربط المشاريع بالمجلدات»** لربط كل مشروع بمجلده الموجود، ثم **«تجهيز مجلدات المشاريع»** لإنشاء التصنيفات الناقصة فقط.
+
+رمز الربط يُحفظ **مشفّراً** في `app_settings` (`drive_oauth`) ولا يُفك إلا في الخادم.
+«إلغاء الربط» يسحب الصلاحية من Google ويحذف الرمز.
+
+### الطريقة 2 — حساب خدمة (يحتاج Google Workspace + Shared Drive)
+
+حساب الخدمة ما له مساحة تخزين، فيشتغل بس داخل **Shared Drive**:
+`GOOGLE_SERVICE_ACCOUNT_JSON` (ملف المفتاح كاملاً) + `GOOGLE_DRIVE_ROOT_ID` (معرّف المجلد)،
+وأضف بريد حساب الخدمة عضواً في الـ Shared Drive بصلاحية **Content manager**.
 
 > الرفع يذهب من المتصفح إلى Google مباشرة (بلا حد حجم Vercel). كل العمليات محصورة داخل المجلد الرئيسي،
-> والحذف ينقل الملف لسلة المحذوفات في Drive. الصلاحية من قسم «Google Drive» في مصفوفة الصلاحيات.
+> والحذف ينقل الملف لسلة المحذوفات في Drive. الصلاحية من قسم «Google Drive» في مصفوفة الصلاحيات،
+> والربط وإلغاؤه لمن يملك تعديل «تخصيص النظام».
 
 ## النشر على Vercel
 

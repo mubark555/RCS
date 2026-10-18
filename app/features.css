@@ -784,3 +784,5 @@ th.pm-sticky { background: var(--surface-2); }
 .drv-map { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
 .drv-map-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .drv-map-row b { font-size: 13.5px; color: var(--ink); }
+.drv-banner code { font-size: 11.5px; background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 5px; }
+.drv-steps { margin: 0 0 12px; padding-inline-start: 20px; font-size: 13px; line-height: 1.9; color: var(--text-2); }

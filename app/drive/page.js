@@ -7,7 +7,7 @@ import { useSettings, brandTitle } from "@/components/SettingsProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { driveSim } from "@/lib/driveSim";
-import { driveReal, driveConfigured } from "@/lib/driveClient";
+import { driveReal, driveStatus, driveConnect, driveFinish, driveDisconnect } from "@/lib/driveClient";
 import { drivePathFor, DRIVE_CATEGORIES, TASKS_FOLDER, FINANCE_CATEGORIES } from "@/lib/drivePaths";
 
 const MAP_KEY = "drive_map"; // { [اسم المشروع]: معرّف مجلده في Drive }
@@ -21,30 +21,57 @@ function fmtSize(n) {
 const fileIcon = (mime = "") => (mime.startsWith("image/") ? "🖼️" : mime.includes("pdf") ? "📕" : /sheet|excel|csv/.test(mime) ? "📊" : /word|document/.test(mime) ? "📄" : /presentation|powerpoint/.test(mime) ? "📽️" : mime.startsWith("video/") ? "🎬" : "📎");
 
 // Google Drive: الرفع يروح تلقائياً لمجلد المشروع والتصنيف (أو مجلد المهمة).
-// يعمل على Drive الحقيقي متى ما ضُبطت مفاتيح حساب الخدمة، وإلا كبيئة اختبار داخل المتصفح.
+// يعمل على Drive الحقيقي متى ما رُبط حساب Google (أو حساب خدمة)، وإلا كبيئة اختبار داخل المتصفح.
 export default function DrivePage() {
   const { viewer, projects, scopeProjects, can, canFinance, taskVisible } = useRole();
   const { settings } = useSettings();
-  const rootName = brandTitle(settings) || "سيم برايم";
+  const [status, setStatus] = useState(null); // حالة الربط من الخادم
   const canEdit = can("drive", "edit");
   const canMap = canEdit && can("settings", "edit");
   const [mode, setMode] = useState(null); // real | sim
+  const rootName = (mode === "real" && status?.rootName) || brandTitle(settings) || "سيم برايم";
   const drive = mode === "real" ? driveReal : driveSim;
   const [map, setMap] = useState({});
   const [folder, setFolder] = useState("root");
   const [trail, setTrail] = useState([]);
   const [items, setItems] = useState(null);
   const [stats, setStats] = useState(null);
-  const [modal, setModal] = useState(""); // upload | map
+  const [modal, setModal] = useState(""); // upload | map | connect
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [flash, setFlash] = useState(null);
   const hereRef = useRef(null);
 
-  useEffect(() => {
-    (isCloud ? driveConfigured() : Promise.resolve(false)).then((ok) => setMode(ok ? "real" : "sim"));
-    appSettings.get(MAP_KEY).then((v) => setMap(v && typeof v === "object" ? v : {})).catch(() => {});
+  const refreshStatus = useCallback(async () => {
+    if (!isCloud) { setMode("sim"); return; }
+    const st = await driveStatus();
+    setStatus(st);
+    setMode(st.ready ? "real" : "sim");
   }, []);
+
+  useEffect(() => {
+    appSettings.get(MAP_KEY).then((v) => setMap(v && typeof v === "object" ? v : {})).catch(() => {});
+    // الرجوع من صفحة موافقة Google: إكمال الربط ثم تنظيف الرابط
+    const qs = new URLSearchParams(window.location.search);
+    const code = qs.get("code"), state = qs.get("state");
+    if (code || qs.get("error")) window.history.replaceState(null, "", "/drive");
+    (async () => {
+      if (code && state && isCloud) {
+        try {
+          const r = await driveFinish(code, state);
+          setFlash({ note: `تم ربط حساب Google (${r.account}) — المجلد الرئيسي: ${r.rootName}` });
+        } catch (e) {
+          setErr(e?.message || "تعذّر إكمال الربط.");
+        }
+      } else if (qs.get("error")) setErr("تم إلغاء الربط من صفحة Google.");
+      await refreshStatus();
+    })();
+  }, [refreshStatus]);
+
+  async function disconnect() {
+    if (!confirm(`إلغاء ربط حساب Google${status?.account ? ` (${status.account})` : ""}؟\n\nالملفات تبقى في Drive كما هي، لكن النظام ما يقدر يوصل لها لين يُعاد الربط.`)) return;
+    await run("disconnect", async () => { await driveDisconnect(); setFolder("root"); await refreshStatus(); });
+  }
 
   const myProjects = useMemo(() => (projects || []).map((p) => p.name).filter((n) => !scopeProjects || scopeProjects.includes(n)), [projects, scopeProjects]);
   // المشروع المقابل لمجلد في الجذر: بالربط أولاً ثم بتطابق الاسم
@@ -121,9 +148,10 @@ export default function DrivePage() {
         <div className="drv-banner live">
           <Icon name="check" size={18} />
           <div>
-            <b>مربوط بـ Google Drive</b>
-            <span>الملفات ترتفع لمجلد Drive المشترك مباشرة وتترتب تلقائياً: <b>المشروع ← التصنيف</b> أو <b>المشروع ← المهام ← اسم المهمة</b>. الحذف ينقلها لسلة المحذوفات في Drive.</span>
+            <b>مربوط بـ Google Drive{status?.account ? ` — ${status.account}` : ""}</b>
+            <span>الملفات ترتفع لمجلد «{rootName}» في Drive مباشرة وتترتب تلقائياً: <b>المشروع ← التصنيف</b> أو <b>المشروع ← المهام ← اسم المهمة</b>. الحذف ينقلها لسلة المحذوفات في Drive.</span>
           </div>
+          {status?.canConnect && <button className="btn sm ghost" style={{ marginInlineStart: "auto" }} disabled={busy === "disconnect"} onClick={disconnect}>إلغاء الربط</button>}
         </div>
       ) : (
         <div className="drv-banner">
@@ -131,7 +159,9 @@ export default function DrivePage() {
           <div>
             <b>بيئة اختبار — محاكاة لـ Google Drive</b>
             <span>Drive الحقيقي غير مربوط بعد. الملفات هنا محفوظة في متصفحك فقط، ولا تُرفع لـ Drive ولا لقاعدة البيانات. الترتيب نفسه اللي بيطبّقه النظام بعد الربط: <b>المشروع ← التصنيف</b> أو <b>المشروع ← المهام ← اسم المهمة</b>.</span>
+            {status?.admin && !status?.canConnect && <span>لربط Drive الحقيقي: أضف <code>GOOGLE_OAUTH_CLIENT_ID</code> و <code>GOOGLE_OAUTH_CLIENT_SECRET</code> في إعدادات Vercel (الخطوات في README).</span>}
           </div>
+          {status?.canConnect && <button className="btn sm primary" style={{ marginInlineStart: "auto" }} onClick={() => setModal("connect")}><Icon name="link" size={14} /> ربط حساب Google</button>}
         </div>
       )}
 
@@ -158,7 +188,7 @@ export default function DrivePage() {
       {err && <div className="drv-err"><Icon name="alert" size={15} /> {err}</div>}
       {flash && (
         <div className="drv-flash">
-          <Icon name="check" size={16} /> تم رفع <b>{flash.name}</b> إلى: <span className="drv-path">{flash.path.join(" / ")}</span>
+          <Icon name="check" size={16} /> {flash.note ? flash.note : <>تم رفع <b>{flash.name}</b> إلى: <span className="drv-path">{flash.path.join(" / ")}</span></>}
           <button type="button" onClick={() => setFlash(null)} aria-label="إخفاء"><Icon name="close" size={13} /></button>
         </div>
       )}
@@ -230,6 +260,12 @@ export default function DrivePage() {
               setFolder(dest);
             }}
           />
+        </Modal>
+      )}
+
+      {modal === "connect" && (
+        <Modal title="ربط حساب Google Drive" onClose={() => setModal("")}>
+          <ConnectForm redirectUri={status?.redirectUri} onCancel={() => setModal("")} />
         </Modal>
       )}
 
@@ -352,5 +388,35 @@ function MapForm({ drive, projects, map, onSave, onCancel }) {
         <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
       </div>
     </div>
+  );
+}
+
+// ربط حساب Google: رابط المجلد الرئيسي ثم موافقة Google بحساب صاحب المجلد
+function ConnectForm({ redirectUri, onCancel }) {
+  const [folder, setFolder] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <form onSubmit={async (e) => {
+      e.preventDefault();
+      setBusy(true);
+      setError("");
+      try { await driveConnect(folder); } catch (x) { setError(x?.message || "تعذّر بدء الربط."); setBusy(false); }
+    }}>
+      <ol className="drv-steps">
+        <li>افتح المجلد الرئيسي في Google Drive (اللي فيه مجلدات المشاريع) وانسخ رابطه من شريط العنوان.</li>
+        <li>الصقه هنا واضغط «متابعة إلى Google».</li>
+        <li>سجّل دخولك <b>بحساب Google اللي يملك المجلد</b> ووافق على الصلاحية. الملفات بترتفع باسم هذا الحساب وعلى مساحته.</li>
+      </ol>
+      <label className="field full"><span>رابط المجلد الرئيسي</span>
+        <input dir="ltr" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="https://drive.google.com/drive/folders/…" required />
+      </label>
+      {redirectUri && <p className="muted" style={{ fontSize: 12 }}>رابط الرجوع المسجّل في Google Cloud لازم يكون: <code dir="ltr">{redirectUri}</code></p>}
+      {error && <div className="chat-error">{error}</div>}
+      <div className="modal-actions">
+        <button type="submit" className="btn primary" disabled={busy || !folder.trim()}>{busy ? "جارٍ التحويل…" : "متابعة إلى Google"}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
+      </div>
+    </form>
   );
 }

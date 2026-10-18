@@ -778,3 +778,9 @@ th.pm-sticky { background: var(--surface-2); }
 .drv-here { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 12px; }
 .drv-dest { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); margin-top: 4px; font-size: 13px; }
 .drv-dest small { color: var(--muted); }
+.drv-banner.live { background: #eaf6ef; border-color: #bfe3cc; color: #15803d; }
+.drv-err { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #fdeceb; color: #c0392b; font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.drv-folder small { font-size: 11px; margin-inline-start: auto; }
+.drv-map { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
+.drv-map-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.drv-map-row b { font-size: 13.5px; color: var(--ink); }

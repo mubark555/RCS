@@ -5,13 +5,42 @@ import { appSettings } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
-import { EVENT_TYPES, mergeEvents } from "@/lib/calendar-seed";
+import { EVENT_TYPES, mergeEvents, occurrenceIn } from "@/lib/calendar-seed";
+import { JAZ_THEMES, JAZ_THEMES_YEAR } from "@/lib/calendar-unified";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const WD = ["ح", "ن", "ث", "ر", "خ", "ج", "س"];
 const pad = (n) => String(n).padStart(2, "0");
 const KEY = "calendar_events";
 const uid = () => Math.random().toString(36).slice(2, 10);
+const BRANDS = ["سيم", "هوميرا", "زِل", "جاز", "قنيف"];
+const SPAN_MAX = 14; // الفعاليات الأطول (المواسم) تُعلَّم في الشبكة ببدايتها ونهايتها فقط
+const ACCURACY = { "مؤكد": "#16a34a", "تقديري": "#c88a2e", "بانتظار التأكيد": "#2563eb", "تعارض": "#e0574e" };
+
+// المشاريع المعنية بالفعالية (من عمود المشاريع + أفكار قنيف وجاز)
+function brandsOf(e) {
+  const list = (e.brands || "").split(/[،,]/).map((x) => x.trim()).filter(Boolean);
+  if (e.qunaif) list.push("قنيف");
+  if (e.jaz) list.push("جاز");
+  return [...new Set(list)];
+}
+// كل أيام الفعالية من البداية للنهاية (YYYY-MM-DD)
+function spanDays(start, end) {
+  if (!end || end <= start) return [start];
+  const out = [];
+  const d = new Date(`${start}T00:00:00`);
+  for (let k = keyOfDate(d); k <= end; d.setDate(d.getDate() + 1), k = keyOfDate(d)) out.push(k);
+  return out;
+}
+const keyOfDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function fmtRange(start, end) {
+  const a = new Date(`${start}T00:00:00`);
+  if (!end || end === start) return `${a.getDate()} ${MONTHS[a.getMonth()]}`;
+  const b = new Date(`${end}T00:00:00`);
+  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) return `${a.getDate()}–${b.getDate()} ${MONTHS[a.getMonth()]}`;
+  const yb = a.getFullYear() === b.getFullYear() ? "" : ` ${b.getFullYear()}`;
+  return `${a.getDate()} ${MONTHS[a.getMonth()]} – ${b.getDate()} ${MONTHS[b.getMonth()]}${yb}`;
+}
 
 // الروزنامة السنوية: 12 شهراً بالمناسبات الوطنية والدينية والأيام العالمية والمواسم والمؤتمرات
 // (للمناسبات والفعاليات فقط — التسليمات والاجتماعات في أقسامها).
@@ -26,6 +55,7 @@ export default function CalendarPage() {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [q, setQ] = useState("");
+  const [brand, setBrand] = useState("");
 
   useEffect(() => {
     appSettings.get(KEY).then((v) => { setRemoved(v?.removed || []); setEvents(mergeEvents(v)); }).catch(() => setEvents(mergeEvents(null)));
@@ -37,28 +67,47 @@ export default function CalendarPage() {
     await appSettings.set(KEY, { events: list, removed: rm });
   }
 
-  // كل البنود في السنة المعروضة، مفهرسة بالتاريخ YYYY-MM-DD
+  const visible = useMemo(() => {
+    const t = q.trim();
+    return (events || []).filter((e) => {
+      if (types.length && !types.includes(e.type)) return false;
+      if (brand) { const b = brandsOf(e); if (!b.includes(brand) && !b.includes("الكل")) return false; }
+      if (t && !`${e.title} ${e.desc || ""} ${e.tip || ""} ${e.note || ""} ${e.qunaif || ""} ${e.jaz || ""} ${e.brands || ""} ${e.source || ""}`.includes(t)) return false;
+      return true;
+    });
+  }, [events, types, brand, q]);
+
+  // أيام الشبكة الملوّنة في السنة المعروضة، مفهرسة بالتاريخ YYYY-MM-DD (الأقصر أولاً ليظهر لونه)
   const byDate = useMemo(() => {
     const map = {};
-    const add = (d, item) => { (map[d] = map[d] || []).push(item); };
-    const s = q.trim();
-    (events || []).forEach((e) => {
-      if (types.length && !types.includes(e.type)) return;
-      if (s && !`${e.title} ${e.desc || ""} ${e.tip || ""} ${e.note || ""}`.includes(s)) return;
-      const md = (e.date || "").slice(5);
-      if (e.yearly) add(`${year}-${md}`, { kind: "event", ...e });
-      else if ((e.date || "").startsWith(`${year}-`)) add(e.date, { kind: "event", ...e });
+    visible.forEach((e) => {
+      const start = occurrenceIn(e, year);
+      if (!start) return;
+      const days = spanDays(start, e.yearly ? null : e.end);
+      const marked = days.length <= SPAN_MAX ? days : [days[0], days[days.length - 1]];
+      marked.filter((d) => d.startsWith(`${year}-`)).forEach((d) => { (map[d] = map[d] || []).push({ kind: "event", ...e, len: days.length }); });
     });
+    Object.values(map).forEach((list) => list.sort((a, b) => a.len - b.len));
     return map;
-  }, [events, year, types, q]);
+  }, [visible, year]);
 
-  const monthItems = useMemo(() => {
-    const prefix = `${year}-${pad(month + 1)}-`;
-    return Object.entries(byDate)
-      .filter(([d]) => d.startsWith(prefix))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .flatMap(([d, list]) => list.map((x) => ({ ...x, day: d })));
-  }, [byDate, year, month]);
+  // فعاليات كل شهر (مرة واحدة لكل فعالية، بما فيها الممتدة من أشهر سابقة)
+  const byMonth = useMemo(() => MONTHS.map((_, m) => {
+    const from = `${year}-${pad(m + 1)}-01`;
+    const to = `${year}-${pad(m + 1)}-31`;
+    return visible
+      .map((e) => {
+        const start = occurrenceIn(e, year);
+        if (!start) return null;
+        const until = !e.yearly && e.end > start ? e.end : null;
+        if (start > to || (until || start) < from) return null;
+        return { kind: "event", ...e, day: start, until, ongoing: start < from };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.day.localeCompare(b.day));
+  }), [visible, year]);
+  const monthItems = byMonth[month];
+  const jazTheme = year === JAZ_THEMES_YEAR && (!brand || brand === "جاز") ? JAZ_THEMES[month + 1] : null;
 
   const todayKey = (() => { const n = new Date(); return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`; })();
   const toggleType = (t) => setTypes((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
@@ -80,6 +129,10 @@ export default function CalendarPage() {
               <i className="yc-dot" style={{ background: m.color }} /> {m.ar}
             </span>
           ))}
+          <select className="yc-brand" value={brand} onChange={(e) => setBrand(e.target.value)} title="المشروع">
+            <option value="">كل المشاريع</option>
+            {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
           <div className="mtg-search yc-search">
             <span style={{ color: "var(--muted)", display: "inline-flex" }}><Icon name="search" size={15} /></span>
             <input placeholder="ابحث عن مناسبة…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -95,7 +148,7 @@ export default function CalendarPage() {
             const first = new Date(year, m, 1).getDay();
             const days = new Date(year, m + 1, 0).getDate();
             const cells = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
-            const count = Object.keys(byDate).filter((d) => d.startsWith(`${year}-${pad(m + 1)}-`)).reduce((s, d) => s + byDate[d].length, 0);
+            const count = byMonth[m].length;
             return (
               <div key={m} className={`yc-month ${m === month ? "on" : ""}`} onClick={() => setMonth(m)}>
                 <div className="yc-mhead"><b>{mName}</b>{count > 0 && <span className="yc-count">{count}</span>}</div>
@@ -111,7 +164,7 @@ export default function CalendarPage() {
                       <span key={i} className={`yc-d ${key === todayKey ? "today" : ""} ${list.length ? "has" : ""}`}
                         style={color ? { background: `${color}22`, color, fontWeight: 800, cursor: "pointer" } : undefined}
                         title={list.map((x) => x.title).join("\n")}
-                        onClick={ev ? (e) => { e.stopPropagation(); setMonth(m); setViewing({ ...ev, day: key }); } : undefined}>
+                        onClick={ev ? (e) => { e.stopPropagation(); setMonth(m); setViewing({ ...ev, day: occurrenceIn(ev, year) }); } : undefined}>
                         {d}
                       </span>
                     );
@@ -125,18 +178,29 @@ export default function CalendarPage() {
         {/* تفاصيل الشهر المختار */}
         <div className="card yc-list">
           <div className="section-title"><span>{MONTHS[month]} {year}</span></div>
+          {jazTheme && (
+            <div className="yc-theme">
+              <b>ثيمة جاز للشهر: {jazTheme.theme}</b>
+              <small>{jazTheme.idea}</small>
+            </div>
+          )}
           {monthItems.length === 0 ? <div className="empty" style={{ padding: "20px 0" }}>لا فعاليات في هذا الشهر.</div> :
             monthItems.map((x, i) => {
-              const d = Number(x.day.slice(8));
+              const d = x.ongoing ? "…" : Number(x.day.slice(8));
+              const bs = brandsOf(x);
               const color = EVENT_TYPES[x.type]?.color || "#64748b";
               const label = EVENT_TYPES[x.type]?.ar;
               return (
                 <div className="yc-item" key={`${x.kind}-${x.id}-${i}`} onClick={() => setViewing(x)} style={{ cursor: "pointer" }}>
-                  <span className="yc-daybox" style={{ background: `${color}1a`, color }}>{d}</span>
+                  <span className="yc-daybox" style={{ background: `${color}1a`, color }} title={x.ongoing ? "مستمرة من شهر سابق" : undefined}>{d}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <b>{x.title}</b>
                     <small className="muted">
-                      {label}{x.approx ? " · تاريخ تقريبي" : ""}{x.note ? ` · ${x.note}` : ""}
+                      {label}
+                      {x.until ? ` · ${fmtRange(x.day, x.until)}` : ""}
+                      {x.accuracy && x.accuracy !== "مؤكد" ? ` · ${x.accuracy}` : x.approx && !x.accuracy ? " · تاريخ تقريبي" : ""}
+                      {x.note ? ` · ${x.note}` : ""}
+                      {bs.length > 0 ? ` · ${bs.join("، ")}` : ""}
                     </small>
                     {x.desc && <small className="yc-desc">{x.desc}</small>}
                   </div>
@@ -147,7 +211,7 @@ export default function CalendarPage() {
               );
             })}
           <p className="muted" style={{ fontSize: 11.5, marginTop: 12 }}>
-            المناسبات الهجرية تقريبية (تُحدَّد برؤية الهلال)، ومواعيد المؤتمرات تتغيّر سنوياً — راجِعها من مصادرها الرسمية.
+            المناسبات الهجرية محسوبة على تقويم أم القرى وتثبت برؤية الهلال، ومواعيد المعارض والمؤتمرات تتغيّر سنوياً — راجِعها من مصادرها الرسمية.
           </p>
         </div>
       </div>
@@ -176,19 +240,29 @@ export default function CalendarPage() {
 }
 
 function EventForm({ initial, onSave, onCancel, onDelete }) {
-  const [f, setF] = useState({ title: "", date: "", type: "internal", yearly: false, approx: false, note: "", ...initial });
+  const [f, setF] = useState({ title: "", date: "", end: "", type: "internal", yearly: false, approx: false, note: "", ...initial });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (f.title.trim() && f.date) { const { kind, day, ...rest } = f; onSave({ ...rest, title: f.title.trim(), note: (f.note || "").trim() }); } }}>
+    <form onSubmit={(e) => { e.preventDefault(); if (f.title.trim() && f.date) { const { kind, day, ...rest } = f; onSave({ ...rest, title: f.title.trim(), note: (f.note || "").trim(), end: f.end > f.date ? f.end : "" }); } }}>
       <div className="form-grid">
         <label className="field full"><span>العنوان *</span><input value={f.title} onChange={set("title")} required /></label>
         <label className="field"><span>التاريخ *</span><input type="date" value={f.date} onChange={set("date")} required /></label>
+        <label className="field"><span>تاريخ النهاية (للفعاليات الممتدة)</span><input type="date" value={f.end || ""} min={f.date} onChange={set("end")} /></label>
+        <label className="field"><span>دقة التاريخ</span>
+          <select value={f.accuracy || ""} onChange={set("accuracy")}>
+            <option value="">—</option>
+            {Object.keys(ACCURACY).map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </label>
         <label className="field"><span>النوع</span>
           <select value={f.type} onChange={set("type")}>{Object.entries(EVENT_TYPES).map(([k, m]) => <option key={k} value={k}>{m.ar}</option>)}</select>
         </label>
         <label className="field full"><span>ملاحظة قصيرة</span><input value={f.note || ""} onChange={set("note")} placeholder="مثال: مناسب لحملة مشروع…" /></label>
         <label className="field full"><span>نبذة عن المناسبة</span><textarea rows={2} value={f.desc || ""} onChange={set("desc")} /></label>
         <label className="field full"><span>فكرة محتوى / تسويق</span><textarea rows={2} value={f.tip || ""} onChange={set("tip")} /></label>
+        <label className="field full"><span>المشاريع المعنية</span><input value={f.brands || ""} onChange={set("brands")} placeholder="مثال: سيم، قنيف — أو: الكل" /></label>
+        <label className="field full"><span>فكرة قنيف</span><textarea rows={2} value={f.qunaif || ""} onChange={set("qunaif")} /></label>
+        <label className="field full"><span>فكرة جاز</span><textarea rows={2} value={f.jaz || ""} onChange={set("jaz")} /></label>
       </div>
       <label className="hold-check"><input type="checkbox" checked={!!f.yearly} onChange={set("yearly")} /> <span>تتكرر كل سنة بنفس التاريخ</span></label>
       <label className="hold-check"><input type="checkbox" checked={!!f.approx} onChange={set("approx")} /> <span>تاريخ تقريبي</span></label>
@@ -206,7 +280,11 @@ function EventDetail({ ev, canManage, onEdit }) {
   const t = EVENT_TYPES[ev.type] || { ar: "", color: "#64748b" };
   const day = ev.day || ev.date;
   const d = new Date(day);
-  const left = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(new Date().toDateString())) / 86400000);
+  const today = new Date(new Date().toDateString());
+  const left = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today) / 86400000);
+  const until = !ev.yearly && ev.end > day ? ev.end : null;
+  const leftEnd = until ? Math.round((new Date(`${until}T00:00:00`) - today) / 86400000) : null;
+  const bs = brandsOf(ev);
   return (
     <div className="yc-detail">
       <div className="yc-dhead" style={{ background: `${t.color}14`, borderColor: `${t.color}40` }}>
@@ -219,14 +297,20 @@ function EventDetail({ ev, canManage, onEdit }) {
             <span style={{ color: t.color }}>{t.ar}</span>
             <span>{WEEKDAYS[d.getDay()]}</span>
             {ev.yearly && <span>سنوية</span>}
-            {ev.approx && <span>تاريخ تقريبي</span>}
-            <span>{left === 0 ? "اليوم" : left > 0 ? `بعد ${left} يوم` : `مضت قبل ${-left} يوم`}</span>
+            {until && <span>{fmtRange(day, until)} · {spanDays(day, until).length} يوم</span>}
+            {ev.hijri && <span>{ev.hijri}</span>}
+            {ev.accuracy ? <span style={{ color: ACCURACY[ev.accuracy] }}>{ev.accuracy}</span> : ev.approx && <span>تاريخ تقريبي</span>}
+            <span>{left === 0 ? "اليوم" : left > 0 ? `بعد ${left} يوم` : leftEnd !== null && leftEnd >= 0 ? "جارية الآن" : `مضت قبل ${-(leftEnd ?? left)} يوم`}</span>
           </div>
         </div>
       </div>
       {ev.desc && <div className="yc-dsec"><b><Icon name="info" size={15} /> نبذة</b><p>{ev.desc}</p></div>}
       {ev.tip && <div className="yc-dsec"><b><Icon name="flag" size={15} /> فكرة محتوى / تسويق</b><p>{ev.tip}</p></div>}
+      {bs.length > 0 && <div className="yc-dsec"><b><Icon name="projects" size={15} /> المشاريع المعنية</b><p>{bs.join("، ")}</p></div>}
+      {ev.qunaif && <div className="yc-dsec"><b><Icon name="flag" size={15} /> فكرة قنيف</b><p>{ev.qunaif}</p></div>}
+      {ev.jaz && <div className="yc-dsec"><b><Icon name="flag" size={15} /> فكرة جاز</b><p>{ev.jaz}</p></div>}
       {ev.note && <div className="yc-dsec"><b><Icon name="projects" size={15} /> ملاحظة</b><p>{ev.note}</p></div>}
+      {ev.source && <div className="yc-dsec"><b><Icon name="info" size={15} /> ملاحظات وأساس التقدير</b><p>{ev.source}</p></div>}
       {ev.greet && <div className="yc-dsec"><b><Icon name="gift" size={15} /> تهنئة النظام</b><p>تظهر للفريق عند الدخول: «{ev.greet.message}»</p></div>}
       {ev.approx && <p className="muted" style={{ fontSize: 12 }}>التاريخ تقريبي — راجِعه من المصدر الرسمي قبل الاعتماد عليه.</p>}
       {canManage && <div className="modal-actions"><button className="btn" onClick={onEdit}><Icon name="edit" size={15} /> تعديل</button></div>}

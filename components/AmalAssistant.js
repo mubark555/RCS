@@ -11,6 +11,7 @@ import { answer, suggestions, taskItem, AMAL_NAME, PRIORITY_OPTIONS } from "@/li
 import { welcome, pageTip, reactionFor, IDLE_TIPS, summarizeTask, timeGreeting, leaveGreeting } from "@/lib/amalLife";
 import { tourFor, isNewEmployee } from "@/lib/amalTour";
 import AmalTour from "@/components/AmalTour";
+import { readAmalPrefs } from "@/lib/amalPref";
 
 const STALE_MS = 5 * 60 * 1000; // تحديث بيانات أمل كل 5 دقائق (وأي تعديل في النظام يحدّثها فوراً)
 const SLEEP_AFTER = 2 * 60 * 1000;   // تنام بعد دقيقتين بلا نشاط
@@ -148,7 +149,10 @@ export default function AmalAssistant() {
   const [canSpeak, setCanSpeak] = useState(false);
   const [tour, setTour] = useState(null);       // { steps, key }
   const [tourStepId, setTourStepId] = useState(null);
-  const [pos, setPos] = useState(null);         // موضع مخصص بعد السحب (null = وسط الشاشة)
+  const [pos, setPos] = useState(null);         // موضع مخصص بعد السحب (null = حسب المكان المختار)
+  const [size, setSize] = useState("m");        // حجم الشخصية (تخصيص أمل)
+  const [place, setPlace] = useState("center"); // مكانها الافتراضي (تخصيص أمل)
+  const greetOff = useRef(false);
   const drag = useRef(null);
   const tourActive = useRef(false);
   const sleepingRef = useRef(false);
@@ -172,11 +176,24 @@ export default function AmalAssistant() {
 
   // ---------- التفضيلات وقدرات المتصفح ----------
   useEffect(() => {
-    setMini(pref.get("mini", false));
-    setMuted(pref.get("tips_off", false));
-    try { const v = window.localStorage.getItem("amal_voice_mode"); if (v === "on" || v === "off" || v === "auto") setVoice(v); } catch {}
-    try { const p = JSON.parse(window.localStorage.getItem("amal_pos") || "null"); if (p && typeof p.x === "number") setPos(p); } catch {}
+    // تُقرأ عند البداية وكل ما تغيّرت من «تخصيص أمل» في الرئيسية
+    const load = () => {
+      const p = readAmalPrefs();
+      setMini(p.mini);
+      setMuted(p.tipsOff);
+      setVoice(p.voice);
+      voiceRef.current = p.voice;
+      if (p.voice === "off") { try { window.speechSynthesis?.cancel(); } catch {} }
+      setPos(p.pos);
+      setSize(p.size);
+      setPlace(p.place);
+      greetOff.current = p.greetOff;
+      if (p.tipsOff || p.mini) setBubble(null);
+    };
+    load();
+    window.addEventListener("amal:prefs", load);
     setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
+    return () => window.removeEventListener("amal:prefs", load);
   }, []);
 
   // ---------- البيانات ----------
@@ -343,7 +360,7 @@ export default function AmalAssistant() {
         const greet = leaveMsg
           ? { ...leaveMsg, important: true, speech: `${hello}. ${leaveMsg.text}` }
           : { ...welcome(ctxOf(d)), important: true, speech: `${hello}. أنا أمل، مساعدتك الذكية في النظام. أتابع معك المهام والمشاريع والاجتماعات، وأجاوب على أسئلتك، وأقدر أنشئ لك مهام. اضغط عليّ متى ما احتجتني.` };
-        afterOverlays(() => say(greet, { force: true }));
+        if (!greetOff.current) afterOverlays(() => say(greet, { force: true }));
       }
     }, 250);
     return () => clearTimeout(t);
@@ -611,7 +628,7 @@ export default function AmalAssistant() {
       {tour && <AmalTour key={tour.key} steps={tour.steps} face={FACE} full={FULL} onEnd={endTour} onStep={(st, idx) => { setTourStepId(st.id); setMood(st.mood || "talk"); speak(`${st.title}. ${st.text}`, { defer: idx === 0, important: st.id === "meet" }); }} />}
       {!open && (!tour || tourStepId === "amal") && (
         <div
-          className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : "is-center"}`}
+          className={`amal-dock ${mini ? "is-mini" : ""} ${pos ? "is-placed" : `is-${place}`} size-${size}`}
           style={pos ? { left: pos.x, top: pos.y } : undefined}
         >
           {bubble && (

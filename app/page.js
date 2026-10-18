@@ -16,7 +16,9 @@ import {
   invoiceRows, receivables, money, kpiAchievement,
 } from "@/lib/metrics";
 import { leavesApi, awayOn, upcomingLeaves, LEAVE_TYPES } from "@/lib/leaves";
-import { mergeEvents, EVENT_TYPES } from "@/lib/calendar-seed";
+import { mergeEvents, occurrenceIn, EVENT_TYPES } from "@/lib/calendar-seed";
+import { useAmalEnabled } from "@/lib/amalPref";
+import AmalSettings from "@/components/AmalSettings";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -38,6 +40,8 @@ export default function Dashboard() {
   const { viewer, role, clientProject, scopeProjects, canApprove, canDeliver, canFinance, can, taskVisible, decisionBlockFor } = useRole();
   const [data, setData] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const [amalOn, setAmalOn] = useAmalEnabled();
+  const [amalSettings, setAmalSettings] = useState(false);
   const [viewing, setViewing] = useState(null);
   const [report, setReport] = useState(null); // نافذة التقرير المصغّر
   const [tab, setTab] = useState("overdue");
@@ -94,7 +98,7 @@ export default function Dashboard() {
     const tk = `${y}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
     const occ = (data.events || []).flatMap((e) => {
       if (!e.date) return [];
-      if (e.yearly) return [`${y}-${e.date.slice(5)}`, `${y + 1}-${e.date.slice(5)}`].map((d) => ({ ...e, day: d }));
+      if (e.yearly) return [occurrenceIn(e, y), occurrenceIn(e, y + 1)].filter(Boolean).map((d) => ({ ...e, day: d }));
       return [{ ...e, day: e.date }];
     }).filter((e) => e.day >= tk && e.type !== "internal").sort((a, b) => a.day.localeCompare(b.day)).slice(0, 3);
 
@@ -153,6 +157,19 @@ export default function Dashboard() {
           <small>{hijriToday()}</small>
         </div>
         <div className="cc-hero-acts">
+          <div className="cc-amal">
+            <label title={amalOn ? "أمل مفعّلة — اضغط لإيقافها" : "أمل غير مفعّلة — اضغط لتفعيل المساعدة الذكية"}>
+              <img src="/amal/amal-face.webp" alt="" />
+              <span><b>أمل <i>AI</i></b><small>{amalOn ? "مفعّلة" : "غير مفعّلة"}</small></span>
+              <span className={`switch ${amalOn ? "on" : ""}`}>
+                <input type="checkbox" checked={amalOn} onChange={(e) => setAmalOn(e.target.checked)} aria-label="تفعيل المساعدة الذكية أمل" />
+                <i />
+              </span>
+            </label>
+            <button type="button" className="cc-amal-gear" onClick={() => setAmalSettings(true)} title="تخصيص أمل" aria-label="تخصيص أمل">
+              <Icon name="settings" size={16} />
+            </button>
+          </div>
           {can("reports") && <button className="btn ghost" onClick={() => router.push("/reports")}><Icon name="file" size={15} /> التقارير المفصّلة</button>}
           <button className="btn primary" onClick={() => router.push(pending.length && canApprove ? "/approvals" : "/tasks")}>
             {pending.length && canApprove ? `مراجعة الاعتمادات (${pending.length})` : "عرض المهام"}
@@ -360,6 +377,7 @@ export default function Dashboard() {
           onDelete={async (t) => { if (confirm(`حذف المهمة؟\n\n${t.task}`)) { await tasksStore.remove(t.id); setViewing(null); await reload(); } }} />
       )}
       {dialog && <ReviewDialog task={dialog.task} mode={dialog.mode} onClose={() => setDialog(null)} onDone={reload} />}
+      {amalSettings && <AmalSettings onClose={() => setAmalSettings(false)} />}
     </div>
     </>
   );

@@ -17,6 +17,7 @@ import {
 } from "@/lib/metrics";
 import { leavesApi, awayOn, upcomingLeaves, LEAVE_TYPES } from "@/lib/leaves";
 import { mergeEvents, occurrenceIn, EVENT_TYPES } from "@/lib/calendar-seed";
+import { useAmalEnabled } from "@/lib/amalPref";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const { viewer, role, clientProject, scopeProjects, canApprove, canDeliver, canFinance, can, taskVisible, decisionBlockFor } = useRole();
   const [data, setData] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const [amalOn, setAmalOn] = useAmalEnabled();
   const [viewing, setViewing] = useState(null);
   const [report, setReport] = useState(null); // نافذة التقرير المصغّر
   const [tab, setTab] = useState("overdue");
@@ -153,6 +155,14 @@ export default function Dashboard() {
           <small>{hijriToday()}</small>
         </div>
         <div className="cc-hero-acts">
+          <label className="cc-amal" title={amalOn ? "أمل مفعّلة — اضغط لإيقافها" : "أمل غير مفعّلة — اضغط لتفعيل المساعدة الذكية"}>
+            <img src="/amal/amal-face.webp" alt="" />
+            <span><b>أمل <i>AI</i></b><small>{amalOn ? "مفعّلة" : "غير مفعّلة"}</small></span>
+            <span className={`switch ${amalOn ? "on" : ""}`}>
+              <input type="checkbox" checked={amalOn} onChange={(e) => setAmalOn(e.target.checked)} aria-label="تفعيل المساعدة الذكية أمل" />
+              <i />
+            </span>
+          </label>
           {can("reports") && <button className="btn ghost" onClick={() => router.push("/reports")}><Icon name="file" size={15} /> التقارير المفصّلة</button>}
           <button className="btn primary" onClick={() => router.push(pending.length && canApprove ? "/approvals" : "/tasks")}>
             {pending.length && canApprove ? `مراجعة الاعتمادات (${pending.length})` : "عرض المهام"}

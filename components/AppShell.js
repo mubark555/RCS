@@ -16,6 +16,7 @@ import dynamic from "next/dynamic";
 // أمل تُحمَّل بعد ظهور الصفحة حتى لا تؤخر فتحها
 const AmalAssistant = dynamic(() => import("@/components/AmalAssistant"), { ssr: false });
 import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
+import { useAmalEnabled } from "@/lib/amalPref";
 
 export default function AppShell({ children }) {
   const { loading, authed, isCloud, authEmail, signOut } = useAuth();
@@ -23,6 +24,7 @@ export default function AppShell({ children }) {
   const path = usePathname();
   const section = sectionOfPath(path);
   const blocked = ready && section && !can(section, "view");
+  const [amalOn] = useAmalEnabled();
 
   // عند الدخول في الوضع السحابي: عبّئ البيانات الأولية إن كانت القاعدة فارغة
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function AppShell({ children }) {
         </div>
         <WelcomeGate />
       </div>
-      <AmalAssistant />
+      {amalOn && <AmalAssistant />}
     </div>
   );
 }

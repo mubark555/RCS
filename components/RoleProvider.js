@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { usersStore, projectsStore, appSettings } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { projManagers, projClients, projMembers, userProjects, PROJECTS } from "@/lib/constants";
 import { resolvePerms, atLeast } from "@/lib/permissions";
@@ -16,6 +17,8 @@ export function RoleProvider({ children }) {
   const [viewerId, setViewerId] = useState(null);
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
+  const [loadError, setLoadError] = useState(""); // تعذّر تحميل المستخدمين (غير «لا صلاحية»)
+  const [retryTick, setRetryTick] = useState(0);
   // قائمة الحسابات المخوّلة بقسم المالية (معرّفات مستخدمين) — يعيّنها مالك النظام
   const [financeUsers, setFinanceUsers] = useState([]);   // اطلاع
   const [financeEditors, setFinanceEditors] = useState([]); // اطلاع وتعديل
@@ -27,6 +30,24 @@ export function RoleProvider({ children }) {
     const list = await usersStore.list().catch(() => []);
     setUsers(list);
     return list;
+  }, []);
+
+  // تحميل المستخدمين عند الدخول السحابي: فشل التحميل لا يعني «لا صلاحية».
+  // على الجوال قد تنتهي صلاحية الجلسة أثناء خمول المتصفح، فنجدّدها ونعيد المحاولة.
+  const loadUsersForLogin = useCallback(async () => {
+    let last = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const list = await usersStore.list();
+        if (list.length) { setUsers(list); return list; }
+        last = new Error("قائمة المستخدمين رجعت فاضية.");
+      } catch (e) {
+        last = e;
+      }
+      try { await supabase?.auth.refreshSession(); } catch {}
+      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+    }
+    throw last || new Error("تعذّر تحميل المستخدمين.");
   }, []);
 
   const reloadProjects = useCallback(async () => {
@@ -72,10 +93,22 @@ export function RoleProvider({ children }) {
   useEffect(() => {
     (async () => {
       setReady(false);
+      if (isCloud && authed) {
+        reloadProjects();
+        try {
+          const list = await loadUsersForLogin();
+          setLoadError("");
+          await resolveCloudViewer(list);
+        } catch (e) {
+          setNoAccess(false);
+          setViewerId(null);
+          setLoadError(e?.message || "تعذّر الاتصال بقاعدة البيانات.");
+        }
+        setReady(true);
+        return;
+      }
       const [list] = await Promise.all([reloadUsers(), reloadProjects()]);
-      if (isCloud) {
-        if (authed) await resolveCloudViewer(list);
-      } else {
+      if (!isCloud) {
         let saved = null;
         try { saved = window.localStorage.getItem("sp_viewer"); } catch {}
         const exists = list.find((u) => u.id === saved);
@@ -84,7 +117,8 @@ export function RoleProvider({ children }) {
       }
       setReady(true);
     })();
-  }, [reloadUsers, reloadProjects, isCloud, authed, authEmail, resolveCloudViewer]);
+  }, [reloadUsers, reloadProjects, loadUsersForLogin, isCloud, authed, authEmail, resolveCloudViewer, retryTick]);
+  const retryLogin = useCallback(() => setRetryTick((n) => n + 1), []);
 
   // تحميل قائمة صلاحية المالية (مشتركة سحابياً عبر app_settings)
   useEffect(() => {
@@ -174,7 +208,7 @@ export function RoleProvider({ children }) {
 
   return (
     <RoleCtx.Provider
-      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, team, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms, taskVisible, isInvolved, decisionBlockFor }}
+      value={{ users, projects, viewer, viewerId, setViewer, reloadUsers, reloadProjects, role, scopeProjects, clientProject, team, readOnly, canManage, canFinance, canFinanceEdit, canApprove, canDeliver, financeUsers, financeEditors, saveFinanceUsers, ready, allowSwitch, noAccess, loadError, retryLogin, perms, permsOf, can, ability, permOverrides, savePermissions, canManagePerms, taskVisible, isInvolved, decisionBlockFor }}
     >
       {children}
     </RoleCtx.Provider>
@@ -184,7 +218,7 @@ export function RoleProvider({ children }) {
 export function useRole() {
   return useContext(RoleCtx) || {
     users: [], projects: [], viewer: null, role: "manager", scopeProjects: null, clientProject: null, team: [],
-    readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false,
+    readOnly: false, canManage: true, canFinance: true, canFinanceEdit: true, canApprove: true, canDeliver: true, financeUsers: [], financeEditors: [], ready: false, allowSwitch: true, noAccess: false, loadError: "", retryLogin: () => {},
     perms: { sections: {}, abilities: {} }, permsOf: () => ({ sections: {}, abilities: {} }), can: () => true, ability: () => true, permOverrides: {}, savePermissions: async () => {}, canManagePerms: true,
     taskVisible: () => true, isInvolved: () => false, decisionBlockFor: () => null,
     setViewer: () => {}, reloadUsers: async () => [], reloadProjects: async () => [], saveFinanceUsers: async () => {},

@@ -446,7 +446,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
 
           {/* شات الملاحظات والتواصل حول المهمة */}
           <div className="d-section" ref={chatRef} style={{ scrollMarginTop: 16 }}><span className="st-ic"><Icon name="chat" size={15} /></span>شات الملاحظات</div>
-          <TaskChat taskId={t.id} onCount={setChatCount} />
+          <TaskChat task={t} onCount={setChatCount} />
         </div>
 
         {!readOnly && (

@@ -8,6 +8,8 @@ import { useRole } from "@/components/RoleProvider";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskDetail from "@/components/TaskDetail";
+import ChatBox from "@/components/ChatBox";
+import { projectChannel } from "@/lib/chat";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import ProjectChainEditor, { ChainPath } from "@/components/ProjectChainEditor";
 import { useProjectChains, effectiveChain } from "@/lib/projectChain";
@@ -262,6 +264,18 @@ export default function ProjectPage() {
               </div>
             )}
           </div>
+
+          {can("chat", "view") && (
+            <div className="card pd-card" id="chat">
+              <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>شات المشروع</span>
+                <Link href={`/chat?c=${encodeURIComponent(projectChannel(project.id))}`} className="btn sm ghost" style={{ marginInlineStart: "auto" }}>فتح في المحادثات</Link>
+              </div>
+              <ChatBox channel={projectChannel(project.id)} label={`شات مشروع ${project.name}`}
+                link={`/chat?c=${encodeURIComponent(projectChannel(project.id))}`}
+                emptyText="لا رسائل بعد — ابدأ النقاش حول المشروع، واكتب @ للإشارة لشخص." />
+            </div>
+          )}
 
           <div className="card pd-card">
             <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>

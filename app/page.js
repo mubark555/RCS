@@ -18,6 +18,7 @@ import {
 import { leavesApi, awayOn, upcomingLeaves, LEAVE_TYPES } from "@/lib/leaves";
 import { mergeEvents, occurrenceIn, EVENT_TYPES } from "@/lib/calendar-seed";
 import { useAmalEnabled } from "@/lib/amalPref";
+import AmalSettings from "@/components/AmalSettings";
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [amalOn, setAmalOn] = useAmalEnabled();
+  const [amalSettings, setAmalSettings] = useState(false);
   const [viewing, setViewing] = useState(null);
   const [report, setReport] = useState(null); // نافذة التقرير المصغّر
   const [tab, setTab] = useState("overdue");
@@ -155,14 +157,19 @@ export default function Dashboard() {
           <small>{hijriToday()}</small>
         </div>
         <div className="cc-hero-acts">
-          <label className="cc-amal" title={amalOn ? "أمل مفعّلة — اضغط لإيقافها" : "أمل غير مفعّلة — اضغط لتفعيل المساعدة الذكية"}>
-            <img src="/amal/amal-face.webp" alt="" />
-            <span><b>أمل <i>AI</i></b><small>{amalOn ? "مفعّلة" : "غير مفعّلة"}</small></span>
-            <span className={`switch ${amalOn ? "on" : ""}`}>
-              <input type="checkbox" checked={amalOn} onChange={(e) => setAmalOn(e.target.checked)} aria-label="تفعيل المساعدة الذكية أمل" />
-              <i />
-            </span>
-          </label>
+          <div className="cc-amal">
+            <label title={amalOn ? "أمل مفعّلة — اضغط لإيقافها" : "أمل غير مفعّلة — اضغط لتفعيل المساعدة الذكية"}>
+              <img src="/amal/amal-face.webp" alt="" />
+              <span><b>أمل <i>AI</i></b><small>{amalOn ? "مفعّلة" : "غير مفعّلة"}</small></span>
+              <span className={`switch ${amalOn ? "on" : ""}`}>
+                <input type="checkbox" checked={amalOn} onChange={(e) => setAmalOn(e.target.checked)} aria-label="تفعيل المساعدة الذكية أمل" />
+                <i />
+              </span>
+            </label>
+            <button type="button" className="cc-amal-gear" onClick={() => setAmalSettings(true)} title="تخصيص أمل" aria-label="تخصيص أمل">
+              <Icon name="settings" size={16} />
+            </button>
+          </div>
           {can("reports") && <button className="btn ghost" onClick={() => router.push("/reports")}><Icon name="file" size={15} /> التقارير المفصّلة</button>}
           <button className="btn primary" onClick={() => router.push(pending.length && canApprove ? "/approvals" : "/tasks")}>
             {pending.length && canApprove ? `مراجعة الاعتمادات (${pending.length})` : "عرض المهام"}
@@ -370,6 +377,7 @@ export default function Dashboard() {
           onDelete={async (t) => { if (confirm(`حذف المهمة؟\n\n${t.task}`)) { await tasksStore.remove(t.id); setViewing(null); await reload(); } }} />
       )}
       {dialog && <ReviewDialog task={dialog.task} mode={dialog.mode} onClose={() => setDialog(null)} onDone={reload} />}
+      {amalSettings && <AmalSettings onClose={() => setAmalSettings(false)} />}
     </div>
     </>
   );

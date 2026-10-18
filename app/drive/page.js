@@ -142,6 +142,32 @@ export default function DrivePage() {
 
   if (!mode) return <div className="empty">جاري التحميل…</div>;
 
+  // النظام المنشور: الصفحة مقفلة لين يُربط حساب Google (بيئة الاختبار للوضع المحلي فقط)
+  if (mode === "sim" && isCloud) {
+    return (
+      <div className="drv-gate">
+        <span className="ic"><Icon name="lock" size={30} /></span>
+        <h2>Google Drive غير مربوط بعد</h2>
+        <p>بعد الربط، الملفات ترتفع لمجلدكم في Drive مباشرة وتترتب تلقائياً حسب <b>المشروع ← التصنيف</b> أو <b>المشروع ← المهام ← اسم المهمة</b>.</p>
+        {err && <div className="drv-err" style={{ justifyContent: "center" }}><Icon name="alert" size={15} /> {err}</div>}
+        {status?.canConnect ? (
+          <button className="btn primary" onClick={() => setModal("connect")}><Icon name="link" size={16} /> ربط حساب Google</button>
+        ) : status?.admin ? (
+          <div className="drv-gate-note">
+            لتفعيل الربط: أضف <code dir="ltr">GOOGLE_OAUTH_CLIENT_ID</code> و <code dir="ltr">GOOGLE_OAUTH_CLIENT_SECRET</code> في إعدادات Vercel ثم Redeploy — بعدها يظهر هنا زر «ربط حساب Google». الخطوات كاملة في README.
+          </div>
+        ) : (
+          <div className="drv-gate-note">بانتظار مدير النظام يربط حساب Google Drive.</div>
+        )}
+        {modal === "connect" && (
+          <Modal title="ربط حساب Google Drive" onClose={() => setModal("")}>
+            <ConnectForm redirectUri={status?.redirectUri} onCancel={() => setModal("")} />
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       {mode === "real" ? (

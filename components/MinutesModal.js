@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toHref } from "@/lib/links.mjs";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { STATUS_META } from "@/lib/constants";
@@ -86,7 +87,7 @@ export function minutesDocHtml(m) {
   <section><h2>محضر الاجتماع</h2>${bullets(m.minutes)}</section>
   ${decs.length ? `<section><h2>القرارات</h2><table><tr><th>القرار</th><th style="width:120px">المسؤول</th><th style="width:110px">الموعد</th></tr>${decs.map((a) => `<tr><td>${esc(a.text)}</td><td>${esc(a.assignee || "—")}</td><td>${esc(a.due || "—")}</td></tr>`).join("")}</table></section>` : ""}
   ${acts.length ? `<section><h2>إجراءات المتابعة</h2><table><tr><th>الإجراء</th><th style="width:120px">المسؤول</th><th style="width:110px">الموعد</th></tr>${acts.map((a) => `<tr><td>${esc(a.text)}</td><td>${esc(a.assignee || "—")}</td><td>${esc(a.due || "—")}</td></tr>`).join("")}</table></section>` : ""}
-  ${links.length ? `<section><h2>المرفقات والروابط</h2><ul class="att">${links.map((l) => `<li>${esc(l.type || "رابط")}: <a href="${esc(l.url)}">${esc(l.label || l.url)}</a></li>`).join("")}</ul></section>` : ""}
+  ${links.length ? `<section><h2>المرفقات والروابط</h2><ul class="att">${links.map((l) => `<li>${esc(l.type || "رابط")}: <a href="${esc(toHref(l.url) || l.url)}">${esc(l.label || l.url)}</a></li>`).join("")}</ul></section>` : ""}
 
   <div class="sign">
     <div>توقيع مدير المشروع</div>
@@ -273,7 +274,7 @@ export default function MinutesModal({ meeting, onClose, onEdit, onUpdated, read
             {links.map((l, i) => (
               <div className="file-line" key={i}>
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="link" size={15} /></span>
-                <a href={l.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, color: "var(--primary)", fontWeight: 600 }}>{l.label || l.url}</a>
+                <a href={toHref(l.url) || l.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, color: "var(--primary)", fontWeight: 600 }}>{l.label || l.url}</a>
                 <span className="pill">{l.type}</span>
               </div>
             ))}

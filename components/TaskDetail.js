@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toHref } from "@/lib/links.mjs";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import TaskChat from "@/components/TaskChat";
@@ -405,7 +406,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
               links.map((l, i) => (
                 <div className="file-line" key={i}>
                   <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="link" size={15} /></span>
-                  <a href={l.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, color: "var(--primary)", fontWeight: 600 }}>
+                  <a href={toHref(l.url) || l.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, color: "var(--primary)", fontWeight: 600 }}>
                     {l.label || l.url}
                   </a>
                   <span className="pill">{l.type}</span>

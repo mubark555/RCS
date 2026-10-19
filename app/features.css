@@ -792,3 +792,10 @@ th.pm-sticky { background: var(--surface-2); }
 .drv-gate p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.9; }
 .drv-gate-note { font-size: 12.5px; color: var(--muted); line-height: 1.9; background: var(--surface-2); border-radius: 12px; padding: 10px 14px; }
 .drv-gate-note code { font-size: 11.5px; background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 5px; }
+
+/* الروابط داخل الشات والاجتماعات */
+.chat-link { color: #2563eb; text-decoration: underline; word-break: break-all; }
+.chat-msg.mine .chat-link { color: inherit; }
+.mtg-btn.join { background: #2563eb; color: #fff; border-color: #2563eb; }
+.mtg-btn.join:hover { background: #1d4ed8; }
+.mtg-link { color: #2563eb; text-decoration: underline; word-break: break-all; }

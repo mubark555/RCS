@@ -9,6 +9,7 @@ import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { minutesDocHtml } from "@/components/MinutesModal";
+import { toHref, firstUrl } from "@/lib/links.mjs";
 import { parseAttendees, presentOf, MEETING_STATUS, isLocked, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf, organizerOf } from "@/lib/meetings";
 import { isMe } from "@/lib/mywork.mjs";
 
@@ -203,7 +204,9 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
   const attendees = parseAttendees(m.attendees);
   const links = Array.isArray(m.links) ? m.links : [];
   const agendaPreview = (m.agenda || "").split("\n").filter(Boolean).join(" · ");
-  const metaBits = [dateStr, `${m.duration} دقيقة`, m.project, m.location].filter(Boolean);
+  // رابط الاجتماع: من حقل «المكان / رابط الاجتماع» (حتى لو كُتب بدون https://)
+  const joinUrl = firstUrl(m.location);
+  const metaBits = [dateStr, `${m.duration} دقيقة`, m.project, joinUrl ? "" : m.location].filter(Boolean);
 
   async function del() {
     if (!confirm(`حذف الاجتماع؟\n\n${m.title}`)) return;
@@ -221,7 +224,10 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
             <span className="st" style={{ background: `${st.color}1e`, color: st.color }}>{st.short || st.ar}</span>
           </div>
           {m.status !== "Cancelled" && <Lifecycle m={m} />}
-          <div className="mtg-meta">{metaBits.join(" · ")}</div>
+          <div className="mtg-meta">
+            {metaBits.join(" · ")}
+            {joinUrl && <> · <a href={joinUrl} target="_blank" rel="noopener noreferrer" dir="ltr" className="mtg-link">{m.location}</a></>}
+          </div>
           {(organizerOf(m) || m.objective) && (
             <div className="mtg-meta">
               {organizerOf(m) && <>المنظّم: <b>{organizerOf(m)}</b></>}
@@ -242,6 +248,11 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
           )}
           {agendaPreview && <div className="mtg-agenda">{agendaPreview}</div>}
           <div className="mtg-actions">
+            {joinUrl && (m.status || "Scheduled") === "Scheduled" && (
+              <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="mtg-btn join">
+                <Icon name="link" size={15} /> دخول الاجتماع
+              </a>
+            )}
             {!readOnly && (m.status || "Scheduled") === "Scheduled" && (
               <button className={`mtg-btn go${past ? " pulse" : ""}`} onClick={onEnd}>
                 <Icon name="stop" size={14} /> إنهاء الاجتماع
@@ -259,7 +270,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
               <Icon name="upload" size={15} /> تصدير
             </button>
             {links.map((l, i) => (
-              <a key={i} href={l.url} target="_blank" rel="noreferrer" className="mtg-btn pri">
+              <a key={i} href={toHref(l.url) || l.url} target="_blank" rel="noopener noreferrer" className="mtg-btn pri">
                 <Icon name="link" size={15} /> {l.label || l.type || "رابط"}
               </a>
             ))}

@@ -8,6 +8,7 @@ import { useRole } from "@/components/RoleProvider";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { useChat } from "@/components/ChatProvider";
 import { findMentions, splitMentions } from "@/lib/chat";
+import { splitLinks } from "@/lib/links.mjs";
 
 const ROLE_LABEL = { manager: "إدارة", member: "فريق", client: "عميل" };
 
@@ -205,7 +206,11 @@ export default function ChatBox({ channel, label, link, onCount, closed = false,
                 <div className="chat-bubble">
                   {c.body && (
                     <div className="chat-text">
-                      {splitMentions(c.body, names).map((p, i) => (p.mention ? <span key={i} className={`chat-mention${p.text === `@${me}` ? " me" : ""}`}>{p.text}</span> : p.text))}
+                      {splitMentions(c.body, names).map((p, i) => (p.mention
+                        ? <span key={i} className={`chat-mention${p.text === `@${me}` ? " me" : ""}`}>{p.text}</span>
+                        : splitLinks(p.text).map((x, j) => (x.href
+                          ? <a key={`${i}-${j}`} className="chat-link" href={x.href} target="_blank" rel="noopener noreferrer" dir="ltr">{x.text}</a>
+                          : <span key={`${i}-${j}`}>{x.text}</span>))))}
                     </div>
                   )}
                   {(c.attachments || []).length > 0 && (

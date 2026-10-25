@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { filesStore, isCloud } from "@/lib/store";
+import { useEffect, useMemo, useState } from "react";
+import { filesStore } from "@/lib/store";
 import { useRole, useProjectNames } from "@/components/RoleProvider";
 import { isFinanceFile } from "@/lib/constants";
 import Modal from "@/components/Modal";
@@ -17,7 +17,7 @@ export default function ArchivePage() {
   const [fProject, setFProject] = useState("");
   const [fCat, setFCat] = useState("");
   const [q, setQ] = useState("");
-  const [modal, setModal] = useState(null); // 'upload' | 'link'
+  const [modal, setModal] = useState(null); // 'link'
   const [busyId, setBusyId] = useState(null);
 
   async function reload() {
@@ -69,15 +69,9 @@ export default function ArchivePage() {
         <span className="pill" style={{ fontSize: 13, padding: "6px 12px" }}>{filtered.length} عنصر</span>
         <div style={{ marginInlineStart: "auto" }} />
         {!readOnly && (
-          <button className="btn primary" onClick={() => setModal("upload")}><Icon name="upload" size={16} /> رفع ملف</button>
+          <button className="btn primary" onClick={() => setModal("link")}><Icon name="link" size={16} /> مشاركة ملف برابط</button>
         )}
       </div>
-
-      {!isCloud && !readOnly && (
-        <div className="card" style={{ borderColor: "#f3cfc9", background: "#fcece9", marginBottom: 14, fontSize: 13, color: "#cf4940" }}>
-          الوضع المحلي التجريبي: تُحفظ الملفات المرفوعة داخل متصفحك فقط. الروابط تعمل دائماً. عند ربط Supabase تُرفع للتخزين السحابي وتُشارك مع الفريق.
-        </div>
-      )}
 
       <div className="toolbar">
         <input placeholder="بحث…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minWidth: 200 }} />
@@ -119,66 +113,18 @@ export default function ArchivePage() {
         ))
       )}
 
-      {modal === "upload" && (
-        <Modal title="رفع ملف جديد" onClose={() => setModal(null)}>
-          <UploadForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
+      {modal === "link" && (
+        <Modal title="مشاركة ملف برابط مباشر" onClose={() => setModal(null)}>
+          <LinkForm onCancel={() => setModal(null)} onDone={async () => { setModal(null); await reload(); }} />
         </Modal>
       )}
     </div>
   );
 }
 
-function UploadForm({ onDone, onCancel }) {
-  const projectNames = useProjectNames();
-  const fileRef = useRef(null);
-  const [meta, setMeta] = useState({ project: "", category: CATEGORIES[0], note: "" });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit(e) {
-    e.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) { setErr("اختر ملفاً أولاً"); return; }
-    setBusy(true); setErr("");
-    try {
-      await filesStore.upload(file, meta);
-      await onDone();
-    } catch (e2) {
-      setErr("تعذّر الرفع: " + (e2?.message || e2));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit}>
-      <label className="field"><span>الملف *</span><input type="file" ref={fileRef} /></label>
-      <div className="form-grid">
-        <label className="field"><span>المشروع</span>
-          <select value={meta.project} onChange={(e) => setMeta({ ...meta, project: e.target.value })}>
-            <option value="">—</option>
-            {projectNames.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
-        <label className="field"><span>التصنيف</span>
-          <select value={meta.category} onChange={(e) => setMeta({ ...meta, category: e.target.value })}>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-      </div>
-      <label className="field"><span>ملاحظة</span><input value={meta.note} onChange={(e) => setMeta({ ...meta, note: e.target.value })} /></label>
-      {err && <div style={{ color: "#cf4940", fontSize: 13, marginBottom: 10 }}>{err}</div>}
-      <div className="modal-actions">
-        <button type="submit" className="btn primary" disabled={busy}>{busy ? "جاري الرفع…" : "رفع"}</button>
-        <button type="button" className="btn ghost" onClick={onCancel}>إلغاء</button>
-      </div>
-    </form>
-  );
-}
-
 function LinkForm({ onDone, onCancel }) {
   const projectNames = useProjectNames();
-  const [f, setF] = useState({ name: "", url: "", project: "", category: "محاضر", note: "" });
+  const [f, setF] = useState({ name: "", url: "", project: "", category: CATEGORIES[0], note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -199,7 +145,7 @@ function LinkForm({ onDone, onCancel }) {
 
   return (
     <form onSubmit={submit}>
-      <label className="field"><span>الرابط *</span><input value={f.url} onChange={set("url")} placeholder="https://…" /></label>
+      <label className="field"><span>الرابط *</span><input type="url" dir="ltr" value={f.url} onChange={set("url")} placeholder="https://… (Drive، OneDrive، Dropbox…)" /></label>
       <label className="field"><span>الاسم / الوصف</span><input value={f.name} onChange={set("name")} placeholder="مثال: محضر اجتماع 20 يوليو" /></label>
       <div className="form-grid">
         <label className="field"><span>المشروع</span>

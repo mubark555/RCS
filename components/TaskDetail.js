@@ -33,7 +33,6 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const [files, setFiles] = useState([]);
   const [taskFiles, setTaskFiles] = useState([]);
   const [dialog, setDialog] = useState(null); // submit | approve | revision
-  const [uploading, setUploading] = useState(false);
   const [t, setT] = useState(task);
   const [chatCount, setChatCount] = useState(0);
   const chatRef = useRef(null);
@@ -112,21 +111,6 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
     await persist({ links: links.filter((_, j) => j !== i) });
   }
 
-  // رفع مرفق (ملف) خاص بهذه المهمة
-  async function uploadFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try {
-      const rec = await filesStore.upload(file, { project: t.project, category: "مرفق مهمة", note: t.task, task_id: t.id });
-      if (rec) setTaskFiles((l) => [rec, ...l]);
-    } catch (err) {
-      alert(`تعذّر رفع الملف: ${err?.message || ""}`);
-    } finally {
-      setUploading(false);
-    }
-  }
   async function openFile(f) { window.open(await filesStore.getUrl(f), "_blank"); }
   async function removeFile(f) {
     if (!confirm(`حذف المرفق؟\n${f.name}`)) return;
@@ -378,10 +362,11 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
             </>
           )}
 
-          {/* المرفقات (ملفات) */}
+          {/* مرفقات قديمة مرفوعة سابقاً (الرفع المباشر أُلغي — الملفات تُشارك كروابط) */}
+          {taskFiles.length > 0 && (<>
           <div className="d-section"><span className="st-ic"><Icon name="file" size={15} /></span>المرفقات ({taskFiles.length})</div>
           <div className="detail-block">
-            {taskFiles.length === 0 ? <span className="muted">لا مرفقات بعد.</span> : taskFiles.map((f) => (
+            {taskFiles.map((f) => (
               <div className="file-line" key={f.id}>
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="file" size={15} /></span>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
@@ -389,13 +374,8 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                 {!readOnly && <button className="btn sm ghost" type="button" onClick={() => removeFile(f)} title="حذف"><Icon name="close" size={14} /></button>}
               </div>
             ))}
-            {!readOnly && (
-              <label className="btn sm" style={{ marginTop: 10, cursor: "pointer", display: "inline-flex" }}>
-                <Icon name="upload" size={14} /> {uploading ? "جاري الرفع…" : "رفع ملف"}
-                <input type="file" hidden onChange={uploadFile} disabled={uploading} />
-              </label>
-            )}
           </div>
+          </>)}
 
           {/* الروابط داخل المهمة */}
           <div className="d-section"><span className="st-ic"><Icon name="link" size={15} /></span>الروابط ({links.length})</div>

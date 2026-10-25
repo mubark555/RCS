@@ -40,7 +40,7 @@ export default function ProjectDetail({ project, onClose }) {
     if (!lnk.url.trim()) return;
     setBusyFile(true);
     try {
-      await filesStore.addLink({ name: lnk.label || lnk.url, url: lnk.url, project: project.name, category: "Google Drive" });
+      await filesStore.addLink({ name: lnk.label || lnk.url, url: lnk.url, project: project.name, category: "رابط ملف" });
       setLnk({ label: "", url: "" });
       await reloadFiles();
     } finally {
@@ -130,9 +130,9 @@ export default function ProjectDetail({ project, onClose }) {
             {tasks.length > 15 && <div className="muted" style={{ padding: 8, fontSize: 12 }}>+ {tasks.length - 15} مهمة أخرى…</div>}
           </div>
 
-          <div className="d-section">أرشيف المشروع — روابط Google Drive ({files.length})</div>
+          <div className="d-section">روابط ملفات المشروع ({files.length})</div>
           <div className="detail-block">
-            {files.length === 0 ? <span className="muted">لا روابط بعد — أضِف روابط ملفات المشروع (Google Drive).</span> : files.map((f) => (
+            {files.length === 0 ? <span className="muted">لا روابط بعد — شارك أي ملف برابط مباشر.</span> : files.map((f) => (
               <div className="file-line" key={f.id}>
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="link" size={15} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -146,7 +146,7 @@ export default function ProjectDetail({ project, onClose }) {
             {!readOnly && (
               <div className="inline-form" style={{ marginTop: 10 }}>
                 <input placeholder="الوصف (مثال: عرض تقديمي)" value={lnk.label} onChange={(e) => setLnk({ ...lnk, label: e.target.value })} />
-                <input placeholder="رابط Google Drive…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
+                <input type="url" dir="ltr" placeholder="https://…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
                 <button className="btn primary" type="button" onClick={addLink} disabled={busyFile || !lnk.url.trim()}>إضافة</button>
               </div>
             )}

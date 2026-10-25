@@ -748,51 +748,6 @@ th.pm-sticky { background: var(--surface-2); }
   .chp-back { display: inline-flex !important; }
 }
 
-/* ================= Google Drive — بيئة اختبار ================= */
-.drv-banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 14px; background: #fef6e4; border: 1px solid #f3dfb2; color: #8a5a14; margin-bottom: 14px; }
-.drv-banner > div { display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.7; }
-.drv-banner span { color: var(--text-2); }
-.drv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.drv-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: 14px; }
-.drv-crumbs button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 9px; color: var(--text-2); font-weight: 700; }
-.drv-crumbs button:hover { background: var(--surface); }
-.drv-crumbs button.on { color: var(--ink); font-weight: 800; }
-.drv-crumbs i { font-style: normal; color: var(--muted); margin: 0 2px; }
-.drv-flash { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: #eaf6ef; color: #15803d; font-size: 13px; margin-bottom: 12px; }
-.drv-flash button { all: unset; cursor: pointer; margin-inline-start: auto; color: var(--muted); display: inline-flex; }
-.drv-path { font-weight: 800; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
-.drv-box { padding: 14px; transition: box-shadow .15s; }
-.drv-box.drop { box-shadow: 0 0 0 3px var(--ring); }
-.drv-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.drv-folder { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); cursor: pointer; }
-.drv-folder:hover { border-color: var(--primary); }
-.drv-folder .ic { color: #c88a2e; display: inline-flex; }
-.drv-folder b { font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drv-folder .x { all: unset; cursor: pointer; margin-inline-start: auto; color: var(--muted); display: none; }
-.drv-folder:hover .x { display: inline-flex; }
-.drv-file { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-bottom: 1px solid var(--border); }
-.drv-file .emo { font-size: 20px; }
-.drv-file .body { flex: 1; min-width: 0; }
-.drv-file b { display: block; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drv-file small { color: var(--muted); font-size: 11.5px; }
-.drv-here { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 12px; }
-.drv-dest { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); margin-top: 4px; font-size: 13px; }
-.drv-dest small { color: var(--muted); }
-.drv-banner.live { background: #eaf6ef; border-color: #bfe3cc; color: #15803d; }
-.drv-err { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #fdeceb; color: #c0392b; font-size: 13px; font-weight: 700; margin-bottom: 12px; }
-.drv-folder small { font-size: 11px; margin-inline-start: auto; }
-.drv-map { display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
-.drv-map-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.drv-map-row b { font-size: 13.5px; color: var(--ink); }
-.drv-banner code { font-size: 11.5px; background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 5px; }
-.drv-steps { margin: 0 0 12px; padding-inline-start: 20px; font-size: 13px; line-height: 1.9; color: var(--text-2); }
-.drv-gate { max-width: 560px; margin: 40px auto; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 36px 28px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.drv-gate .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); }
-.drv-gate h2 { margin: 4px 0 0; font-size: 20px; color: var(--ink); }
-.drv-gate p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.9; }
-.drv-gate-note { font-size: 12.5px; color: var(--muted); line-height: 1.9; background: var(--surface-2); border-radius: 12px; padding: 10px 14px; }
-.drv-gate-note code { font-size: 11.5px; background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 5px; }
-
 /* الروابط داخل الشات والاجتماعات */
 .chat-link { color: #2563eb; text-decoration: underline; word-break: break-all; }
 .chat-msg.mine .chat-link { color: inherit; }

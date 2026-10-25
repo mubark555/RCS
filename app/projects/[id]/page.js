@@ -24,7 +24,6 @@ export default function ProjectPage() {
   const readOnly = !canManage;
   const [newDeliv, setNewDeliv] = useState("");
   const [scopeEdit, setScopeEdit] = useState(null); // نص نطاق العمل أثناء التحرير
-  const [uploading, setUploading] = useState(false);
   const [project, setProject] = useState(undefined);
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -76,7 +75,7 @@ export default function ProjectPage() {
     if (!lnk.url.trim()) return;
     setBusy(true);
     try {
-      await filesStore.addLink({ name: lnk.label || lnk.url, url: lnk.url, project: project.name, category: "Google Drive" });
+      await filesStore.addLink({ name: lnk.label || lnk.url, url: lnk.url, project: project.name, category: "رابط ملف" });
       setLnk({ label: "", url: "" });
       await loadAll();
     } finally { setBusy(false); }
@@ -102,19 +101,6 @@ export default function ProjectPage() {
     setScopeEdit(null);
     await loadAll();
   }
-  async function uploadFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try {
-      await filesStore.upload(file, { project: project.name, category: "ملف مشروع", note: "" });
-      await loadAll();
-    } catch (err) {
-      alert(`تعذّر رفع الملف: ${err?.message || ""}`);
-    } finally { setUploading(false); }
-  }
-
   async function openLink(f) { window.open(await filesStore.getUrl(f), "_blank"); }
   async function delLink(f) { if (confirm(`حذف الرابط؟\n${f.name}`)) { await filesStore.remove(f); await loadAll(); } }
 
@@ -323,15 +309,8 @@ export default function ProjectPage() {
           </div>
 
           <div className="card pd-card">
-            <div className="section-title" style={{ display: "flex", alignItems: "center" }}>
-              <span>الملفات والروابط ({files.length})</span>
-              {!readOnly && (
-                <label className="btn sm" style={{ marginInlineStart: "auto", cursor: "pointer" }}>
-                  <Icon name="upload" size={13} /> {uploading ? "جاري الرفع…" : "رفع ملف"}
-                  <input type="file" hidden onChange={uploadFile} disabled={uploading} />
-                </label>
-              )}
-            </div>
+            <div className="section-title">روابط الملفات ({files.length})</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>شارك أي ملف برابط مباشر (Drive، OneDrive، Dropbox…).</div>
             {files.length === 0 ? <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>لا روابط بعد.</div> : files.map((f) => (
               <div className="file-line" key={f.id}>
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name={f.kind === "link" ? "link" : "file"} size={15} /></span>
@@ -346,7 +325,7 @@ export default function ProjectPage() {
             {!readOnly && (
               <div className="inline-form" style={{ marginTop: 12 }}>
                 <input placeholder="الوصف (مثال: عرض تقديمي)" value={lnk.label} onChange={(e) => setLnk({ ...lnk, label: e.target.value })} />
-                <input placeholder="رابط Google Drive…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
+                <input type="url" dir="ltr" placeholder="https://…" value={lnk.url} onChange={(e) => setLnk({ ...lnk, url: e.target.value })} />
                 <button className="btn primary" type="button" onClick={addLink} disabled={busy || !lnk.url.trim()}>إضافة</button>
               </div>
             )}

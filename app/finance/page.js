@@ -102,12 +102,12 @@ export default function FinancePage() {
     return { invoiced, collected, outstanding, overdueAmount, overdueCount: overdue.length, rate, projBars, monthPts, count: active.length };
   }, [rows]);
 
-  // رفع مرفق مالي (فاتورة أو إيصال سداد) — مصنّف «مالية» ومخفي عن غير المخوّلين
-  async function uploadAttachment(file, ref, project, note) {
+  // إرفاق رابط مالي (فاتورة أو إيصال سداد) — مصنّف «مالية» ومخفي عن غير المخوّلين
+  async function attachLink(url, ref, project, note) {
     try {
-      await filesStore.upload(file, { project: project || "", category: "مالية", note, ref });
+      await filesStore.addLink({ name: note, url, project: project || "", category: "مالية", note, ref });
     } catch (e) {
-      alert(`تعذّر رفع المرفق: ${e?.message || ""}`);
+      alert(`تعذّر حفظ الرابط: ${e?.message || ""}`);
     }
   }
 
@@ -286,10 +286,10 @@ export default function FinancePage() {
             projects={projects}
             kpis={kpis}
             onCancel={() => setEditing(null)}
-            onSave={async (payload, file) => {
+            onSave={async (payload, link) => {
               const rec = editing.id ? await invoicesStore.update(editing.id, payload) : await invoicesStore.create(payload);
               const id = editing.id || rec?.id;
-              if (file && id) await uploadAttachment(file, `invoice:${id}`, payload.project, `فاتورة ${payload.number}`);
+              if (link && id) await attachLink(link, `invoice:${id}`, payload.project, `فاتورة ${payload.number}`);
               setEditing(null);
               await reload();
             }}
@@ -304,7 +304,7 @@ export default function FinancePage() {
             payments={(payments || []).filter((p) => p.invoice_id === detail.id)}
             filesOf={filesOf}
             canEdit={canManage}
-            onUpload={async (file, ref) => { await uploadAttachment(file, ref, detail.project, `فاتورة ${detail.number}`); await reload(); }}
+            onAddLink={async (url, ref) => { await attachLink(url, ref, detail.project, `فاتورة ${detail.number}`); await reload(); }}
             onRemoveFile={async (f) => { if (confirm(`حذف المرفق؟\n${f.name}`)) { await filesStore.remove(f); await reload(); } }}
             onRemovePayment={async (p) => {
               if (!confirm("حذف هذه الدفعة؟")) return;
@@ -323,9 +323,9 @@ export default function FinancePage() {
           <PaymentForm
             invoice={payFor}
             onCancel={() => setPayFor(null)}
-            onSave={async (payload, file) => {
+            onSave={async (payload, link) => {
               const pay = await paymentsStore.create({ invoice_id: payFor.id, ...payload });
-              if (file && pay?.id) await uploadAttachment(file, `payment:${pay.id}`, payFor.project, `سداد ${payFor.number}`);
+              if (link && pay?.id) await attachLink(link, `payment:${pay.id}`, payFor.project, `سداد ${payFor.number}`);
               // إذا اكتمل السداد، علّم الفاتورة كمدفوعة تلقائياً
               const newPaid = (paidByInv[payFor.id] || 0) + (Number(payload.amount) || 0);
               if (newPaid >= (Number(payFor.amount) || 0) && payFor.status !== "مدفوعة") {
@@ -342,7 +342,7 @@ export default function FinancePage() {
 }
 
 function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
-  const [file, setFile] = useState(null);
+  const [link, setLink] = useState("");
   const [f, setF] = useState({
     number: "", project: "", amount: "", currency: CURRENCY,
     issue_date: "", due_date: "", status: "مسودة", kpi_id: "", note: "",
@@ -371,7 +371,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
         due_date: f.due_date || null,
         status: INVOICE_STATUSES.includes(f.status) ? f.status : "مسودة",
         note: (f.note || "").trim(),
-      }, file);
+      }, link.trim());
     } finally { setSaving(false); }
   }
 
@@ -401,7 +401,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
         </label>
       </div>
       <label className="field full"><span>ملاحظات / وصف الخدمة</span><input value={f.note} onChange={set("note")} placeholder="وصف مختصر للمقابل المُفوتر" /></label>
-      <label className="field full"><span>مرفق الفاتورة (PDF أو صورة — اختياري)</span><input type="file" accept=".pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
+      <label className="field full"><span>رابط مرفق الفاتورة (اختياري)</span><input type="url" dir="ltr" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} /></label>
       {err && <div style={{ background: "#fdeceb", color: "#e0574e", fontSize: 13, fontWeight: 600, padding: "10px 14px", borderRadius: 11, marginBottom: 12 }}>{err}</div>}
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "…" : (initial ? "حفظ" : "إضافة الفاتورة")}</button>
@@ -412,7 +412,7 @@ function InvoiceForm({ initial, projects = [], kpis = [], onSave, onCancel }) {
 }
 
 function PaymentForm({ invoice, onSave, onCancel }) {
-  const [file, setFile] = useState(null);
+  const [link, setLink] = useState("");
   const [f, setF] = useState({ amount: "", date: "", method: PAYMENT_METHODS[0], note: "" });
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -424,7 +424,7 @@ function PaymentForm({ invoice, onSave, onCancel }) {
     if (!amount || amount <= 0) { setErr("أدخل مبلغ الدفعة."); return; }
     setSaving(true);
     try {
-      await onSave({ amount, date: f.date || null, method: f.method, note: (f.note || "").trim() }, file);
+      await onSave({ amount, date: f.date || null, method: f.method, note: (f.note || "").trim() }, link.trim());
     } finally { setSaving(false); }
   }
 
@@ -442,7 +442,7 @@ function PaymentForm({ invoice, onSave, onCancel }) {
         </label>
       </div>
       <label className="field full"><span>ملاحظة</span><input value={f.note} onChange={set("note")} placeholder="مثال: دفعة أولى / سداد كامل" /></label>
-      <label className="field full"><span>إيصال السداد (PDF أو صورة — اختياري)</span><input type="file" accept=".pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
+      <label className="field full"><span>رابط إيصال السداد (اختياري)</span><input type="url" dir="ltr" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} /></label>
       {err && <div style={{ background: "#fdeceb", color: "#e0574e", fontSize: 13, fontWeight: 600, padding: "10px 14px", borderRadius: 11, marginBottom: 12 }}>{err}</div>}
       <div className="modal-actions">
         <button type="submit" className="btn primary" disabled={saving}>{saving ? "…" : "تسجيل الدفعة"}</button>
@@ -453,15 +453,23 @@ function PaymentForm({ invoice, onSave, onCancel }) {
 }
 
 // تفاصيل الفاتورة: البيانات + مرفق الفاتورة + الدفعات وإيصالاتها
-function InvoiceDetail({ inv, payments, filesOf, canEdit, onUpload, onRemoveFile, onRemovePayment, onPay, onClose }) {
-  const [busy, setBusy] = useState("");
-  async function pick(e, ref) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setBusy(ref);
-    try { await onUpload(file, ref); } finally { setBusy(""); }
+function LinkAdder({ onAdd }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function add() {
+    if (!url.trim()) return;
+    setBusy(true);
+    try { await onAdd(url.trim()); setUrl(""); } finally { setBusy(false); }
   }
+  return (
+    <div className="inline-form" style={{ marginTop: 8 }}>
+      <input type="url" dir="ltr" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
+      <button className="btn sm" type="button" onClick={add} disabled={busy || !url.trim()}><Icon name="link" size={13} /> {busy ? "…" : "إضافة رابط"}</button>
+    </div>
+  );
+}
+
+function InvoiceDetail({ inv, payments, filesOf, canEdit, onAddLink, onRemoveFile, onRemovePayment, onPay, onClose }) {
   async function open(f) { window.open(await filesStore.getUrl(f), "_blank"); }
   const FileList = ({ refKey, empty }) => {
     const list = filesOf(refKey);
@@ -469,18 +477,13 @@ function InvoiceDetail({ inv, payments, filesOf, canEdit, onUpload, onRemoveFile
       <div>
         {list.length === 0 ? <span className="muted" style={{ fontSize: 12.5 }}>{empty}</span> : list.map((f) => (
           <div className="file-line" key={f.id}>
-            <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="file" size={15} /></span>
+            <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name={f.kind === "link" ? "link" : "file"} size={15} /></span>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
             <button className="btn sm" type="button" onClick={() => open(f)}>فتح</button>
             {canEdit && <button className="btn sm ghost icon" type="button" onClick={() => onRemoveFile(f)} title="حذف"><Icon name="close" size={13} /></button>}
           </div>
         ))}
-        {canEdit && (
-          <label className="btn sm" style={{ marginTop: 8, cursor: "pointer", display: "inline-flex" }}>
-            <Icon name="upload" size={13} /> {busy === refKey ? "جاري الرفع…" : "رفع مرفق"}
-            <input type="file" accept=".pdf,image/*" hidden onChange={(e) => pick(e, refKey)} disabled={!!busy} />
-          </label>
-        )}
+        {canEdit && <LinkAdder onAdd={(url) => onAddLink(url, refKey)} />}
       </div>
     );
   };

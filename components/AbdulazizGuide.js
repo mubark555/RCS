@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRole } from "@/components/RoleProvider";
 import Icon from "@/components/Icon";
-import { ABDULAZIZ_AVATAR, guideForPath, visibleGuides } from "@/lib/abdulaziz";
+import { ABDULAZIZ_AVATAR, ABDULAZIZ_POSES, guideForPath, visibleGuides } from "@/lib/abdulaziz";
 import { useAmalEnabled, readAmalPrefs } from "@/lib/amalPref";
 
 const SEEN_KEY = "abdulaziz_seen";
@@ -30,6 +30,11 @@ function Avatar({ size = 52 }) {
       {ABDULAZIZ_AVATAR ? <img src={ABDULAZIZ_AVATAR} alt="عبدالعزيز" /> : "ع"}
     </span>
   );
+}
+
+// الشخصية كاملة بوضعية حسب الموقف (ترحيب، شرح، تفكير…)
+function Figure({ pose = "idle", className = "" }) {
+  return <img className={`az-fig ${className}`} src={ABDULAZIZ_POSES[pose] || ABDULAZIZ_POSES.idle} alt="" draggable={false} />;
 }
 
 function GuideBody({ g }) {
@@ -67,6 +72,7 @@ export default function AbdulazizGuide() {
   const [sel, setSel] = useState(null); // مفتاح القسم المعروض في «كل الأقسام»
   const [tab, setTab] = useState("page"); // page | all
   const [bubble, setBubble] = useState(null);
+  const [hover, setHover] = useState(false);
 
   const current = useMemo(() => (ready ? guideForPath(path, can) : null), [path, can, ready]);
   const all = useMemo(() => (ready ? visibleGuides(can) : []), [can, ready]);
@@ -115,8 +121,8 @@ export default function AbdulazizGuide() {
             </div>
           </div>
         )}
-        <button type="button" className="az-fab" onClick={() => (open ? setOpen(false) : show())} title="عبدالعزيز — شرح أقسام النظام" aria-label="عبدالعزيز — شرح أقسام النظام">
-          <Avatar />
+        <button type="button" className="az-fab" onClick={() => (open ? setOpen(false) : show())} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} title="عبدالعزيز — شرح أقسام النظام" aria-label="عبدالعزيز — شرح أقسام النظام">
+          <Figure pose={bubble ? "wave" : hover ? "thumbs" : "idle"} />
           <span className="az-fab-tag">عبدالعزيز</span>
         </button>
       </div>
@@ -140,11 +146,13 @@ export default function AbdulazizGuide() {
 
             <div className="az-scroll">
               {tab === "page" && current && (<>
+                <Figure pose="explain" className="az-host" />
                 <h3 className="az-title"><Icon name={current.ico} size={18} /> {current.ar}</h3>
                 <GuideBody g={current} />
               </>)}
 
               {tab === "all" && !picked && (<>
+                <Figure pose="present" className="az-host" />
                 <p className="az-intro">اختر أي قسم وأشرح لك وش هو وكيف تستخدمه. تظهر هنا الأقسام المتاحة لك حسب صلاحياتك.</p>
                 <div className="az-list">
                   {all.map((g) => (
@@ -158,6 +166,7 @@ export default function AbdulazizGuide() {
 
               {tab === "all" && picked && (<>
                 <button type="button" className="btn sm ghost az-back" onClick={() => setSel(null)}><Icon name="arrow" size={14} /> كل الأقسام</button>
+                <Figure pose="thumbs" className="az-host" />
                 <h3 className="az-title"><Icon name={picked.ico} size={18} /> {picked.ar}</h3>
                 <GuideBody g={picked} />
                 {current?.key !== picked.key && (

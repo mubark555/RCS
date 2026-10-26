@@ -15,6 +15,7 @@ import DeadlineAlerts from "@/components/DeadlineAlerts";
 import dynamic from "next/dynamic";
 // أمل تُحمَّل بعد ظهور الصفحة حتى لا تؤخر فتحها
 const AmalAssistant = dynamic(() => import("@/components/AmalAssistant"), { ssr: false });
+const AbdulazizGuide = dynamic(() => import("@/components/AbdulazizGuide"), { ssr: false });
 import { ensureCloudSeeded, ensureQunaif } from "@/lib/store";
 import { useAmalEnabled } from "@/lib/amalPref";
 
@@ -107,6 +108,7 @@ export default function AppShell({ children }) {
         <WelcomeGate />
       </div>
       {amalOn && <AmalAssistant />}
+      <AbdulazizGuide />
     </div>
   );
 }

@@ -754,3 +754,48 @@ th.pm-sticky { background: var(--surface-2); }
 .mtg-btn.join { background: #2563eb; color: #fff; border-color: #2563eb; }
 .mtg-btn.join:hover { background: #1d4ed8; }
 .mtg-link { color: #2563eb; text-decoration: underline; word-break: break-all; }
+
+/* ================= عبدالعزيز — مرشد أقسام النظام (أسفل يسار الشاشة، ولوحته من اليسار) ================= */
+.az-dock { position: fixed; left: 24px; bottom: 24px; z-index: 8900; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.az-dock.is-raised { bottom: 250px; }
+.az-fab { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.az-fab:focus-visible .az-avatar { outline: 3px solid var(--ring); outline-offset: 2px; }
+.az-avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, #2f5d8a, #1f3f63); color: #fff; font-weight: 800; border: 3px solid var(--surface); box-shadow: var(--shadow); }
+.az-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.az-fab:hover .az-avatar { transform: translateY(-2px); transition: transform .2s ease; }
+.az-fab-tag { font-size: 11.5px; font-weight: 800; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; box-shadow: var(--shadow-sm); }
+.az-bubble { position: relative; width: 270px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; padding: 14px 14px 12px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.7; color: var(--text); animation: toastIn .28s ease both; }
+.az-bubble b { color: var(--ink); font-size: 14px; }
+.az-bubble-act { display: flex; gap: 6px; margin-top: 4px; }
+.az-x { all: unset; cursor: pointer; position: absolute; top: 8px; left: 8px; color: var(--muted); display: inline-flex; }
+.az-overlay { position: fixed; inset: 0; z-index: 9500; background: rgba(30, 24, 20, 0.28); display: flex; justify-content: flex-end; }
+.az-panel { width: 420px; max-width: 100vw; height: 100%; background: var(--surface); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+.az-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.az-head > div { flex: 1; display: flex; flex-direction: column; }
+.az-head b { font-size: 16px; color: var(--ink); }
+.az-head small { font-size: 12.5px; color: var(--muted); }
+.az-tabs { margin: 12px 18px 0; }
+.az-scroll { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
+.az-title { display: flex; align-items: center; gap: 8px; font-size: 17px; margin: 0 0 8px; color: var(--ink); }
+.az-intro { margin: 0 0 12px; font-size: 13.5px; line-height: 1.8; color: var(--text-2); }
+.az-guide .az-h { font-weight: 800; font-size: 13.5px; color: var(--ink); margin: 14px 0 6px; }
+.az-guide ul, .az-guide ol { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.75; }
+.az-list { display: flex; flex-direction: column; gap: 8px; }
+.az-item { all: unset; cursor: pointer; display: flex; gap: 12px; align-items: flex-start; padding: 11px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
+.az-item:hover, .az-item:focus-visible { border-color: var(--primary); background: var(--primary-soft); }
+.az-item-ic { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--surface); color: var(--primary); border: 1px solid var(--border); }
+.az-item-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.az-item-t b { font-size: 14px; color: var(--ink); }
+.az-item-t small { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.az-back { margin-bottom: 10px; }
+.az-go { margin-top: 16px; width: 100%; justify-content: center; }
+.az-foot { border-top: 1px solid var(--border); padding: 12px 18px; font-size: 12.5px; color: var(--text-2); }
+.az-foot label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.az-foot input { width: auto; flex: none; margin: 0; }
+@media (max-width: 640px) {
+  .az-dock { left: 14px; bottom: 14px; }
+  .az-dock.is-raised { bottom: 190px; }
+  .az-panel { width: 100vw; }
+  .az-bubble { width: calc(100vw - 28px); }
+}
+@media print { .az-dock, .az-overlay { display: none !important; } }

@@ -8,7 +8,18 @@ export const DEFAULT_SETTINGS = {
   logoText: "ڤ",
   logoUrl: "",
   primaryColor: "#e05a50",
+  crNumber: "",
+  phone: "",
 };
+
+// قراءة الإعدادات المحفوظة خارج React (مثل تصدير المستندات)
+export function getStoredSettings() {
+  try {
+    return { ...DEFAULT_SETTINGS, ...(JSON.parse(window.localStorage.getItem("sp_settings")) || {}) };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
 
 const Ctx = createContext(null);
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import { tasksStore, meetingsStore } from "@/lib/store";
+import { getStoredSettings } from "@/components/SettingsProvider";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
 
@@ -23,6 +24,8 @@ export function exportMinutes(m) {
   const links = Array.isArray(m.links) ? m.links : [];
   const items = Array.isArray(m.action_items) ? m.action_items : [];
   const esc = (s) => String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const { crNumber, phone } = getStoredSettings();
+  const orgInfo = [crNumber && `السجل التجاري: <span dir="ltr">${esc(crNumber)}</span>`, phone && `الجوال: <span dir="ltr">${esc(phone)}</span>`].filter(Boolean).join(" &nbsp;|&nbsp; ");
   const bullets = (s) => {
     const ls = toLines(s);
     return ls.length ? `<ul>${ls.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="empty">—</p>`;
@@ -86,7 +89,7 @@ export function exportMinutes(m) {
     <div>توقيع مدير المشروع</div>
     <div>توقيع العميل</div>
   </div>
-  <footer><span>ڤيوليت — نظام إدارة مشاريع سيم برايم</span><span>${esc(m.title)}</span></footer>
+  <footer><span>ڤيوليت — نظام إدارة مشاريع سيم برايم${orgInfo ? `<br>${orgInfo}` : ""}</span><span>${esc(m.title)}</span></footer>
 </div></body></html>`;
 
   // طباعة عبر iframe مخفي (بلا نافذة about:blank)

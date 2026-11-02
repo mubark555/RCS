@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useSettings } from "@/components/SettingsProvider";
+import { useSettings, DEFAULT_SETTINGS } from "@/components/SettingsProvider";
 import { useRole } from "@/components/RoleProvider";
 import Icon from "@/components/Icon";
 
@@ -47,7 +47,7 @@ export default function SettingsPage() {
   function restore() {
     if (!confirm("استعادة الإعدادات الافتراضية؟")) return;
     reset();
-    setF({ appName: "ڤيوليت", tagline: "DIGITAL MARKETING", logoText: "ڤ", logoUrl: "", primaryColor: "#e05a50" });
+    setF(DEFAULT_SETTINGS);
     setSaved(false);
   }
 
@@ -61,6 +61,10 @@ export default function SettingsPage() {
           <label className="field"><span>اسم النظام</span><input value={f.appName} onChange={set("appName")} /></label>
           <label className="field"><span>الوصف / الشعار النصي</span><input value={f.tagline} onChange={set("tagline")} /></label>
           <label className="field"><span>حرف الشعار (يظهر إن لم توجد صورة)</span><input value={f.logoText} onChange={set("logoText")} maxLength={2} /></label>
+
+          <div className="section-title" style={{ marginTop: 20 }}>بيانات المنشأة</div>
+          <label className="field"><span>رقم السجل التجاري</span><input value={f.crNumber || ""} onChange={set("crNumber")} inputMode="numeric" dir="ltr" placeholder="مثال: 1010123456" /></label>
+          <label className="field"><span>رقم الجوال</span><input type="tel" value={f.phone || ""} onChange={set("phone")} dir="ltr" placeholder="مثال: 0500000000" /></label>
 
           <div className="field">
             <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>شعار النظام (صورة)</span>
@@ -102,6 +106,12 @@ export default function SettingsPage() {
               <div style={{ fontSize: 11, letterSpacing: 2, color: "var(--muted)", fontWeight: 700 }}>{f.tagline}</div>
             </div>
           </div>
+          {(f.crNumber || f.phone) && (
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12.5, color: "var(--text-2)", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+              {f.crNumber && <span>السجل التجاري: <b dir="ltr">{f.crNumber}</b></span>}
+              {f.phone && <span>الجوال: <b dir="ltr">{f.phone}</b></span>}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <button className="btn primary" style={{ background: f.primaryColor }}>زر أساسي</button>
             <span className="badge" style={{ background: `${f.primaryColor}22`, color: f.primaryColor }}><span className="dot" style={{ background: f.primaryColor }} />شارة</span>
@@ -109,7 +119,7 @@ export default function SettingsPage() {
           </div>
           <div className="progress" style={{ marginTop: 16 }}><span style={{ width: "65%", background: f.primaryColor }} /></div>
           <p className="muted" style={{ fontSize: 12.5, marginTop: 16 }}>
-            يُطبّق اللون فوراً على الأزرار والشارات والعناصر النشطة في كل النظام. اسم النظام وشعاره يظهران في الشريط الجانبي.
+            يُطبّق اللون فوراً على الأزرار والشارات والعناصر النشطة في كل النظام. اسم النظام وشعاره يظهران في الشريط الجانبي، والسجل التجاري ورقم الجوال يظهران في محاضر الاجتماعات المطبوعة.
           </p>
         </div>
       </div>

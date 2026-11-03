@@ -10,6 +10,7 @@ import LineList from "@/components/LineList";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { minutesDocHtml } from "@/components/MinutesModal";
 import { toHref, firstUrl } from "@/lib/links.mjs";
+import { REMINDER_OPTIONS, DEFAULT_MEETING_MAIL, detectMeetingMail, diffMeeting, meetingRecipients, meetingReminders, reminderLabel, MEETING_MAIL_KINDS } from "@/lib/meetingMail.mjs";
 import { parseAttendees, presentOf, MEETING_STATUS, isLocked, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf, organizerOf } from "@/lib/meetings";
 import { isMe } from "@/lib/mywork.mjs";
 
@@ -31,7 +32,9 @@ const FILTERS = [
 
 export default function MeetingsPage() {
   const { can, scopeProjects, users, viewer, ability } = useRole();
-  const { sendEmail, announce } = useNotifications();
+  const { sendEmail, announce, sendMeetingMail, notifyPrefs } = useNotifications();
+  const mailPrefs = { ...DEFAULT_MEETING_MAIL, ...(notifyPrefs?.meetingMail || {}) };
+  const mailOn = Boolean(notifyPrefs?.emailEnabled);
   const readOnly = !can("meetings", "edit");
   const [filter, setFilter] = useState("upcoming");
   const [ending, setEnding] = useState(null);     // اجتماع قيد الإنهاء (كتابة المحضر)
@@ -138,7 +141,16 @@ export default function MeetingsPage() {
             <MeetingCard key={m.id} m={m} readOnly={readOnly} canApprove={canApproveMinutes(m)}
               dim={m.status === "Cancelled"}
               onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload}
-              onEnd={() => setEnding(m)} onApprove={() => setApproving(m)} />
+              onEnd={() => setEnding(m)} onApprove={() => setApproving(m)}
+              onBeforeDelete={async () => {
+                // حذف اجتماع قادم → إشعار الحضور بالإلغاء (يحذفه من تقويمهم)
+                const upcoming = (m.status || "Scheduled") === "Scheduled" && m.start_at > new Date().toISOString();
+                if (upcoming && mailOn && mailPrefs.cancel && m.notify_attendees !== false && confirm("إرسال إشعار إلغاء بالبريد للحضور قبل الحذف؟")) {
+                  await sendMeetingMail("cancel", { ...m, status: "Cancelled" });
+                }
+              }}
+              onRemind={async () => { await sendMeetingMail("reminder", m, { force: true, offset: 0 }); await reload(); }}
+              mailOn={mailOn} />
           ))}
         </div>
       )}
@@ -179,11 +191,24 @@ export default function MeetingsPage() {
           <MeetingForm
             initial={editing.id ? editing : null}
             users={users}
+            mailPrefs={mailPrefs}
+            mailOn={mailOn}
             onCancel={() => setEditing(null)}
-            onSave={async (payload) => {
-              if (editing.id) await meetingsStore.update(editing.id, payload);
-              else await meetingsStore.create({ ...payload, created_by: viewer?.name || "", organizer: payload.organizer || viewer?.name || "" });
+            onSave={async (payload, opts = {}) => {
+              const prev = editing.id ? editing : null;
+              let saved;
+              if (prev) {
+                // تغيّر الموعد → إعادة جدولة التذكيرات
+                const timeChanged = new Date(prev.start_at || 0).getTime() !== new Date(payload.start_at || 0).getTime();
+                saved = await meetingsStore.update(prev.id, timeChanged ? { ...payload, reminders_sent: [] } : payload);
+              } else {
+                saved = await meetingsStore.create({ ...payload, created_by: viewer?.name || "", organizer: payload.organizer || viewer?.name || "" });
+              }
               setEditing(null);
+              // بريد الحضور: دعوة / تحديث / إلغاء
+              const rec = { ...(prev || {}), ...payload, ...(saved || {}) };
+              const kind = opts.sendMail === false ? null : detectMeetingMail(prev, rec);
+              if (kind && rec.id) await sendMeetingMail(kind, rec, { changes: kind === "update" ? diffMeeting(prev, rec) : undefined });
               await reload();
             }}
           />
@@ -193,7 +218,8 @@ export default function MeetingsPage() {
   );
 }
 
-function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canApprove, dim, readOnly }) {
+function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canApprove, dim, readOnly, onBeforeDelete, onRemind, mailOn }) {
+  const [reminding, setReminding] = useState(false);
   const st = STATUS_AR[m.status] || STATUS_AR.Scheduled;
   const locked = isLocked(m);
   const past = m.start_at && m.start_at < new Date().toISOString();
@@ -210,6 +236,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
 
   async function del() {
     if (!confirm(`حذف الاجتماع؟\n\n${m.title}`)) return;
+    if (onBeforeDelete) await onBeforeDelete();
     await meetingsStore.remove(m.id);
     await onChange();
   }
@@ -269,12 +296,18 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
             <button className="mtg-btn neutral" onClick={() => exportMinutes(m)}>
               <Icon name="upload" size={15} /> تصدير
             </button>
+            {!readOnly && mailOn && (m.status || "Scheduled") === "Scheduled" && !past && m.notify_attendees !== false && (
+              <button className="mtg-btn neutral" disabled={reminding} onClick={async () => { setReminding(true); try { await onRemind(); } finally { setReminding(false); } }}>
+                <Icon name="bell" size={15} /> {reminding ? "جاري الإرسال…" : "تذكير الحضور الآن"}
+              </button>
+            )}
             {links.map((l, i) => (
               <a key={i} href={toHref(l.url) || l.url} target="_blank" rel="noopener noreferrer" className="mtg-btn pri">
                 <Icon name="link" size={15} /> {l.label || l.type || "رابط"}
               </a>
             ))}
           </div>
+          <MailStrip m={m} mailOn={mailOn} />
         </div>
         {!readOnly && !locked && (
           <div className="mtg-side">
@@ -287,7 +320,72 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
   );
 }
 
-function MeetingForm({ initial, users, onSave, onCancel, mode }) {
+// شريط بريد الحضور: التذكيرات المجدولة + آخر ما أُرسل
+function MailStrip({ m, mailOn }) {
+  const log = Array.isArray(m.mail_log) ? m.mail_log : [];
+  const scheduled = (m.status || "Scheduled") === "Scheduled";
+  if (!mailOn && !log.length) return null;
+  if (m.notify_attendees === false) return <div className="mm-mail muted"><Icon name="mail" size={13} /> بريد الحضور متوقف لهذا الاجتماع</div>;
+  const sent = new Set((m.reminders_sent || []).map(Number));
+  const rem = meetingReminders(m);
+  const last = log[0];
+  return (
+    <div className="mm-mail">
+      <Icon name="mail" size={13} />
+      {scheduled && mailOn && rem.slice().sort((a, b) => b - a).map((r) => (
+        <span key={r} className={`mm-rem ${sent.has(Number(r)) ? "done" : ""}`}>{sent.has(Number(r)) ? "✓ " : ""}{reminderLabel(r)}</span>
+      ))}
+      {last && (
+        <span className="muted" title={last.error || ""}>
+          آخر بريد: {MEETING_MAIL_KINDS[last.kind]?.ar || last.kind}{last.label ? ` (${last.label})` : ""} · {new Date(last.at).toLocaleString("ar-SA-u-ca-gregory", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+          {last.error ? <b style={{ color: "#dc2626" }}> — تعذّر: {last.error}</b> : ` — ${last.to} مستلم`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// إعدادات بريد الحضور داخل نموذج الاجتماع
+function MeetingMailBox({ f, setF, users, mailPrefs, mailOn, sendMail, setSendMail, isEdit }) {
+  const on = f.notify_attendees !== false;
+  const reminders = Array.isArray(f.reminders) ? f.reminders : mailPrefs.defaultReminders || [];
+  const toggleRem = (min) => setF((s) => {
+    const cur = Array.isArray(s.reminders) ? s.reminders : mailPrefs.defaultReminders || [];
+    return { ...s, reminders: cur.includes(min) ? cur.filter((x) => x !== min) : [...cur, min].sort((a, b) => b - a) };
+  });
+  const { recipients, missing } = meetingRecipients(f, users);
+  return (
+    <div className="field full mm-box">
+      <label className="mm-head">
+        <input type="checkbox" checked={on} onChange={(e) => setF((s) => ({ ...s, notify_attendees: e.target.checked }))} />
+        <span><Icon name="mail" size={15} /> بريد للحضور (دعوة مع مرفق تقويم، وتحديثات، وتذكير قبل الموعد)</span>
+      </label>
+      {!mailOn && <div className="mm-warn">إشعارات البريد متوقفة من «الإعدادات ← إشعارات البريد» — ستُحفظ الخيارات وتعمل عند التفعيل.</div>}
+      {on && (
+        <>
+          <div className="mm-label">التذكير قبل الاجتماع</div>
+          <div className="attendee-picker">
+            {REMINDER_OPTIONS.map((o) => (
+              <span key={o.min} className={`att-chip ${reminders.includes(o.min) ? "on" : ""}`} onClick={() => toggleRem(o.min)}>{o.ar}</span>
+            ))}
+          </div>
+          <div className="mm-recip">
+            <b>يصل البريد إلى ({recipients.length}):</b> {recipients.length ? recipients.map((r) => r.name).join("، ") : <span className="muted">لا أحد لديه بريد بعد</span>}
+            {missing.length > 0 && <div style={{ color: "#d97706" }}>بلا بريد (لن يصلهم): {missing.join("، ")} — أضِف بريدهم من قسم الفريق.</div>}
+          </div>
+          {mailOn && (
+            <label className="mm-check">
+              <input type="checkbox" checked={sendMail} onChange={(e) => setSendMail(e.target.checked)} />
+              {isEdit ? "إرسال بريد للحضور بالتغييرات عند الحفظ (تحديث / إلغاء)" : "إرسال الدعوة بالبريد للحضور فور الحفظ"}
+            </label>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAULT_MEETING_MAIL, mailOn = false }) {
   const projectNames = useProjectNames();
   const ending = mode === "end";
   const [f, setF] = useState(() => {
@@ -305,6 +403,7 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
   const togglePresent = (name) =>
     setF((s) => ({ ...s, present: s.present.includes(name) ? s.present.filter((x) => x !== name) : [...s.present, name] }));
   const [saving, setSaving] = useState(false);
+  const [sendMail, setSendMail] = useState(true);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
 
   const toggleAtt = (name) =>
@@ -332,7 +431,11 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
         action_items: ai.filter((a) => a.text && a.text.trim()),
         // التصنيف للمدعوين فقط (الافتراضي: أساسي)
         attendance: Object.fromEntries(f.attendees.map((a) => [a, ATTENDANCE_TYPES[f.attendance?.[a]] ? f.attendance[a] : DEFAULT_ATTENDANCE])),
-      });
+        ...(ending ? {} : {
+          notify_attendees: f.notify_attendees !== false,
+          reminders: Array.isArray(f.reminders) ? f.reminders : mailPrefs.defaultReminders || [],
+        }),
+      }, { sendMail: f.notify_attendees !== false && sendMail });
     } finally {
       setSaving(false);
     }
@@ -421,6 +524,7 @@ function MeetingForm({ initial, users, onSave, onCancel, mode }) {
           )}
         </div>
 
+        <MeetingMailBox f={f} setF={setF} users={users} mailPrefs={mailPrefs} mailOn={mailOn} sendMail={sendMail} setSendMail={setSendMail} isEdit={Boolean(initial)} />
         </>}
         <div className="field full">
           <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>جدول الأعمال</span>

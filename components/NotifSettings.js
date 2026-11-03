@@ -7,6 +7,7 @@ import {
   NOTIF_CATALOG, NOTIF_ACTIONS, notifKey,
 } from "@/components/NotificationsProvider";
 import { useRole } from "@/components/RoleProvider";
+import { DEFAULT_MEETING_MAIL, REMINDER_OPTIONS } from "@/lib/meetingMail.mjs";
 
 const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
@@ -174,6 +175,9 @@ export default function NotifSettings() {
         <textarea rows={3} value={p.bodyTemplate || ""} onChange={(e) => saveNotifyPrefs({ bodyTemplate: e.target.value })} placeholder="{الإجراء} {النوع}: {الاسم}" disabled={dis} />
       </label>
 
+      {/* بريد الاجتماعات للحضور أنفسهم */}
+      <MeetingMailSettings p={p} save={saveNotifyPrefs} row={row} dis={dis} />
+
       {/* قائمة الإشعارات المحدّدة */}
       <div className="section-title" style={{ marginTop: 20, fontSize: 14 }}>الإشعارات التي تُرسل بريداً</div>
       <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>
@@ -246,6 +250,47 @@ export default function NotifSettings() {
       <div className="modal-actions" style={{ marginTop: 16 }}>
         <button className="btn" onClick={sendTest} disabled={testing || dis}>{testing ? "جاري الإرسال…" : "إرسال رسالة اختبار"}</button>
       </div>
+    </div>
+  );
+}
+
+const MEETING_MAIL_ROWS = [
+  ["invite", "دعوة عند إنشاء اجتماع", "تصل للمدعوين والمنظّم مع مرفق تقويم (ICS) وزر الانضمام وGoogle Calendar."],
+  ["update", "تحديث عند تغيّر الاجتماع", "عند تغيّر الموعد أو المدة أو المكان أو الحضور — مع توضيح ما الذي تغيّر."],
+  ["cancel", "إلغاء الاجتماع", "عند الإلغاء أو حذف اجتماع قادم — ويُحذف من تقويم الحضور تلقائياً."],
+  ["reminders", "التذكير قبل الاجتماع", "يُرسل تلقائياً حسب التوقيت المختار لكل اجتماع."],
+  ["includeIcs", "إرفاق دعوة التقويم", "ملف invite.ics يعمل مع Outlook و Google و Apple Calendar."],
+];
+
+function MeetingMailSettings({ p, save, row, dis }) {
+  const mm = { ...DEFAULT_MEETING_MAIL, ...(p.meetingMail || {}) };
+  const put = (patch) => save({ meetingMail: { ...mm, ...patch } });
+  const rem = mm.defaultReminders || [];
+  const toggleRem = (min) => put({ defaultReminders: rem.includes(min) ? rem.filter((x) => x !== min) : [...rem, min].sort((a, b) => b - a) });
+  return (
+    <div style={{ opacity: dis ? 0.55 : 1 }}>
+      <div className="section-title" style={{ marginTop: 20, fontSize: 14 }}>بريد الاجتماعات للحضور</div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 6 }}>
+        يصل لحضور كل اجتماع أنفسهم (وليس لقائمة المستقبلين أعلاه). المحضر المعتمد يُرسل من «اعتماد وإرسال للحضور».
+      </p>
+      {MEETING_MAIL_ROWS.map(([k, label, hint]) => (
+        <div key={k} style={row}>
+          <div>
+            <b style={{ fontSize: 13.5 }}>{label}</b>
+            <div className="muted" style={{ fontSize: 12 }}>{hint}</div>
+          </div>
+          <Toggle on={mm[k] !== false} onChange={(v) => put({ [k]: v })} />
+        </div>
+      ))}
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-2)", margin: "12px 0 6px" }}>التذكيرات الافتراضية للاجتماعات الجديدة</div>
+      <div className="attendee-picker">
+        {REMINDER_OPTIONS.map((o) => (
+          <span key={o.min} className={`att-chip ${rem.includes(o.min) ? "on" : ""}`} onClick={() => toggleRem(o.min)}>{o.ar}</span>
+        ))}
+      </div>
+      <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+        تُرسل التذكيرات أثناء فتح النظام، ولضمان وصولها دائماً فعّل المهمة المجدولة (راجع SUPABASE_SETUP.md ← «تذكيرات الاجتماعات»).
+      </p>
     </div>
   );
 }

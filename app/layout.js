@@ -6,10 +6,7 @@ import "@fontsource/cairo/800.css";
 import "./globals.css";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { RoleProvider } from "@/components/RoleProvider";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
-import Toaster from "@/components/Toaster";
-import ReminderWatcher from "@/components/ReminderWatcher";
+import AppShell from "@/components/AppShell";
 
 export const metadata = {
   title: "نظام إدارة سيم برايم | ڤيوليت",
@@ -23,15 +20,7 @@ export default function RootLayout({ children }) {
       <body>
         <SettingsProvider>
           <RoleProvider>
-            <div className="app">
-              <Sidebar />
-              <div className="main">
-                <TopBar />
-                <div className="content">{children}</div>
-              </div>
-            </div>
-            <ReminderWatcher />
-            <Toaster />
+            <AppShell>{children}</AppShell>
           </RoleProvider>
         </SettingsProvider>
       </body>

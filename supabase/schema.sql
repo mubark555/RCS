@@ -146,6 +146,16 @@ create table if not exists public.user_sessions (
 create index if not exists sessions_started_idx on public.user_sessions (started_at desc);
 create index if not exists sessions_user_idx    on public.user_sessions (user_name, started_at desc);
 
+-- ------------------------- رموز الدخول (OTP) -------------------------
+-- تتبّع محاولات التحقق ومنع إعادة استخدام الرمز (الرمز نفسه لا يُخزَّن)
+create table if not exists public.auth_otps (
+  nonce       text primary key,
+  email       text        default '',
+  attempts    int         default 0,
+  used        boolean     default false,
+  created_at  timestamptz default now()
+);
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
@@ -159,6 +169,7 @@ alter table public.users    enable row level security;
 alter table public.kpis     enable row level security;
 alter table public.activity_log  enable row level security;
 alter table public.user_sessions enable row level security;
+alter table public.auth_otps     enable row level security;  -- بلا سياسات: يصل إليه الخادم فقط بمفتاح service_role
 
 do $$
 begin

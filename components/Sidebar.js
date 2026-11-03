@@ -22,7 +22,7 @@ const ROLE_AR = { manager: "مدير", member: "عضو", client: "عميل" };
 
 export default function Sidebar() {
   const path = usePathname();
-  const { users, viewer, viewerId, setViewer, role } = useRole();
+  const { users, viewer, viewerId, setViewer, role, auth, realUser, canPreview, logout } = useRole();
   const { settings } = useSettings();
   const links = ALL_LINKS.filter((l) => l.roles.includes(role));
 
@@ -52,10 +52,14 @@ export default function Sidebar() {
       </nav>
 
       <div className="side-foot">
-        {/* تبديل الدور (وضع تجريبي) */}
+        {/* تبديل الدور: وضع تجريبي بلا دخول، أو «معاينة» للمدير بعد الدخول */}
+        {canPreview && (
         <div className="role-switch">
-          <div className="rs-label">عرض النظام كـ</div>
+          <div className="rs-label">{auth.enabled ? "معاينة النظام كـ" : "عرض النظام كـ"}</div>
           <select value={viewerId || ""} onChange={(e) => setViewer(e.target.value)}>
+            {realUser && !users.some((u) => u.id === realUser.id) && (
+              <option value={realUser.id}>{realUser.name} — {ROLE_AR[realUser.role] || realUser.role} (حسابي)</option>
+            )}
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name} — {ROLE_AR[u.role] || u.role}
@@ -69,14 +73,23 @@ export default function Sidebar() {
               {viewer.project ? ` · ${viewer.project}` : ""}
             </div>
           )}
+          {auth.enabled && realUser && viewer && viewer.id !== realUser.id && (
+            <button className="link-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setViewer(realUser.id)}>العودة لحسابي</button>
+          )}
         </div>
+        )}
 
         <div className="side-user">
-          <span className="av">{(viewer?.name || "ف").slice(0, 1)}</span>
-          <span>
-            <b>{viewer?.name || "فريق ڤيوليت"}</b>
-            <small>{viewer?.title || "إدارة مشاريع سيم برايم"}</small>
+          <span className="av">{((realUser || viewer)?.name || "ف").slice(0, 1)}</span>
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <b>{(realUser || viewer)?.name || "فريق ڤيوليت"}</b>
+            <small>{auth.enabled && realUser ? realUser.email || realUser.title : viewer?.title || "إدارة مشاريع سيم برايم"}</small>
           </span>
+          {auth.enabled && realUser && (
+            <button className="btn sm ghost icon" title="تسجيل الخروج" onClick={() => confirm("تسجيل الخروج من النظام؟") && logout()}>
+              <Icon name="logout" size={17} />
+            </button>
+          )}
         </div>
         <div className="side-mode">
           <span className="d" style={{ background: isCloud ? "#3f8e7f" : "#e0a23a" }} />

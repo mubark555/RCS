@@ -263,8 +263,9 @@ end $$;
 
 -- =====================================================================
 --  سياسات الوصول (RLS)
---  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
---  للاستخدام الحقيقي فعّل مصادقة Supabase وقيّد السياسات حسب auth.uid().
+--  الجداول مغلقة افتراضياً (RLS مفعّل). سياسات الوصول للأعضاء الفعّالين فقط
+--  في الملف: supabase/migrations/2026-11-security.sql
+--  ⚠️ شغّله بعد هذا الملف وبعد بقية ملفات migrations — بدونه لن يقرأ النظام أي بيانات.
 -- =====================================================================
 alter table public.tasks    enable row level security;
 alter table public.meetings enable row level security;
@@ -279,46 +280,6 @@ alter table public.payments enable row level security;
 alter table public.activity enable row level security;
 alter table public.task_comments enable row level security;
 
-do $$
-begin
-  if not exists (select 1 from pg_policies where tablename='invoices' and policyname='invoices_all') then
-    create policy invoices_all on public.invoices for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='payments' and policyname='payments_all') then
-    create policy payments_all on public.payments for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='activity' and policyname='activity_all') then
-    create policy activity_all on public.activity for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='tasks' and policyname='tasks_all') then
-    create policy tasks_all on public.tasks for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='meetings' and policyname='meetings_all') then
-    create policy meetings_all on public.meetings for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='files' and policyname='files_all') then
-    create policy files_all on public.files for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='projects' and policyname='projects_all') then
-    create policy projects_all on public.projects for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='users' and policyname='users_all') then
-    create policy users_all on public.users for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='kpis' and policyname='kpis_all') then
-    create policy kpis_all on public.kpis for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='notifications' and policyname='notifications_all') then
-    create policy notifications_all on public.notifications for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='app_settings' and policyname='app_settings_all') then
-    create policy app_settings_all on public.app_settings for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='task_comments' and policyname='task_comments_all') then
-    create policy task_comments_all on public.task_comments for all using (true) with check (true);
-  end if;
-end $$;
-
 -- =====================================================================
 --  التخزين (Storage): أنشئ bucket باسم archive
 -- =====================================================================
@@ -326,10 +287,4 @@ insert into storage.buckets (id, name, public)
 values ('archive', 'archive', false)
 on conflict (id) do nothing;
 
-do $$
-begin
-  if not exists (select 1 from pg_policies where tablename='objects' and policyname='archive_all') then
-    create policy archive_all on storage.objects for all
-      using (bucket_id = 'archive') with check (bucket_id = 'archive');
-  end if;
-end $$;
+-- سياسة التخزين (للأعضاء فقط) في: supabase/migrations/2026-11-security.sql

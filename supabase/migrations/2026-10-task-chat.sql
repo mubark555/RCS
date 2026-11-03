@@ -22,7 +22,7 @@ do $$
 begin
   -- الوصول للأعضاء الفعّالين فقط (لا سياسات مفتوحة) — راجع 2026-11-security.sql
   if to_regprocedure('public.is_member()') is not null
-     and not exists (select 1 from pg_policies where tablename='task_comments' and policyname='task_comments_members') then
+     and not exists (select 1 from pg_policies where tablename='task_comments' and policyname in ('task_comments_members', 'task_comments_read')) then
     execute 'create policy task_comments_members on public.task_comments for all to authenticated using (public.is_member()) with check (public.is_member())';
   end if;
   if not exists (

@@ -8,6 +8,7 @@ import PrintHeader from "@/components/PrintHeader";
 import { useAuth } from "@/components/AuthProvider";
 import { useRole } from "@/components/RoleProvider";
 import LoginScreen from "@/components/LoginScreen";
+import SessionTracker from "@/components/SessionTracker";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
@@ -105,6 +106,7 @@ export default function AppShell({ children }) {
           ) : children}
         </div>
         <WelcomeGate />
+        <SessionTracker />
       </div>
       {amalOn && <AmalAssistant />}
     </div>

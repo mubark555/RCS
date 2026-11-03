@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase, isCloud } from "@/lib/supabase";
+import { endSession } from "@/lib/sessions";
 
 const AuthCtx = createContext(null);
 
@@ -54,6 +55,7 @@ export function AuthProvider({ children }) {
       return supabase.auth.verifyOtp({ email, token, type: "email" });
     },
     async signOut() {
+      await endSession().catch(() => {}); // توثيق وقت الخروج قبل إنهاء الجلسة
       if (isCloud) await supabase.auth.signOut();
     },
   };

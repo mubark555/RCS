@@ -118,6 +118,34 @@ alter table public.meetings add column if not exists extra_emails   text    defa
 alter table public.meetings add column if not exists notify_log     jsonb   default '[]'::jsonb;    -- سجل الإشعارات المرسلة
 create index if not exists meetings_status_start_idx on public.meetings (status, start_at);
 
+-- ------------------------- سجل النشاط وجلسات الدخول -------------------------
+create table if not exists public.activity_log (
+  id          uuid primary key default gen_random_uuid(),
+  at          timestamptz default now(),
+  user_id     text        default '',
+  user_name   text        default '',
+  action      text        not null,   -- create | update | status | delete | login | logout | upload | link
+  entity      text        default '',  -- task | meeting | project | user | kpi | file | session
+  entity_id   text        default '',
+  title       text        default '',
+  project     text        default '',
+  details     jsonb       default '{}'::jsonb   -- { changes: [{field,label,from,to}] }
+);
+create index if not exists activity_at_idx   on public.activity_log (at desc);
+create index if not exists activity_user_idx on public.activity_log (user_name, at desc);
+
+create table if not exists public.user_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       text        default '',
+  user_name     text        default '',
+  started_at    timestamptz default now(),   -- وقت الدخول
+  last_seen_at  timestamptz default now(),   -- آخر نشاط (نبض كل دقيقة)
+  ended_at      timestamptz,                 -- وقت الخروج الصريح
+  device        text        default ''
+);
+create index if not exists sessions_started_idx on public.user_sessions (started_at desc);
+create index if not exists sessions_user_idx    on public.user_sessions (user_name, started_at desc);
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
@@ -129,6 +157,8 @@ alter table public.files    enable row level security;
 alter table public.projects enable row level security;
 alter table public.users    enable row level security;
 alter table public.kpis     enable row level security;
+alter table public.activity_log  enable row level security;
+alter table public.user_sessions enable row level security;
 
 do $$
 begin
@@ -149,6 +179,16 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='kpis' and policyname='kpis_all') then
     create policy kpis_all on public.kpis for all using (true) with check (true);
+  end if;
+  -- سجل النشاط: إضافة وقراءة فقط (لا تعديل ولا حذف للحفاظ على موثوقية السجل)
+  if not exists (select 1 from pg_policies where tablename='activity_log' and policyname='activity_insert') then
+    create policy activity_insert on public.activity_log for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='activity_log' and policyname='activity_select') then
+    create policy activity_select on public.activity_log for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename='user_sessions' and policyname='sessions_all') then
+    create policy sessions_all on public.user_sessions for all using (true) with check (true);
   end if;
 end $$;
 

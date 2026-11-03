@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { usersStore, projectsStore } from "@/lib/store";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
+import { setActor, ensureSession, heartbeat, endSessionOnUnloadLocal, HEARTBEAT_MS } from "@/lib/activity";
 
 const RoleCtx = createContext(null);
 
@@ -46,6 +47,31 @@ export function RoleProvider({ children }) {
   }, []);
 
   const viewer = users.find((u) => u.id === viewerId) || null;
+
+  // تتبّع الدخول/الخروج: جلسة لكل مستخدم + نبض دوري أثناء استخدام النظام
+  useEffect(() => {
+    setActor(viewer);
+    if (!ready || !viewer) return;
+    ensureSession(viewer).catch(() => {});
+    const beat = () => {
+      if (document.visibilityState !== "visible") return;
+      ensureSession(viewer).catch(() => {}); // تستأنف أو تبدأ جلسة جديدة بعد الخمول
+    };
+    const iv = setInterval(beat, HEARTBEAT_MS);
+    const onVis = () => document.visibilityState === "visible" && beat();
+    const onAct = () => heartbeat().catch(() => {});
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", endSessionOnUnloadLocal);
+    window.addEventListener("click", onAct, { passive: true });
+    window.addEventListener("keydown", onAct, { passive: true });
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", endSessionOnUnloadLocal);
+      window.removeEventListener("click", onAct);
+      window.removeEventListener("keydown", onAct);
+    };
+  }, [ready, viewer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const role = viewer?.role || "manager";
 
   // المشاريع المرئية للمستخدم الحالي (null = كل المشاريع)

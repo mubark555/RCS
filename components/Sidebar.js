@@ -14,6 +14,7 @@ const ALL_LINKS = [
   { href: "/kpis", label: "الأداء والمستهدفات", ico: "chart", roles: ["manager", "member"] },
   { href: "/meetings", label: "الاجتماعات", ico: "calendar", roles: ["manager", "member", "client"] },
   { href: "/team", label: "الفريق", ico: "users", roles: ["manager", "member"] },
+  { href: "/activity", label: "سجل النشاط", ico: "clock", roles: ["manager"] },
   { href: "/settings", label: "تخصيص النظام", ico: "settings", roles: ["manager"] },
 ];
 

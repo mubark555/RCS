@@ -20,8 +20,10 @@ alter table public.task_comments enable row level security;
 
 do $$
 begin
-  if not exists (select 1 from pg_policies where tablename='task_comments' and policyname='task_comments_all') then
-    create policy task_comments_all on public.task_comments for all using (true) with check (true);
+  -- الوصول للأعضاء الفعّالين فقط (لا سياسات مفتوحة) — راجع 2026-11-security.sql
+  if to_regprocedure('public.is_member()') is not null
+     and not exists (select 1 from pg_policies where tablename='task_comments' and policyname='task_comments_members') then
+    execute 'create policy task_comments_members on public.task_comments for all to authenticated using (public.is_member()) with check (public.is_member())';
   end if;
   if not exists (
     select 1 from pg_publication_tables

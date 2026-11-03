@@ -7,6 +7,7 @@ import Icon from "@/components/Icon";
 import { toast } from "@/components/Toaster";
 import { REMINDER_OPTIONS, isEmail } from "@/lib/notify-core";
 import { notifyPrefsOf, getEmailStatus } from "@/lib/notifications";
+import { isCloud } from "@/lib/store";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
 
@@ -59,6 +60,7 @@ export default function SettingsPage() {
 
   return (
     <div>
+      <SecurityStatus />
       <NotificationSettings />
       <div className="dash-2col" style={{ marginTop: 0 }}>
         <div className="card">
@@ -206,6 +208,21 @@ function NotificationSettings() {
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         يصل البريد للحضور الذين لديهم بريد مسجّل في صفحة «الفريق»، ولأي بريد إضافي يُكتب في نموذج الاجتماع.
       </p>
+    </div>
+  );
+}
+
+// تنبيه حالة الحماية
+function SecurityStatus() {
+  const { auth } = useRole();
+  if (!isCloud) return null;
+  if (auth.enabled) {
+    return <div className="mail-status ok" style={{ marginTop: 0 }}>🔒 النظام محمي: الدخول برمز OTP مفعّل، وقاعدة البيانات لا تُقرأ ولا تُعدّل إلا عبر الخادم وبحسب صلاحية كل مستخدم.</div>;
+  }
+  return (
+    <div className="mail-status warn" style={{ marginTop: 0 }}>
+      ⚠️ قاعدة البيانات مغلقة أمام الوصول المباشر، لكن <b>تسجيل الدخول غير مفعّل</b> — أي شخص يفتح رابط النظام يستطيع استخدامه.
+      فعّل الدخول بضبط <code>AUTH_SECRET</code> و <code>AUTH_ADMIN_EMAILS</code> على الخادم.
     </div>
   );
 }

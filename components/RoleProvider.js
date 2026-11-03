@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { usersStore, projectsStore } from "@/lib/store";
+import { usersStore, projectsStore, isCloud } from "@/lib/store";
 import { projManagers, projClients, projMembers } from "@/lib/constants";
 import { setActor, ensureSession, heartbeat, endSessionOnUnloadLocal, endSession, HEARTBEAT_MS } from "@/lib/activity";
 
@@ -28,6 +28,12 @@ export function RoleProvider({ children }) {
 
   useEffect(() => {
     (async () => {
+      // صفحة الدخول لا تحتاج بيانات (والواجهات المحمية سترفض قبل الدخول)
+      if (window.location.pathname.startsWith("/login")) {
+        if (!isCloud) await reloadUsers();
+        setReady(true);
+        return;
+      }
       const [list, , me] = await Promise.all([
         reloadUsers(),
         reloadProjects(),

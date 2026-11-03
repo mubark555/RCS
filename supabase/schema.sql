@@ -99,6 +99,10 @@ create table if not exists public.users (
 );
 
 -- ------------------------- أعمدة إضافية -------------------------
+alter table public.projects add column if not exists logo     text  default '';
+alter table public.projects add column if not exists managers jsonb default '[]'::jsonb;
+alter table public.projects add column if not exists clients  jsonb default '[]'::jsonb;
+alter table public.projects add column if not exists members  jsonb default '[]'::jsonb;
 alter table public.tasks    add column if not exists holder   text  default '';
 alter table public.tasks    add column if not exists handoffs jsonb default '[]'::jsonb;
 alter table public.meetings add column if not exists attendees jsonb default '[]'::jsonb;
@@ -157,63 +161,55 @@ create table if not exists public.auth_otps (
 );
 
 -- =====================================================================
---  سياسات الوصول (RLS)
---  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).
---  للاستخدام الحقيقي فعّل مصادقة Supabase وقيّد السياسات حسب auth.uid().
+--  الحماية (RLS) — قاعدة البيانات مغلقة بالكامل أمام المفتاح العام (anon)
+--
+--  المتصفح لا يصل لقاعدة البيانات مباشرة؛ كل القراءة والكتابة تمر عبر واجهات
+--  الخادم (/api/db/*) التي تتحقق من جلسة الدخول وصلاحية المستخدم، وتستخدم
+--  مفتاح service_role (يتجاوز RLS ولا يُكشف للمتصفح أبداً).
+--  RLS مفعّل بلا أي سياسة = لا قراءة ولا كتابة للمفتاح العام.
 -- =====================================================================
-alter table public.tasks    enable row level security;
-alter table public.meetings enable row level security;
-alter table public.files    enable row level security;
-alter table public.projects enable row level security;
-alter table public.users    enable row level security;
-alter table public.kpis     enable row level security;
+alter table public.tasks         enable row level security;
+alter table public.meetings      enable row level security;
+alter table public.files         enable row level security;
+alter table public.projects      enable row level security;
+alter table public.users         enable row level security;
+alter table public.kpis          enable row level security;
 alter table public.activity_log  enable row level security;
 alter table public.user_sessions enable row level security;
-alter table public.auth_otps     enable row level security;  -- بلا سياسات: يصل إليه الخادم فقط بمفتاح service_role
+alter table public.auth_otps     enable row level security;
 
-do $$
+-- حذف السياسات المفتوحة القديمة (من النسخ السابقة لهذا الملف)
+drop policy if exists tasks_all        on public.tasks;
+drop policy if exists meetings_all     on public.meetings;
+drop policy if exists files_all        on public.files;
+drop policy if exists projects_all     on public.projects;
+drop policy if exists users_all        on public.users;
+drop policy if exists kpis_all         on public.kpis;
+drop policy if exists activity_insert  on public.activity_log;
+drop policy if exists activity_select  on public.activity_log;
+drop policy if exists sessions_all     on public.user_sessions;
+
+-- سحب الصلاحيات من الأدوار العامة (طبقة حماية ثانية فوق RLS)
+revoke all on public.tasks, public.meetings, public.files, public.projects, public.users,
+              public.kpis, public.activity_log, public.user_sessions, public.auth_otps
+  from anon, authenticated;
+
+-- سجل النشاط غير قابل للتعديل أو الحذف حتى من الخادم
+create or replace function public.activity_log_immutable() returns trigger
+language plpgsql as $$
 begin
-  if not exists (select 1 from pg_policies where tablename='tasks' and policyname='tasks_all') then
-    create policy tasks_all on public.tasks for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='meetings' and policyname='meetings_all') then
-    create policy meetings_all on public.meetings for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='files' and policyname='files_all') then
-    create policy files_all on public.files for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='projects' and policyname='projects_all') then
-    create policy projects_all on public.projects for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='users' and policyname='users_all') then
-    create policy users_all on public.users for all using (true) with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='kpis' and policyname='kpis_all') then
-    create policy kpis_all on public.kpis for all using (true) with check (true);
-  end if;
-  -- سجل النشاط: إضافة وقراءة فقط (لا تعديل ولا حذف للحفاظ على موثوقية السجل)
-  if not exists (select 1 from pg_policies where tablename='activity_log' and policyname='activity_insert') then
-    create policy activity_insert on public.activity_log for insert with check (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='activity_log' and policyname='activity_select') then
-    create policy activity_select on public.activity_log for select using (true);
-  end if;
-  if not exists (select 1 from pg_policies where tablename='user_sessions' and policyname='sessions_all') then
-    create policy sessions_all on public.user_sessions for all using (true) with check (true);
-  end if;
+  raise exception 'activity_log is append-only';
 end $$;
+drop trigger if exists activity_log_no_change on public.activity_log;
+create trigger activity_log_no_change before update or delete on public.activity_log
+  for each row execute function public.activity_log_immutable();
 
 -- =====================================================================
---  التخزين (Storage): أنشئ bucket باسم archive
+--  التخزين (Storage): bucket خاص باسم archive — بلا أي سياسة عامة
+--  الرفع عبر رابط موقّع لمرة واحدة يصدره الخادم، والتنزيل عبر رابط مؤقت (ساعة)
 -- =====================================================================
 insert into storage.buckets (id, name, public)
 values ('archive', 'archive', false)
-on conflict (id) do nothing;
+on conflict (id) do update set public = false;
 
-do $$
-begin
-  if not exists (select 1 from pg_policies where tablename='objects' and policyname='archive_all') then
-    create policy archive_all on storage.objects for all
-      using (bucket_id = 'archive') with check (bucket_id = 'archive');
-  end if;
-end $$;
+drop policy if exists archive_all on storage.objects;

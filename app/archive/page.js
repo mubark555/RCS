@@ -236,7 +236,7 @@ function iconFor(f) {
 function fmtSize(bytes) {
   if (!bytes) return "—";
   const u = ["B", "KB", "MB", "GB"];
-  let i = 0, n = bytes;
+  let i = 0, n = Number(bytes) || 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
 }

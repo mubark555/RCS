@@ -6,6 +6,7 @@ import { NOTIFY_EVENTS, computeDueReminder, isEmail } from "@/lib/notify-core";
 import { mailConfig, sendMail } from "@/lib/server/mailer";
 import { renderEmail } from "@/lib/server/email-templates";
 import { serverCloud } from "@/lib/server/supabase-server";
+import { identity } from "@/lib/server/db-guard";
 import { dispatch, appendLog, claimReminder, loadMeeting, loadUsers, defaultBrand, DEFAULT_TZ, APP_URL } from "@/lib/server/notify-service";
 
 export const runtime = "nodejs";
@@ -42,6 +43,18 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: "طلب غير صالح" }, { status: 400 }); }
   const { event, meetingId } = body || {};
+
+  // العملاء لا يرسلون إشعارات، والرسالة التجريبية للمدير فقط
+  if (serverCloud) {
+    try {
+      const who = await identity(req);
+      if (who.role === "client" || (event === "test" && who.role !== "manager")) {
+        return NextResponse.json({ ok: false, error: "غير مصرّح" }, { status: 403 });
+      }
+    } catch (e) {
+      return NextResponse.json({ ok: false, error: e.message }, { status: e.status || 500 });
+    }
+  }
   if (!NOTIFY_EVENTS[event]) return NextResponse.json({ ok: false, error: "نوع إشعار غير معروف" }, { status: 400 });
 
   const cfg = mailConfig();

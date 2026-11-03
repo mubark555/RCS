@@ -109,6 +109,15 @@ alter table public.files    add column if not exists kind text default 'file'; -
 alter table public.files    add column if not exists url  text default '';
 alter table public.files    alter column path drop not null;   -- الروابط بلا مسار تخزين
 
+-- ------------------------- إشعارات البريد للاجتماعات -------------------------
+alter table public.meetings add column if not exists action_items   jsonb   default '[]'::jsonb;
+alter table public.meetings add column if not exists notify         boolean default true;          -- تفعيل الإشعارات لهذا الاجتماع
+alter table public.meetings add column if not exists reminders      jsonb   default '[1440,60]'::jsonb; -- دقائق قبل الموعد
+alter table public.meetings add column if not exists reminders_sent jsonb   default '[]'::jsonb;    -- التذكيرات المُرسلة (منع التكرار)
+alter table public.meetings add column if not exists extra_emails   text    default '';             -- ضيوف من خارج النظام
+alter table public.meetings add column if not exists notify_log     jsonb   default '[]'::jsonb;    -- سجل الإشعارات المرسلة
+create index if not exists meetings_status_start_idx on public.meetings (status, start_at);
+
 -- =====================================================================
 --  سياسات الوصول (RLS)
 --  ملاحظة: هذه سياسات مفتوحة للبدء السريع (anon يقرأ/يكتب).

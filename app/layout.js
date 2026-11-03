@@ -8,6 +8,8 @@ import { SettingsProvider } from "@/components/SettingsProvider";
 import { RoleProvider } from "@/components/RoleProvider";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import Toaster from "@/components/Toaster";
+import ReminderWatcher from "@/components/ReminderWatcher";
 
 export const metadata = {
   title: "نظام إدارة سيم برايم | ڤيوليت",
@@ -28,6 +30,8 @@ export default function RootLayout({ children }) {
                 <div className="content">{children}</div>
               </div>
             </div>
+            <ReminderWatcher />
+            <Toaster />
           </RoleProvider>
         </SettingsProvider>
       </body>

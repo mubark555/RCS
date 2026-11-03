@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/components/SettingsProvider";
 import { useRole } from "@/components/RoleProvider";
 import Icon from "@/components/Icon";
+import { toast } from "@/components/Toaster";
+import { REMINDER_OPTIONS, isEmail } from "@/lib/notify-core";
+import { notifyPrefsOf, getEmailStatus } from "@/lib/notifications";
 
 const PRESETS = ["#e05a50", "#3f8e7f", "#2563eb", "#7c3aed", "#d97706", "#0d9488", "#db2777", "#0ea5e9", "#111827"];
 
@@ -41,7 +44,8 @@ export default function SettingsPage() {
   }
 
   function apply() {
-    save(f);
+    const { notifications, ...rest } = f; // إعدادات الإشعارات تُحفظ فوراً من بطاقتها
+    save(rest);
     setSaved(true);
   }
   function restore() {
@@ -55,6 +59,7 @@ export default function SettingsPage() {
 
   return (
     <div>
+      <NotificationSettings />
       <div className="dash-2col" style={{ marginTop: 0 }}>
         <div className="card">
           <div className="section-title">هوية النظام</div>
@@ -113,6 +118,94 @@ export default function SettingsPage() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ================= إعدادات إشعارات البريد =================
+const TOGGLES = [
+  ["onCreate", "عند إنشاء اجتماع", "دعوة بالبريد مع مرفق تقويم (ICS) ورابط Google Calendar"],
+  ["onUpdate", "عند تعديل الاجتماع", "تغيير الموعد أو المكان أو الحضور — مع توضيح ما تغيّر"],
+  ["onClose", "عند إغلاق الاجتماع", "إرسال ملخص المحضر والقرارات والمهام لكل الحضور"],
+  ["onCancel", "عند إلغاء / حذف الاجتماع", "إشعار إلغاء يحذف الحدث من تقويم الحضور تلقائياً"],
+  ["reminders", "التذكير قبل الاجتماع", "تذكيرات تلقائية حسب التوقيت المحدد لكل اجتماع"],
+  ["includeIcs", "إرفاق دعوة التقويم", "ملف invite.ics متوافق مع Outlook و Google و Apple"],
+  ["askBeforeSend", "السؤال قبل كل إرسال", "تأكيد يدوي قبل إرسال أي بريد"],
+];
+
+function NotificationSettings() {
+  const { settings, save } = useSettings();
+  const { viewer } = useRole();
+  const prefs = notifyPrefsOf(settings);
+  const [status, setStatus] = useState(null);
+  const [to, setTo] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => { getEmailStatus(true).then(setStatus); }, []);
+  useEffect(() => { if (!to && viewer?.email) setTo(viewer.email); }, [viewer]); // eslint-disable-line
+
+  const put = (patch) => save({ notifications: { ...prefs, ...patch } });
+  const toggleRem = (min) => {
+    const cur = prefs.defaultReminders || [];
+    put({ defaultReminders: cur.includes(min) ? cur.filter((x) => x !== min) : [...cur, min].sort((a, b) => b - a) });
+  };
+
+  async function test() {
+    if (!isEmail(to)) return toast("أدخل بريداً صحيحاً", "error");
+    setTesting(true);
+    try {
+      const r = await fetch("/api/notify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "test", to, name: viewer?.name || "", brand: { appName: settings.appName, tagline: settings.tagline, primaryColor: settings.primaryColor } }),
+      });
+      const d = await r.json().catch(() => ({}));
+      toast(d.ok ? `✅ أُرسلت رسالة تجريبية إلى ${to}` : `⚠️ ${d.error || "فشل الإرسال"}`, d.ok ? "success" : "error", 8000);
+    } finally { setTesting(false); }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div className="section-title" style={{ margin: 0 }}>إشعارات البريد الإلكتروني للاجتماعات</div>
+        <label className="switch" style={{ marginInlineStart: "auto" }} title="تفعيل / إيقاف كل الإشعارات">
+          <input type="checkbox" checked={prefs.enabled} onChange={(e) => put({ enabled: e.target.checked })} />
+          <span />
+        </label>
+      </div>
+
+      <div className={`mail-status ${status?.configured ? "ok" : "warn"}`}>
+        {!status ? "جاري فحص إعداد البريد…" : status.configured ? (
+          <>✅ البريد مُعدّ عبر <b>{status.provider === "resend" ? "Resend" : "SMTP"}</b> — المرسل: <span dir="ltr">{status.from}</span>
+            {" · "}التذكيرات المجدولة على الخادم: {status.cron && status.cloud ? "مفعّلة ✅" : "غير مفعّلة (تعمل التذكيرات أثناء فتح النظام فقط)"}</>
+        ) : (
+          <>⚠️ البريد غير مُعدّ على الخادم. أضِف متغيرات البيئة <code>RESEND_API_KEY</code> و <code>EMAIL_FROM</code> (أو إعدادات <code>SMTP_*</code>) في Vercel ثم أعد النشر. التفاصيل في README.</>
+        )}
+      </div>
+
+      <div className="notify-grid" style={{ opacity: prefs.enabled ? 1 : 0.5, pointerEvents: prefs.enabled ? "auto" : "none" }}>
+        {TOGGLES.map(([k, label, hint]) => (
+          <label key={k} className="notify-opt">
+            <input type="checkbox" checked={prefs[k] !== false} onChange={(e) => put({ [k]: e.target.checked })} />
+            <span><b>{label}</b><small>{hint}</small></span>
+          </label>
+        ))}
+      </div>
+
+      <div className="nb-label" style={{ marginTop: 16 }}>التذكيرات الافتراضية للاجتماعات الجديدة</div>
+      <div className="attendee-picker">
+        {REMINDER_OPTIONS.map((o) => (
+          <span key={o.min} className={`att-chip ${(prefs.defaultReminders || []).includes(o.min) ? "on" : ""}`} onClick={() => toggleRem(o.min)}>{o.ar}</span>
+        ))}
+      </div>
+
+      <div className="nb-label" style={{ marginTop: 16 }}>إرسال رسالة تجريبية</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@example.com" dir="ltr" style={{ flex: 1, minWidth: 200 }} />
+        <button className="btn" onClick={test} disabled={testing || !status?.configured}><Icon name="bell" size={16} /> {testing ? "جاري الإرسال…" : "إرسال تجربة"}</button>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+        يصل البريد للحضور الذين لديهم بريد مسجّل في صفحة «الفريق»، ولأي بريد إضافي يُكتب في نموذج الاجتماع.
+      </p>
     </div>
   );
 }

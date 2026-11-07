@@ -26,7 +26,7 @@ do $$
 begin
   -- الوصول للأعضاء الفعّالين فقط (لا سياسات مفتوحة) — راجع 2026-11-security.sql
   if to_regprocedure('public.is_member()') is not null
-     and not exists (select 1 from pg_policies where tablename='chat_messages' and policyname='chat_messages_members') then
+     and not exists (select 1 from pg_policies where tablename='chat_messages' and policyname in ('chat_messages_members', 'chat_messages_read')) then
     execute 'create policy chat_messages_members on public.chat_messages for all to authenticated using (public.is_member()) with check (public.is_member())';
   end if;
   if not exists (

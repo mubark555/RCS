@@ -14,6 +14,9 @@
 --  الدخول حتى يُربط بريد المدير الأول — نفس منطق «تمهيد الأدمن الأول» في النظام.
 -- =====================================================================
 
+-- كل الملف في معاملة واحدة: إما يُطبَّق كاملاً أو لا يتغيّر شيء
+begin;
+
 -- ---------- هل المستخدم الحالي عضو فعّال؟ ----------
 -- security definer: تقرأ جدول users متجاوزةً RLS (وإلا ستدور السياسة على نفسها)
 create or replace function public.is_member()
@@ -117,6 +120,13 @@ begin
     execute format('alter table public.%I enable row level security', t);
     -- إزالة السياسة المفتوحة القديمة (using true)
     execute format('drop policy if exists %I on public.%I', t || '_all', t);
+    -- لا شيء للمفتاح العام (طبقة ثانية فوق RLS)
+    execute format('revoke all on public.%I from anon', t);
+    -- إن طُبّقت الصلاحيات التفصيلية (2026-11-role-permissions.sql) فلا نعيد السياسة العامة:
+    -- السياسات تُجمع بـ OR، وإعادتها كانت ستلغي الصلاحيات التفصيلية بصمت
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = t || '_read') then
+      continue;
+    end if;
     -- سياسة الأعضاء
     execute format('drop policy if exists %I on public.%I', t || '_members', t);
     execute format(
@@ -145,3 +155,5 @@ create policy archive_members on storage.objects
   with check (bucket_id = 'archive' and public.is_member());
 
 update storage.buckets set public = false where id = 'archive';
+
+commit;

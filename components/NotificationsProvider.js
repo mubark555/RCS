@@ -2,7 +2,8 @@
 
 import { postNotify } from "@/lib/notifyClient";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { onDataChange, notificationsStore, activityStore, appSettings } from "@/lib/store";
+import { onDataChange, notificationsStore, activityStore, appSettings, meetingsStore } from "@/lib/store";
+import { DEFAULT_MEETING_MAIL, buildMeetingMail, relativeStart, reminderLabel, MEETING_MAIL_KINDS } from "@/lib/meetingMail.mjs";
 import { useRole } from "@/components/RoleProvider";
 import { eventRecipients, announceRecipients } from "@/lib/notifyTargets.mjs";
 import { diffRecords } from "@/lib/activityCore.mjs";
@@ -49,6 +50,8 @@ export const DEFAULT_NOTIFY = {
   approvalEmails: true,       // بريد دورة الاعتماد: طلب المراجعة لممثل سيم، والقرار للمسؤول
   onCreateOnly: true,         // إرسال عند الإضافة فقط (لتجنّب الإزعاج)
   events: { person: true, project: true, task: true, kpi: true, meeting: true },
+  // بريد الاجتماعات للحضور أنفسهم (دعوة / تحديث / إلغاء / تذكير)
+  meetingMail: DEFAULT_MEETING_MAIL,
   // القالب الافتراضي — المتغيّرات: {الإجراء} {النوع} {الاسم} {الدور} {المسمى} {البريد} {المشروع}
   titleTemplate: "{الإجراء} {النوع}: {الاسم}",
   bodyTemplate: "{الإجراء} {النوع}: {الاسم}\nإشعار تلقائي من نظام سيم برايم لإدارة المشاريع.",
@@ -178,7 +181,7 @@ export function NotificationsProvider({ children }) {
   useEffect(() => {
     appSettings.get("notify").then((p) => {
       if (!p) return;
-      const migrated = { ...DEFAULT_NOTIFY, ...p, events: { ...DEFAULT_NOTIFY.events, ...(p.events || {}) } };
+      const migrated = { ...DEFAULT_NOTIFY, ...p, events: { ...DEFAULT_NOTIFY.events, ...(p.events || {}) }, meetingMail: { ...DEFAULT_MEETING_MAIL, ...(p.meetingMail || {}) } };
       if (p.recipients && !p.extraEmails) migrated.extraEmails = p.recipients;
       if (!Array.isArray(migrated.recipientUsers)) migrated.recipientUsers = [];
       setNotifyPrefs(migrated);
@@ -187,7 +190,7 @@ export function NotificationsProvider({ children }) {
 
   const saveNotifyPrefs = useCallback(async (patch) => {
     setNotifyPrefs((prev) => {
-      const next = { ...prev, ...patch, events: { ...prev.events, ...(patch.events || {}) } };
+      const next = { ...prev, ...patch, events: { ...prev.events, ...(patch.events || {}) }, meetingMail: { ...DEFAULT_MEETING_MAIL, ...(prev.meetingMail || {}), ...(patch.meetingMail || {}) } };
       appSettings.set("notify", next).catch(() => {});
       return next;
     });
@@ -333,6 +336,39 @@ export function NotificationsProvider({ children }) {
     if (emailTo && prefsRef.current.emailEnabled) sendEmail({ to: emailTo, subject: title, body: emailBody || title, path });
   }, [pushToast, sendEmail]);
 
+  // بريد الاجتماع لحضوره: kind = invite | update | cancel | reminder
+  // يُرجع { ok, count, missing, error, skipped }
+  const sendMeetingMail = useCallback(async (kind, m, { changes, offset, force } = {}) => {
+    const p = prefsRef.current;
+    const mm = { ...DEFAULT_MEETING_MAIL, ...(p.meetingMail || {}) };
+    const flag = kind === "reminder" ? "reminders" : kind;
+    if (!force && (!p.emailEnabled || mm[flag] === false || m?.notify_attendees === false)) return { ok: false, skipped: true };
+    let tz;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+    const { mail, missing } = buildMeetingMail(kind, m, usersRef.current, {
+      appUrl: systemUrlFrom(p), tz, changes, offset, includeIcs: mm.includeIcs !== false,
+      relative: kind === "reminder" ? relativeStart(m) : undefined,
+    });
+    if (!mail) return { ok: false, missing, error: "لا يوجد بريد إلكتروني للحضور." };
+    let result;
+    try {
+      const r = await postNotify({ ...mail, fromName: (p.senderName || "").trim() || undefined });
+      const data = await r.json().catch(() => ({}));
+      result = r.ok ? { ok: true, count: mail.to.length, missing } : { ok: false, missing, error: data?.error || "فشل الإرسال." };
+    } catch (e) {
+      result = { ok: false, missing, error: e?.message || "تعذّر الاتصال بخدمة البريد." };
+    }
+    // سجل البريد على الاجتماع نفسه (بلا إشعار إضافي)
+    try {
+      const entry = { at: new Date().toISOString(), kind, label: kind === "reminder" ? reminderLabel(offset) : "", to: result.ok ? result.count : 0, error: result.ok ? "" : result.error, by: viewerRef.current?.name || "" };
+      await meetingsStore.update(m.id, { mail_log: [entry, ...(Array.isArray(m.mail_log) ? m.mail_log : [])].slice(0, 30) }, { action: "update", entity: "" });
+    } catch {}
+    const what = MEETING_MAIL_KINDS[kind]?.ar || "بريد";
+    if (result.ok) pushToast(`✉️ ${what}: أُرسل لـ ${result.count} من الحضور${missing?.length ? ` (بلا بريد: ${missing.join("، ")})` : ""}`, "success");
+    else pushToast(`⚠️ ${what}: ${result.error}`, "danger");
+    return result;
+  }, [pushToast]);
+
   const unread = items.filter((n) => !n.read).length;
 
   const markAllRead = useCallback(async () => {
@@ -347,7 +383,7 @@ export function NotificationsProvider({ children }) {
     for (const n of cur) { notificationsStore.remove(n.id).catch(() => {}); }
   }, [items]);
 
-  const value = { items, unread, open, setOpen, reload, markAllRead, clearAll, pushToast, notifyPrefs, saveNotifyPrefs, announce, sendEmail };
+  const value = { items, unread, open, setOpen, reload, markAllRead, clearAll, pushToast, notifyPrefs, saveNotifyPrefs, announce, sendEmail, sendMeetingMail };
 
   return (
     <NotifCtx.Provider value={value}>
@@ -362,6 +398,7 @@ export function useNotifications() {
     items: [], unread: 0, open: false, setOpen: () => {}, reload: async () => {},
     markAllRead: async () => {}, clearAll: async () => {}, pushToast: () => {},
     notifyPrefs: DEFAULT_NOTIFY, saveNotifyPrefs: async () => {}, announce: async () => {}, sendEmail: async () => ({ ok: false }),
+    sendMeetingMail: async () => ({ ok: false, skipped: true }),
   };
 }
 

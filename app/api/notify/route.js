@@ -5,6 +5,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { allowedRecipients, isActiveUserEmail, checkRecipients } from "@/lib/notifyGuard.mjs";
+import { fromWithName, DEFAULT_FROM, cleanAttachments, sendResend } from "@/lib/resend.mjs";
 
 export const runtime = "nodejs";
 
@@ -55,28 +56,18 @@ export async function POST(req) {
     return Response.json({ error: "الحقول المطلوبة ناقصة (المستقبلون / العنوان)." }, { status: 400 });
   }
 
-  const baseFrom = process.env.NOTIFY_FROM || "سيم برايم <no-reply@vuletmedia.com>";
+  // مرفق دعوة التقويم (اختياري — ملفات .ics فقط)
+  const att = cleanAttachments(payload?.attachments);
+  if (!att.ok) return Response.json({ error: att.error }, { status: 400 });
+
   // اسم مُرسِل مخصّص من الإعدادات: نستبدل الاسم الظاهر مع الإبقاء على عنوان
   // البريد الموثّق (الجزء داخل < >) كما هو، حفاظاً على صحة الإرسال.
-  let from = baseFrom;
-  const name = String(fromName || "").trim().replace(/[<>"]/g, "");
-  if (name) {
-    const m = baseFrom.match(/<([^>]+)>/);
-    const addr = m ? m[1] : baseFrom;
-    from = `${name} <${addr}>`;
-  }
+  const from = fromWithName(DEFAULT_FROM(), fromName);
 
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: recipients, subject, html: html || subject }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      return Response.json({ error: data?.message || "فشل الإرسال." }, { status: r.status });
-    }
-    return Response.json({ ok: true, id: data?.id });
+    const r = await sendResend({ key, from, to: recipients, subject, html, attachments: att.attachments });
+    if (!r.ok) return Response.json({ error: r.error }, { status: r.status || 502 });
+    return Response.json({ ok: true, id: r.id });
   } catch (e) {
     return Response.json({ error: e?.message || "خطأ في الاتصال بخدمة البريد." }, { status: 502 });
   }

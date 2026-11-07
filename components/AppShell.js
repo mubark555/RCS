@@ -9,6 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useRole } from "@/components/RoleProvider";
 import LoginScreen from "@/components/LoginScreen";
 import SessionTracker from "@/components/SessionTracker";
+import MeetingReminderWatcher from "@/components/MeetingReminderWatcher";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import Icon from "@/components/Icon";
@@ -107,6 +108,7 @@ export default function AppShell({ children }) {
         </div>
         <WelcomeGate />
         <SessionTracker />
+        <MeetingReminderWatcher />
       </div>
       {amalOn && <AmalAssistant />}
     </div>

@@ -37,7 +37,16 @@ export function AuthProvider({ children }) {
     // إرسال رمز تحقق (OTP) إلى البريد — بلا رابط، رمز مكوّن من 6 أرقام
     async signInWithEmail(email) {
       if (!isCloud) return { error: null };
-      return supabase.auth.signInWithOtp({ email });
+      const addr = String(email || "").trim();
+      // فحص مسبق: لا نرسل رمزاً (ولا ننشئ حساباً) لبريد غير مضاف في الفريق أو موقوف.
+      // إن لم تُشغَّل ترقية الحماية بعد (الدالة غير موجودة) نكمل كالمعتاد.
+      try {
+        const { data, error } = await supabase.rpc("can_request_login", { p_email: addr });
+        if (!error && data === false) {
+          return { error: { message: "هذا البريد غير مضاف في النظام أو موقوف — تواصل مع مدير النظام." } };
+        }
+      } catch {}
+      return supabase.auth.signInWithOtp({ email: addr });
     },
     // التحقق من الرمز الذي أدخله المستخدم
     async verifyOtp(email, token) {

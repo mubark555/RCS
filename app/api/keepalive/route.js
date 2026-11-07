@@ -10,7 +10,12 @@ export async function GET() {
   if (!url || !key) return Response.json({ ok: false, reason: "supabase not configured" });
   try {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
-    const { error } = await supabase.from("projects").select("id").limit(1);
+    // دالة keepalive() لا تكشف أي بيانات (الجداول محمية ولا يقرؤها المفتاح العام)
+    let { error } = await supabase.rpc("keepalive");
+    if (error) {
+      // قبل تشغيل ترقية الحماية: الطريقة القديمة
+      ({ error } = await supabase.from("projects").select("id").limit(1));
+    }
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
     return Response.json({ ok: true, at: new Date().toISOString() });
   } catch (e) {

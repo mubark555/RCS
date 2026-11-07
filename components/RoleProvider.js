@@ -40,8 +40,16 @@ export function RoleProvider({ children }) {
       try {
         const list = await usersStore.list();
         if (list.length) { setUsers(list); return list; }
+        // قاعدة البيانات المحمية لا تُرجع شيئاً لمن ليس عضواً فعّالاً — نسأل عن السبب
+        const access = await supabase?.rpc("my_access").then((r) => (r.error ? null : r.data), () => null);
+        if (access === "none" || access === "suspended") {
+          const err = new Error(access === "suspended" ? "الحساب موقوف." : "البريد غير مضاف في الفريق.");
+          err.code = "NO_ACCESS";
+          throw err;
+        }
         last = new Error("قائمة المستخدمين رجعت فاضية.");
       } catch (e) {
+        if (e?.code === "NO_ACCESS") throw e;
         last = e;
       }
       try { await supabase?.auth.refreshSession(); } catch {}
@@ -100,9 +108,15 @@ export function RoleProvider({ children }) {
           setLoadError("");
           await resolveCloudViewer(list);
         } catch (e) {
-          setNoAccess(false);
           setViewerId(null);
-          setLoadError(e?.message || "تعذّر الاتصال بقاعدة البيانات.");
+          if (e?.code === "NO_ACCESS") {
+            // ليس عضواً فعّالاً → شاشة «لا تملك صلاحية الدخول» بدل «تعذّر التحميل»
+            setNoAccess(true);
+            setLoadError("");
+          } else {
+            setNoAccess(false);
+            setLoadError(e?.message || "تعذّر الاتصال بقاعدة البيانات.");
+          }
         }
         setReady(true);
         return;

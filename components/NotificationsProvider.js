@@ -5,6 +5,21 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { onDataChange, notificationsStore, activityStore, appSettings } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import { eventRecipients, announceRecipients } from "@/lib/notifyTargets.mjs";
+import { diffRecords } from "@/lib/activityCore.mjs";
+import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
+
+// ترجمة القيم في تفاصيل سجل الأنشطة (In Progress ← قيد التنفيذ…)
+const MEETING_STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
+function activityValueLabel(field, v) {
+  if (field === "status") return STATUS_META[v]?.ar || MEETING_STATUS_AR[v] || v;
+  if (field === "priority") return PRIORITY_META[v]?.ar || v;
+  if (field === "health") return HEALTH_META[v]?.ar || v;
+  if (field === "approval_status") return APPROVAL_META[v]?.ar || v;
+  if (field === "start_at" && v) {
+    try { return new Date(v).toLocaleString("ar-SA-u-ca-gregory", { dateStyle: "medium", timeStyle: "short" }); } catch {}
+  }
+  return v;
+}
 
 const NotifCtx = createContext(null);
 
@@ -131,6 +146,8 @@ export function getNotif(prefs, entityKey, action) {
 }
 
 let _toastSeq = 0;
+
+const recLabelOf = (r) => (r ? r.name || r.title || r.task || "" : "");
 
 export function NotificationsProvider({ children }) {
   const { users, viewer, projects } = useRole();
@@ -270,9 +287,19 @@ export function NotificationsProvider({ children }) {
       try {
         await notificationsStore.send(eventRecipients(evt, usersRef.current, viewerRef.current), { kind: evt.action, entity: evt.entity, title, body: "", read: false });
       } catch {}
-      // توثيق دائم في سجل الأنشطة مع اسم المنفِّذ
+      // توثيق دائم في سجل الأنشطة مع اسم المنفِّذ وما الذي تغيّر بالتحديد (من ← إلى)
       try {
-        activityStore.log({ actor: viewerRef.current?.name || "", action: evt.action, entity: evt.entity, label: evt.label });
+        const rec = evt.record || {};
+        const changes = evt.action === "update" && evt.patch ? diffRecords(evt.prev, evt.patch, activityValueLabel) : [];
+        activityStore.log({
+          actor: viewerRef.current?.name || "",
+          action: evt.action,
+          entity: evt.entity,
+          label: evt.label || recLabelOf(evt.prev),
+          entity_id: rec.id || evt.prev?.id || "",
+          project: rec.project || evt.prev?.project || "",
+          details: changes.length ? { changes } : undefined,
+        });
       } catch {}
       maybeSendEmail(evt, title);
     });

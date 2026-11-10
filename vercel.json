@@ -3,5 +3,8 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "crons": [{ "path": "/api/keepalive", "schedule": "17 6 * * *" }]
+  "crons": [
+    { "path": "/api/keepalive", "schedule": "17 6 * * *" },
+    { "path": "/api/cron/daily-attendance", "schedule": "0 6 * * *" }
+  ]
 }

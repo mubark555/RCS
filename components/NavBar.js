@@ -20,7 +20,7 @@ export default function NavBar() {
           <span className="logo">◆</span>
           <span>
             سيم برايم
-            <small>إدارة المشاريع والمتعاقدين — فيوليت</small>
+            <small>إدارة المشاريع والمتعاقدين — سيم برايم</small>
           </span>
         </div>
         <nav className="nav">

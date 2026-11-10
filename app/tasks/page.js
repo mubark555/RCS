@@ -57,14 +57,8 @@ const colorFor = (name) => {
 const WEEKDAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const pad = (n) => String(n).padStart(2, "0");
-const WEEK = 7 * 86400000;
-// مؤرشفة: مهمة مكتملة مضى على إكمالها (أو تاريخها) أكثر من أسبوع
-function isArchived(t) {
-  if (!isDone(t)) return false;
-  const r = t.completed_at || t.due_date || t.created_at;
-  const d = r ? new Date(r).getTime() : NaN;
-  return !isNaN(d) && d < Date.now() - WEEK;
-}
+// مؤرشفة: أي مهمة منتهية (معتمدة) تنتقل إلى المؤرشفة فور انتهائها
+const isArchived = (t) => isDone(t);
 
 export default function TasksPage() {
   const { readOnly, scopeProjects, projects, users, canDeliver, canManage, viewer, taskVisible, decisionBlockFor } = useRole();

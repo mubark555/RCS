@@ -9,9 +9,10 @@ import { filesStore, tasksStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import { useAmalEnabled } from "@/lib/amalPref";
 import ReviewDialog from "@/components/ReviewDialog";
+import { exceptionalApprove } from "@/lib/workflow";
 import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
 import { stepBlock } from "@/lib/mywork.mjs";
-import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile, isDone, canExceptionalApprove } from "@/lib/constants";
 
 const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
 const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
@@ -148,6 +149,19 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const canSubmitNow = canDeliver && ["Not Started", "In Progress", "Revision Needed"].includes(t.status);
   const decideBlock = t.status === "Pending Review" ? decisionBlockFor(t) : null;
   const canDecideNow = t.status === "Pending Review" && !decideBlock;
+  // الموافقة الاستثنائية: تظهر فقط للمخوّلين وعلى المهام غير المعتمدة
+  const canExceptional = !readOnly && canExceptionalApprove(viewer) && !isDone(t);
+  async function doExceptional() {
+    if (!canExceptional) return;
+    const note = prompt("موافقة استثنائية: سيتم تخطي جميع الاعتمادات ونقل المهمة إلى الموافقة النهائية.\nملاحظة (اختياري):");
+    if (note === null) return;
+    try {
+      await exceptionalApprove(t, chain, viewer?.name || "", note.trim());
+      await afterDecision();
+    } catch (e) {
+      alert(`تعذّرت الموافقة الاستثنائية: ${e?.message || ""}`);
+    }
+  }
   const flowIdx = FLOW.indexOf(t.status === "Revision Needed" ? "In Progress" : t.status);
 
   return (
@@ -227,6 +241,16 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                   <button className="btn" type="button" style={{ color: "#b45309" }} onClick={() => setDialog("revision")}>طلب تعديل</button>
                 </>
               )}
+            </div>
+          )}
+
+          {canExceptional && (
+            <div className="wf-actions" style={{ borderTop: "1px dashed #0d9488", paddingTop: 10 }}>
+              <button className="btn" type="button" style={{ background: "#0d9488", color: "#fff", borderColor: "#0d9488" }} onClick={doExceptional}
+                title="تنهي جميع الاعتمادات وتنقل المهمة مباشرة إلى الموافقة النهائية">
+                <Icon name="check" size={15} /> موافقة استثنائية
+              </button>
+              <small className="muted">تخطي جميع الاعتمادات نهائياً — متاحة لك فقط</small>
             </div>
           )}
 

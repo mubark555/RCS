@@ -11,6 +11,7 @@ import TaskChat from "@/components/TaskChat";
 import TaskDetail from "@/components/TaskDetail";
 import Icon from "@/components/Icon";
 import { GENERAL, projectChannel, parseChannel, taskChatState } from "@/lib/chat";
+import { isDone } from "@/lib/constants";
 
 function ago(iso) {
   if (!iso) return "";
@@ -31,6 +32,7 @@ export default function ChatPage() {
   const [q, setQ] = useState("");
   const [viewingTask, setViewingTask] = useState(null);
   const [showList, setShowList] = useState(false); // للجوال: القائمة أو المحادثة
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     let c = GENERAL;
@@ -51,7 +53,10 @@ export default function ChatPage() {
     .map((p) => ({ p, ch: projectChannel(p.id) }))
     .sort((a, b) => (chat.unread(b.ch) - chat.unread(a.ch)) || chat.lastAt(b.ch).localeCompare(chat.lastAt(a.ch))),
   [projects, scopeProjects, s, chat]);
-  const threads = chat.taskThreads.filter((x) => x.task && (!s || `${x.task.task} ${x.task.project}`.includes(s)));
+  const allThreads = chat.taskThreads.filter((x) => x.task && (!s || `${x.task.task} ${x.task.project}`.includes(s)));
+  // شات المهام المنتهية ينتقل إلى «المؤرشفة» فور انتهاء المهمة
+  const threads = allThreads.filter((x) => !isDone(x.task));
+  const archivedThreads = allThreads.filter((x) => isDone(x.task));
 
   if (!channel) return <div className="empty">جاري التحميل…</div>;
 
@@ -81,15 +86,30 @@ export default function ChatPage() {
         ))}
 
         <div className="chp-group">متابعة المهام</div>
-        {threads.length === 0 && <div className="chp-none">شات أي مهمة يبدأ من تفاصيلها.</div>}
-        {threads.map((x) => {
-          const closed = taskChatState(x.task).closed;
-          return (
-            <Item key={x.channel} on={channel === x.channel} onClick={() => open(x.channel)}
-              icon={<span className="chp-ic task"><Icon name={closed ? "lock" : "tasks"} size={14} /></span>}
-              title={x.task.task} sub={`${x.task.project || "بدون مشروع"}${closed ? " · مقفل" : ""}`} unread={x.unread} last={x.last} />
-          );
-        })}
+        {threads.length === 0 && <div className="chp-none">{archivedThreads.length ? "لا مهام جارية." : "شات أي مهمة يبدأ من تفاصيلها."}</div>}
+        {threads.map((x) => (
+          <Item key={x.channel} on={channel === x.channel} onClick={() => open(x.channel)}
+            icon={<span className="chp-ic task"><Icon name="tasks" size={14} /></span>}
+            title={x.task.task} sub={x.task.project || "بدون مشروع"} unread={x.unread} last={x.last} />
+        ))}
+
+        {archivedThreads.length > 0 && (
+          <>
+            <button type="button" className="chp-group" onClick={() => setShowArchived((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: "none", border: 0, cursor: "pointer", font: "inherit", textAlign: "start" }}>
+              <Icon name="archive" size={14} /> المؤرشفة ({archivedThreads.length})
+              <span style={{ marginInlineStart: "auto", transition: ".2s", transform: showArchived ? "rotate(-90deg)" : "none" }}>‹</span>
+            </button>
+            {(showArchived || archivedThreads.some((x) => x.channel === channel)) && archivedThreads.map((x) => {
+              const closed = taskChatState(x.task).closed;
+              return (
+                <Item key={x.channel} on={channel === x.channel} onClick={() => open(x.channel)}
+                  icon={<span className="chp-ic task"><Icon name={closed ? "lock" : "archive"} size={14} /></span>}
+                  title={x.task.task} sub={`${x.task.project || "بدون مشروع"} · مؤرشفة${closed ? " · مقفل" : ""}`} unread={x.unread} last={x.last} />
+              );
+            })}
+          </>
+        )}
       </aside>
 
       <section className="chp-main">

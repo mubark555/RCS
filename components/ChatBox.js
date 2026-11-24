@@ -21,7 +21,7 @@ function fmtSize(n) {
 
 function fmtTime(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // صندوق محادثة لأي قناة (عام / مشروع / مهمة): رسائل + مرفقات + إشارات @ + تحديث فوري

@@ -13,7 +13,7 @@ const fmt = (iso, withTime) => {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString("ar-SA", withTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", withTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { year: "numeric", month: "short", day: "numeric" });
 };
 const daysSince = (iso) => {
   if (!iso) return null;

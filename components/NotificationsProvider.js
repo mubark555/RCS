@@ -31,6 +31,7 @@ const ACTION_AR = {
   approve: { verb: "اعتماد", tone: "success" },
   revision: { verb: "طلب تعديل", tone: "danger" },
   submit: { verb: "إرسال للمراجعة", tone: "info" },
+  recall: { verb: "سحب للتعديل", tone: "info" },
 };
 
 // ربط اسم الكيان بمفتاح الحدث في الإعدادات

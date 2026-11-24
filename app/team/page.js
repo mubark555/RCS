@@ -340,7 +340,7 @@ export default function TeamPage() {
                   setEditing(null);
                   await reload();
                   const joined = new Date(created?.created_at || Date.now())
-                    .toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+                    .toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { year: "numeric", month: "long", day: "numeric" });
                   setAdded({
                     name: (created || payload).name,
                     joined,
@@ -411,7 +411,7 @@ function MemberDrawer({ u, stat, canManage, leave, onClose, onEdit, onPerms, onT
 
   const li = loadInfo(stat.open);
   const pr = permsOf(u);
-  const joined = u.created_at ? new Date(u.created_at).toLocaleDateString("ar-SA", { year: "numeric", month: "long" }) : "—";
+  const joined = u.created_at ? new Date(u.created_at).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { year: "numeric", month: "long" }) : "—";
 
   return (
     <div className="tm-drawer-wrap" onMouseDown={onClose}>

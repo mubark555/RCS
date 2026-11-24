@@ -328,7 +328,7 @@ export default function Dashboard() {
                 return (
                   <div className="cc-next" key={m.id} onClick={() => router.push("/meetings")}>
                     <span className="cc-db" style={{ background: "#e0f2fe", color: "#0369a1" }}><b>{d.getDate()}</b><small>{MONTHS[d.getMonth()]}</small></span>
-                    <div className="cc-ib"><b>{m.title}</b><small>اجتماع · {d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}{m.project ? ` · ${m.project}` : ""}</small></div>
+                    <div className="cc-ib"><b>{m.title}</b><small>اجتماع · {d.toLocaleTimeString("ar-SA-u-ca-gregory-nu-latn", { hour: "2-digit", minute: "2-digit" })}{m.project ? ` · ${m.project}` : ""}</small></div>
                   </div>
                 );
               })}

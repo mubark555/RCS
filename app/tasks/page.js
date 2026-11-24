@@ -125,7 +125,11 @@ export default function TasksPage() {
   async function handleSave(payload) {
     const p = { ...payload };
     if (editing && editing.id) await tasksStore.update(editing.id, p);
-    else await tasksStore.create(p);
+    else {
+      // صاحب المهمة يُحفظ ليقدر يسحبها لعنده لاحقاً للتعديل
+      const me = viewer?.name || "";
+      await tasksStore.create({ ...p, created_by: me, reviews: [...(Array.isArray(p.reviews) ? p.reviews : []), { decision: "created", by: me, at: new Date().toISOString(), note: "" }] });
+    }
     await ensureDeliverable(p.project, p.deliverable);
     setEditing(null);
     await reload();
@@ -310,7 +314,7 @@ export default function TasksPage() {
       )}
 
       {viewing && (
-        <TaskDetail task={viewing} onClose={() => setViewing(null)}
+        <TaskDetail task={viewing} onClose={() => setViewing(null)} openEditOnRecall
           onUpdate={async (id, patch) => { await tasksStore.update(id, patch); await reload(); }}
           onChanged={reload}
           onEdit={(t) => { setViewing(null); setEditing(t); }}

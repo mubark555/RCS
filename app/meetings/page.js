@@ -13,11 +13,24 @@ import { toHref, firstUrl } from "@/lib/links.mjs";
 import { REMINDER_OPTIONS, DEFAULT_MEETING_MAIL, detectMeetingMail, diffMeeting, meetingRecipients, meetingReminders, reminderLabel, MEETING_MAIL_KINDS } from "@/lib/meetingMail.mjs";
 import { parseAttendees, presentOf, MEETING_STATUS, isLocked, ATTENDANCE_TYPES, DEFAULT_ATTENDANCE, attendanceOf, organizerOf } from "@/lib/meetings";
 import { isMe } from "@/lib/mywork.mjs";
+import { DATE_LOCALE } from "@/lib/constants";
+import { RECURRENCE_OPTIONS, MAX_OCCURRENCES, generateOccurrences, describeRule } from "@/lib/recurrence";
 
 const EMPTY = {
   title: "", objective: "", organizer: "", project: "", start_at: "", duration: 30, location: "",
   attendees: [], attendance: {}, links: [], agenda: "", minutes: "", action_items: [], status: "Scheduled",
+  recurrence: "none", recurrence_end: null, series_id: null,
 };
+
+const DEFAULT_END = { endType: "count", count: 10, until: "" };
+
+// الحقول المشتركة بين مواعيد السلسلة (لا تشمل المحضر والقرارات والحالة الخاصة بكل موعد)
+const SHARED_FIELDS = ["title", "objective", "organizer", "project", "duration", "location", "attendees", "attendance", "agenda", "links", "notify_attendees", "reminders"];
+// حقول خاصة بكل موعد لا تُنسخ للمواعيد الجديدة في السلسلة
+const PER_OCCURRENCE = ["id", "created_at", "minutes", "action_items", "present", "status", "ended_at", "ended_by", "approved_at", "approved_by", "emailed_at", "emailed_count", "email_error", "mail_log", "reminders_sent"];
+const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
+
+const newSeriesId = () => `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 const LINK_TYPES = ["تسجيل", "مستند", "رابط"];
 
@@ -44,6 +57,8 @@ export default function MeetingsPage() {
   const [editing, setEditing] = useState(null);
   const [minutesOf, setMinutesOf] = useState(null);
   const [q, setQ] = useState("");
+  const [deleting, setDeleting] = useState(null);       // حذف موعد من سلسلة متكررة
+  const [showAllSeries, setShowAllSeries] = useState(false);
 
   async function reload() {
     setItems(await meetingsStore.list());
@@ -82,7 +97,115 @@ export default function MeetingsPage() {
     ["toEnd", "Done", "Approved", "all"].forEach((k) => g[k].sort((a, b) => String(b.start_at).localeCompare(String(a.start_at))));
     return g;
   }, [scoped]);
-  const shown = groups[filter] || [];
+  // في «القادمة»: أقرب موعد فقط لكل سلسلة متكررة، مع خيار عرض الكل
+  const seriesLeft = useMemo(() => {
+    const left = {};
+    for (const m of groups.upcoming) if (m.series_id) left[m.series_id] = (left[m.series_id] || 0) + 1;
+    return left;
+  }, [groups]);
+  const shown = useMemo(() => {
+    const list = groups[filter] || [];
+    if (filter !== "upcoming" || showAllSeries) return list;
+    const seen = new Set();
+    return list.filter((m) => {
+      if (!m.series_id) return true;
+      if (seen.has(m.series_id)) return false;
+      seen.add(m.series_id);
+      return true;
+    });
+  }, [groups, filter, showAllSeries]);
+  const hiddenCount = filter === "upcoming" ? groups.upcoming.length - shown.length : 0;
+
+  const seriesOf = (m) => (m?.series_id ? (items || []).filter((x) => x.series_id === m.series_id) : m ? [m] : []);
+
+  // حفظ اجتماع: منفرد، أو إنشاء سلسلة متكررة، أو تعديل موعد/هذا وما بعده
+  async function saveMeeting(payload, opts = {}) {
+    const prev = editing?.id ? editing : null;
+    const rule = opts.rule || { freq: "none" };
+    const freq = rule.freq || "none";
+    const scope = opts.scope || "one";
+    const mail = async (kind, rec, before) => {
+      if (opts.sendMail === false || !kind || !rec?.id) return;
+      await sendMeetingMail(kind, rec, { changes: kind === "update" ? diffMeeting(before, rec) : undefined });
+    };
+
+    // إنشاء سلسلة جديدة، أو تحويل اجتماع منفرد إلى متكرر
+    if (freq !== "none" && !(prev && prev.series_id && seriesOf(prev).length > 1)) {
+      const dates = generateOccurrences(payload.start_at, rule);
+      const series_id = newSeriesId();
+      const recurrence_end = { endType: rule.endType, count: Number(rule.count) || 0, until: rule.until || "" };
+      const common = { ...payload, series_id, recurrence: freq, recurrence_end };
+      if (!prev) {
+        common.created_by = viewer?.name || "";
+        common.organizer = payload.organizer || viewer?.name || "";
+      }
+      const [first, ...rest] = dates;
+      let saved;
+      if (prev) saved = await meetingsStore.update(prev.id, { ...common, start_at: first, reminders_sent: [] });
+      else saved = await meetingsStore.create({ ...common, start_at: first });
+      // المواعيد التالية تبدأ بلا محضر ولا قرارات وبحالة «مجدول»
+      const base = omit(common, PER_OCCURRENCE);
+      await meetingsStore.createMany(rest.map((d) => ({ ...base, start_at: d, minutes: "", action_items: [], present: [], status: "Scheduled" })));
+      // دعوة البريد للموعد الأول فقط (حتى لا يُغرق الحضور برسائل بعدد المواعيد)
+      const rec = { ...(prev || {}), ...common, start_at: first, ...(saved || {}) };
+      await mail(detectMeetingMail(prev, rec), rec, prev);
+      return;
+    }
+
+    // اجتماع منفرد جديد
+    if (!prev) {
+      const saved = await meetingsStore.create({ ...payload, recurrence: "none", series_id: null, created_by: viewer?.name || "", organizer: payload.organizer || viewer?.name || "" });
+      const rec = { ...payload, ...(saved || {}) };
+      await mail(detectMeetingMail(null, rec), rec, null);
+      return;
+    }
+
+    // تعديل اجتماع منفرد، أو موعد واحد فقط من سلسلة
+    const timeChanged = new Date(prev.start_at || 0).getTime() !== new Date(payload.start_at || 0).getTime();
+    const saved = await meetingsStore.update(prev.id, timeChanged ? { ...payload, reminders_sent: [] } : payload);
+    const rec = { ...prev, ...payload, ...(saved || {}) };
+    await mail(detectMeetingMail(prev, rec), rec, prev);
+
+    // هذا الموعد وما بعده: الحقول المشتركة + إزاحة الوقت بنفس الفارق (المواعيد المعتمدة لا تُلمس)
+    if (prev.series_id && scope === "following") {
+      const delta = new Date(payload.start_at) - new Date(prev.start_at);
+      const shared = Object.fromEntries(SHARED_FIELDS.filter((k) => k in payload).map((k) => [k, payload[k]]));
+      const following = seriesOf(prev).filter((x) => x.id !== prev.id && x.start_at >= prev.start_at && !isLocked(x) && (x.status || "Scheduled") === "Scheduled");
+      for (const x of following) {
+        const patch = { ...shared };
+        if (delta) { patch.start_at = new Date(new Date(x.start_at).getTime() + delta).toISOString(); patch.reminders_sent = []; }
+        await meetingsStore.update(x.id, patch, { action: "update", entity: "" });
+      }
+    }
+  }
+
+  // حذف: موعد واحد، أو هذا وما بعده، أو السلسلة كاملة (المحاضر المعتمدة تبقى)
+  async function deleteMeeting(m, scope = "one") {
+    let targets = [m];
+    if (scope === "following") targets = seriesOf(m).filter((x) => x.start_at >= m.start_at);
+    else if (scope === "all") targets = seriesOf(m);
+    targets = targets.filter((x) => x.id === m.id || !isLocked(x));
+    const now = new Date().toISOString();
+    const notifiable = targets.filter((x) => (x.status || "Scheduled") === "Scheduled" && x.start_at > now && x.notify_attendees !== false && Array.isArray(x.mail_log) && x.mail_log.length);
+    if (notifiable.length && mailOn && mailPrefs.cancel && confirm("إرسال إشعار إلغاء بالبريد للحضور قبل الحذف؟")) {
+      for (const x of notifiable) await sendMeetingMail("cancel", { ...x, status: "Cancelled" });
+    }
+    for (const x of targets) await meetingsStore.remove(x.id);
+    setDeleting(null);
+    await reload();
+  }
+
+  async function askDelete(m) {
+    if (m.series_id && seriesOf(m).length > 1) { setDeleting(m); return; }
+    if (!confirm(`حذف الاجتماع؟\n\n${m.title}`)) return;
+    // حذف اجتماع قادم → إشعار الحضور بالإلغاء (يحذفه من تقويمهم)
+    const upcoming = (m.status || "Scheduled") === "Scheduled" && m.start_at > new Date().toISOString();
+    if (upcoming && mailOn && mailPrefs.cancel && m.notify_attendees !== false && confirm("إرسال إشعار إلغاء بالبريد للحضور قبل الحذف؟")) {
+      await sendMeetingMail("cancel", { ...m, status: "Cancelled" });
+    }
+    await meetingsStore.remove(m.id);
+    await reload();
+  }
 
   async function approveAndSend(m, { send }) {
     const at = new Date().toISOString();
@@ -133,6 +256,14 @@ export default function MeetingsPage() {
         ))}
       </div>
 
+      {filter === "upcoming" && Object.keys(seriesLeft).length > 0 && (hiddenCount > 0 || showAllSeries) && (
+        <div style={{ display: "flex", justifyContent: "flex-end", margin: "-4px 0 10px" }}>
+          <button className="btn sm ghost" onClick={() => setShowAllSeries((v) => !v)}>
+            {showAllSeries ? "إظهار أقرب موعد لكل سلسلة فقط" : `عرض كل المواعيد المتكررة (+${hiddenCount})`}
+          </button>
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <div className="mtg-empty">{filter === "upcoming" ? "لا توجد اجتماعات قادمة." : filter === "Approved" ? "لا محاضر معتمدة بعد." : "لا يوجد."}</div>
       ) : (
@@ -140,15 +271,10 @@ export default function MeetingsPage() {
           {shown.map((m) => (
             <MeetingCard key={m.id} m={m} readOnly={readOnly} canApprove={canApproveMinutes(m)}
               dim={m.status === "Cancelled"}
-              onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)} onChange={reload}
+              remaining={filter === "upcoming" && !showAllSeries ? seriesLeft[m.series_id] : 0}
+              onEdit={() => setEditing(m)} onMinutes={() => setMinutesOf(m)}
               onEnd={() => setEnding(m)} onApprove={() => setApproving(m)}
-              onBeforeDelete={async () => {
-                // حذف اجتماع قادم → إشعار الحضور بالإلغاء (يحذفه من تقويمهم)
-                const upcoming = (m.status || "Scheduled") === "Scheduled" && m.start_at > new Date().toISOString();
-                if (upcoming && mailOn && mailPrefs.cancel && m.notify_attendees !== false && confirm("إرسال إشعار إلغاء بالبريد للحضور قبل الحذف؟")) {
-                  await sendMeetingMail("cancel", { ...m, status: "Cancelled" });
-                }
-              }}
+              onDelete={() => askDelete(m)}
               onRemind={async () => { await sendMeetingMail("reminder", m, { force: true, offset: 0 }); await reload(); }}
               mailOn={mailOn} />
           ))}
@@ -190,42 +316,46 @@ export default function MeetingsPage() {
         <Modal title={editing.id ? "تعديل الاجتماع" : "اجتماع جديد"} onClose={() => setEditing(null)}>
           <MeetingForm
             initial={editing.id ? editing : null}
+            seriesCount={editing.id ? seriesOf(editing).length : 0}
             users={users}
             mailPrefs={mailPrefs}
             mailOn={mailOn}
             onCancel={() => setEditing(null)}
             onSave={async (payload, opts = {}) => {
-              const prev = editing.id ? editing : null;
-              let saved;
-              if (prev) {
-                // تغيّر الموعد → إعادة جدولة التذكيرات
-                const timeChanged = new Date(prev.start_at || 0).getTime() !== new Date(payload.start_at || 0).getTime();
-                saved = await meetingsStore.update(prev.id, timeChanged ? { ...payload, reminders_sent: [] } : payload);
-              } else {
-                saved = await meetingsStore.create({ ...payload, created_by: viewer?.name || "", organizer: payload.organizer || viewer?.name || "" });
-              }
+              await saveMeeting(payload, opts);
               setEditing(null);
-              // بريد الحضور: دعوة / تحديث / إلغاء
-              const rec = { ...(prev || {}), ...payload, ...(saved || {}) };
-              const kind = opts.sendMail === false ? null : detectMeetingMail(prev, rec);
-              if (kind && rec.id) await sendMeetingMail(kind, rec, { changes: kind === "update" ? diffMeeting(prev, rec) : undefined });
               await reload();
             }}
           />
+        </Modal>
+      )}
+
+      {deleting && (
+        <Modal title="حذف اجتماع متكرر" onClose={() => setDeleting(null)}>
+          <p style={{ marginTop: 0 }}>«{deleting.title}» جزء من سلسلة متكررة ({describeRule(deleting)}). ماذا تريد أن تحذف؟</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button className="btn" onClick={() => deleteMeeting(deleting, "one")}>هذا الموعد فقط</button>
+            <button className="btn" onClick={() => deleteMeeting(deleting, "following")}>هذا الموعد وكل ما بعده</button>
+            <button className="btn danger" onClick={() => deleteMeeting(deleting, "all")}>كل مواعيد السلسلة ({seriesOf(deleting).length})</button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: "10px 0 0" }}>المواعيد ذات المحاضر المعتمدة لا تُحذف ضمن السلسلة.</p>
+          <div className="modal-actions">
+            <button className="btn ghost" onClick={() => setDeleting(null)}>إلغاء</button>
+          </div>
         </Modal>
       )}
     </div>
   );
 }
 
-function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canApprove, dim, readOnly, onBeforeDelete, onRemind, mailOn }) {
+function MeetingCard({ m, onEdit, onMinutes, onEnd, onApprove, canApprove, dim, readOnly, onDelete, onRemind, mailOn, remaining }) {
   const [reminding, setReminding] = useState(false);
   const st = STATUS_AR[m.status] || STATUS_AR.Scheduled;
   const locked = isLocked(m);
   const past = m.start_at && m.start_at < new Date().toISOString();
   const dt = m.start_at ? new Date(m.start_at) : null;
   const dateStr = dt
-    ? dt.toLocaleString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    ? dt.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
   const attendees = parseAttendees(m.attendees);
   const links = Array.isArray(m.links) ? m.links : [];
@@ -234,12 +364,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
   const joinUrl = firstUrl(m.location);
   const metaBits = [dateStr, `${m.duration} دقيقة`, m.project, joinUrl ? "" : m.location].filter(Boolean);
 
-  async function del() {
-    if (!confirm(`حذف الاجتماع؟\n\n${m.title}`)) return;
-    if (onBeforeDelete) await onBeforeDelete();
-    await meetingsStore.remove(m.id);
-    await onChange();
-  }
+  const rule = describeRule(m);
 
   return (
     <div className={`mtg-card${dim ? " dim" : ""}`}>
@@ -249,6 +374,11 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
           <div className="t">
             <h3>{m.title}</h3>
             <span className="st" style={{ background: `${st.color}1e`, color: st.color }}>{st.short || st.ar}</span>
+            {rule && (
+              <span className="st" style={{ background: "#7c3aed1a", color: "#7c3aed" }} title="اجتماع متكرر">
+                ↻ {rule}{remaining > 1 ? ` · ${remaining} مواعيد قادمة` : ""}
+              </span>
+            )}
           </div>
           {m.status !== "Cancelled" && <Lifecycle m={m} />}
           <div className="mtg-meta">
@@ -312,7 +442,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, onEnd, onApprove, canAppr
         {!readOnly && !locked && (
           <div className="mtg-side">
             <button className="mtg-ib" onClick={onEdit} title="تعديل"><Icon name="edit" size={16} /></button>
-            <button className="mtg-ib del" onClick={del} title="حذف"><Icon name="trash" size={16} /></button>
+            <button className="mtg-ib del" onClick={onDelete} title="حذف"><Icon name="trash" size={16} /></button>
           </div>
         )}
       </div>
@@ -385,7 +515,7 @@ function MeetingMailBox({ f, setF, users, mailPrefs, mailOn, sendMail, setSendMa
   );
 }
 
-function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAULT_MEETING_MAIL, mailOn = false }) {
+function MeetingForm({ initial, users, onSave, onCancel, mode, seriesCount = 0, mailPrefs = DEFAULT_MEETING_MAIL, mailOn = false }) {
   const projectNames = useProjectNames();
   const ending = mode === "end";
   const [f, setF] = useState(() => {
@@ -404,6 +534,15 @@ function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAU
     setF((s) => ({ ...s, present: s.present.includes(name) ? s.present.filter((x) => x !== name) : [...s.present, name] }));
   const [saving, setSaving] = useState(false);
   const [sendMail, setSendMail] = useState(true);
+  // التكرار
+  const inSeries = Boolean(initial?.series_id) && seriesCount > 1;
+  const [rule, setRule] = useState(() => ({ freq: "none", ...DEFAULT_END, ...(initial?.recurrence_end || {}) }));
+  const [scope, setScope] = useState("one");
+  const preview = useMemo(
+    () => (!ending && !inSeries && rule.freq !== "none" && f.start_at ? generateOccurrences(f.start_at, rule) : []),
+    [ending, inSeries, rule, f.start_at]
+  );
+  const setR = (k) => (e) => setRule((r) => ({ ...r, [k]: e.target.value }));
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
 
   const toggleAtt = (name) =>
@@ -422,6 +561,10 @@ function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAU
   async function submit(e) {
     e.preventDefault();
     if (!f.title.trim() || !f.start_at) return;
+    if (!ending && !inSeries && rule.freq !== "none" && rule.endType === "until" && !rule.until) {
+      alert("حدد تاريخ انتهاء التكرار.");
+      return;
+    }
     setSaving(true);
     try {
       await onSave({
@@ -435,7 +578,7 @@ function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAU
           notify_attendees: f.notify_attendees !== false,
           reminders: Array.isArray(f.reminders) ? f.reminders : mailPrefs.defaultReminders || [],
         }),
-      }, { sendMail: f.notify_attendees !== false && sendMail });
+      }, { sendMail: f.notify_attendees !== false && sendMail, rule: ending || inSeries ? { freq: "none" } : rule, scope });
     } finally {
       setSaving(false);
     }
@@ -487,6 +630,54 @@ function MeetingForm({ initial, users, onSave, onCancel, mode, mailPrefs = DEFAU
           <input type="datetime-local" value={toLocalInput(f.start_at)} onChange={(e) => setF((s) => ({ ...s, start_at: fromLocalInput(e.target.value) }))} required />
         </label>
         <label className="field"><span>المدة (دقيقة)</span><input type="number" min={5} step={5} value={f.duration} onChange={set("duration")} /></label>
+
+        {inSeries ? (
+          <div className="field full" style={{ background: "#7c3aed0d", border: "1px solid #7c3aed33", borderRadius: 10, padding: 12 }}>
+            <span style={{ display: "block", fontSize: 12.5, color: "#7c3aed", marginBottom: 8, fontWeight: 700 }}>
+              ↻ اجتماع متكرر ({describeRule(initial)}) — {seriesCount} موعد في السلسلة
+            </span>
+            <div className="seg">
+              <button type="button" className={scope === "one" ? "on" : ""} onClick={() => setScope("one")}>هذا الموعد فقط</button>
+              <button type="button" className={scope === "following" ? "on" : ""} onClick={() => setScope("following")}>هذا الموعد وكل ما بعده</button>
+            </div>
+            {scope === "following" && (
+              <small className="muted" style={{ display: "block", marginTop: 6 }}>
+                يُطبَّق العنوان والهدف والمنظّم والمشروع والمدة والمكان والحضور وجدول الأعمال والروابط وإعدادات البريد، ويُزاح وقت المواعيد التالية بنفس فارق التعديل. المحضر والقرارات والحالة تبقى خاصة بكل موعد.
+              </small>
+            )}
+          </div>
+        ) : (
+          <>
+            <label className="field"><span>التكرار</span>
+              <select value={rule.freq} onChange={setR("freq")}>
+                {RECURRENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
+            {rule.freq !== "none" ? (
+              <div className="field">
+                <span style={{ display: "block", fontSize: 12.5, color: "var(--text-2)", marginBottom: 6, fontWeight: 700 }}>ينتهي التكرار</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={rule.endType} onChange={setR("endType")} style={{ width: 110 }}>
+                    <option value="count">بعد عدد</option>
+                    <option value="until">في تاريخ</option>
+                  </select>
+                  {rule.endType === "count" ? (
+                    <input type="number" min={2} max={MAX_OCCURRENCES} value={rule.count} onChange={setR("count")} title="عدد المواعيد" />
+                  ) : (
+                    <input type="date" value={rule.until} min={f.start_at ? toLocalInput(f.start_at).slice(0, 10) : undefined} onChange={setR("until")} />
+                  )}
+                </div>
+              </div>
+            ) : <div className="field" />}
+            {preview.length > 0 && (
+              <small className="muted" style={{ gridColumn: "1 / -1", marginTop: -4 }}>
+                سيتم إنشاء {preview.length} موعد: من {fmtShort(preview[0])} إلى {fmtShort(preview[preview.length - 1])}
+                {preview.length >= MAX_OCCURRENCES ? ` (الحد الأقصى ${MAX_OCCURRENCES})` : ""}
+                {mailOn && f.notify_attendees !== false ? " · تُرسل الدعوة بالبريد للموعد الأول فقط، والتذكيرات تصل قبل كل موعد." : ""}
+              </small>
+            )}
+          </>
+        )}
         <label className="field full"><span>المكان / رابط الاجتماع</span><input value={f.location} onChange={set("location")} placeholder="Google Meet / Zoom / مكتب…" /></label>
 
         <div className="field full">
@@ -657,6 +848,10 @@ function ApproveMinutes({ m, users, onConfirm, onCancel, onClose }) {
       </div>
     </div>
   );
+}
+
+function fmtShort(iso) {
+  return new Date(iso).toLocaleDateString(DATE_LOCALE, { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 }
 
 function toLocalInput(iso) {

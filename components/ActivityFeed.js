@@ -8,7 +8,7 @@ import { useRole } from "@/components/RoleProvider";
 const FINANCE_ENTITIES = ["فاتورة", "دفعة"];
 // مجموعات التصفية في صفحة السجل
 export const ACTIVITY_GROUPS = {
-  approvals: { ar: "الاعتمادات", test: (a) => ["approve", "revision", "submit"].includes(a.action) },
+  approvals: { ar: "الاعتمادات", test: (a) => ["approve", "revision", "submit", "recall"].includes(a.action) },
   finance: { ar: "المالية والسداد", test: (a) => FINANCE_ENTITIES.includes(a.entity) },
   tasks: { ar: "المهام", test: (a) => a.entity === "مهمة" },
   projects: { ar: "المشاريع", test: (a) => a.entity === "مشروع" },
@@ -22,6 +22,7 @@ const ACTION_META = {
   approve: { verb: "اعتمد", color: "#16a34a", ico: "check" },
   revision: { verb: "طلب تعديل على", color: "#d97706", ico: "alert" },
   submit: { verb: "أرسل للمراجعة", color: "#7c3aed", ico: "arrow" },
+  recall: { verb: "سحب لعنده للتعديل", color: "#0891b2", ico: "arrow" },
 };
 
 function timeAgo(iso) {

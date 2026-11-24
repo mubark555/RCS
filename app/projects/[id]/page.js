@@ -359,7 +359,7 @@ export default function ProjectPage() {
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="calendar" size={15} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{m.title}</div>
-                  <small className="muted">{m.start_at ? new Date(m.start_at).toLocaleDateString("ar-SA", { month: "long", day: "numeric" }) : ""}{m.minutes ? " · يحوي محضراً" : ""}</small>
+                  <small className="muted">{m.start_at ? new Date(m.start_at).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { month: "long", day: "numeric" }) : ""}{m.minutes ? " · يحوي محضراً" : ""}</small>
                 </div>
                 <button className="btn sm" onClick={() => setMinutesOf(m)}>المحضر</button>
                 <button className="btn sm ghost icon" title="تصدير" onClick={() => exportMinutes(m)}><Icon name="upload" size={14} /></button>

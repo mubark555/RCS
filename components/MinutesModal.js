@@ -14,7 +14,7 @@ const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Approved: "مع
 
 export function fmtDate(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("ar-SA", {
+  return new Date(iso).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -68,7 +68,7 @@ export function minutesDocHtml(m) {
   .sign { margin-top: 30px; display:flex; gap: 40px; }
   .sign div { flex:1; border-top:1px solid #ccc; padding-top:6px; font-size:11px; color:#8a8078; text-align:center; }
 </style></head><body><div class="sheet">
-  ${brandHeaderHtml(currentBrand(), m.approved_at ? "محضر اجتماع معتمد" : "محضر اجتماع", new Date().toLocaleDateString("ar-SA"))}
+  ${brandHeaderHtml(currentBrand(), m.approved_at ? "محضر اجتماع معتمد" : "محضر اجتماع", new Date().toLocaleDateString("ar-SA-u-ca-gregory-nu-latn"))}
 
   <h1>${esc(m.title)}</h1>
   <div class="sub">${esc(fmtDate(m.start_at))}</div>

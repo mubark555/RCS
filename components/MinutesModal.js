@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
+import { DATE_LOCALE } from "@/lib/constants";
 import { tasksStore, meetingsStore } from "@/lib/store";
 
 const STATUS_AR = { Scheduled: "مجدول", Done: "منتهي", Cancelled: "ملغى" };
 
 export function fmtDate(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("ar-SA", {
+  return new Date(iso).toLocaleString(DATE_LOCALE, {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -63,7 +64,7 @@ export function exportMinutes(m) {
 </style></head><body><div class="sheet">
   <header>
     <div class="brand">ڤيوليت<small>DIGITAL MARKETING</small></div>
-    <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString("ar-SA"))}</div>
+    <div class="doc-tag"><b>محضر اجتماع رسمي</b><br>${esc(new Date().toLocaleDateString(DATE_LOCALE))}</div>
   </header>
 
   <h1>${esc(m.title)}</h1>

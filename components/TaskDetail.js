@@ -5,7 +5,7 @@ import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import { filesStore } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
-import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META } from "@/lib/constants";
+import { STATUS_META, PRIORITY_META, HEALTH_META, APPROVAL_META, DATE_LOCALE } from "@/lib/constants";
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
@@ -89,7 +89,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate }
                   <div className="flow-body">
                     <b>{h.from} ← {h.to}</b>
                     <small>
-                      {h.at ? new Date(h.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                      {h.at ? new Date(h.at).toLocaleString(DATE_LOCALE, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
                       {h.note ? ` · ${h.note}` : ""}
                     </small>
                   </div>

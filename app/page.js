@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { tasksStore, meetingsStore } from "@/lib/store";
 import Icon from "@/components/Icon";
 import { useRole } from "@/components/RoleProvider";
-import { PRIORITY_META, HEALTH_META } from "@/lib/constants";
+import { PRIORITY_META, HEALTH_META, DATE_LOCALE } from "@/lib/constants";
 
 const DAY = 86400000;
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -171,7 +171,7 @@ export default function Dashboard() {
                     <div className="date-box"><span className="mo">{MONTHS[d.getMonth()]}</span><span className="dy">{d.getDate()}</span></div>
                     <div className="mbody">
                       <b>{m.title}</b>
-                      <small>{d.toLocaleString("ar-SA", { weekday: "long", hour: "2-digit", minute: "2-digit" })}{m.location ? ` · ${m.location}` : ""}</small>
+                      <small>{d.toLocaleString(DATE_LOCALE, { weekday: "long", hour: "2-digit", minute: "2-digit" })}{m.location ? ` · ${m.location}` : ""}</small>
                     </div>
                   </div>
                 );

@@ -5,7 +5,7 @@ import { filesStore, isCloud } from "@/lib/store";
 import { useRole } from "@/components/RoleProvider";
 import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
-import { PROJECTS } from "@/lib/constants";
+import { PROJECTS, DATE_LOCALE } from "@/lib/constants";
 
 const CATEGORIES = ["عقود", "تصاميم", "عروض", "تقارير", "فواتير", "محاضر", "تسجيلات", "أخرى"];
 
@@ -103,7 +103,7 @@ export default function ArchivePage() {
                 {f.project && <span>{f.project}</span>}
                 {f.category && <span>{f.category}</span>}
                 {f.kind === "link" ? <span>رابط</span> : <span>{fmtSize(f.size)}</span>}
-                {f.created_at && <span>{new Date(f.created_at).toLocaleDateString("ar-SA")}</span>}
+                {f.created_at && <span>{new Date(f.created_at).toLocaleDateString(DATE_LOCALE)}</span>}
               </div>
               {f.note && <div style={{ marginTop: 5, fontSize: 13 }}>{f.note}</div>}
             </div>

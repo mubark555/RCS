@@ -6,7 +6,7 @@ import { useRole } from "@/components/RoleProvider";
 import Badge from "@/components/Badge";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
-import { STATUS_META, HEALTH_META, projManagers, projClients, projMembers } from "@/lib/constants";
+import { STATUS_META, HEALTH_META, projManagers, projClients, projMembers, DATE_LOCALE } from "@/lib/constants";
 
 export default function ProjectDetail({ project, onClose }) {
   const { readOnly } = useRole();
@@ -159,7 +159,7 @@ export default function ProjectDetail({ project, onClose }) {
                 <span style={{ color: "var(--primary)", display: "inline-flex" }}><Icon name="calendar" size={15} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{m.title}</div>
-                  <small className="muted">{m.start_at ? new Date(m.start_at).toLocaleDateString("ar-SA", { month: "long", day: "numeric" }) : ""}{m.minutes ? " · يحوي محضراً" : ""}</small>
+                  <small className="muted">{m.start_at ? new Date(m.start_at).toLocaleDateString(DATE_LOCALE, { month: "long", day: "numeric" }) : ""}{m.minutes ? " · يحوي محضراً" : ""}</small>
                 </div>
                 <button className="btn sm" onClick={() => setMinutesOf(m)}>المحضر</button>
                 <button className="btn sm ghost icon" title="تصدير" onClick={() => exportMinutes(m)}><Icon name="upload" size={14} /></button>

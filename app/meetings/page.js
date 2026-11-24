@@ -7,7 +7,7 @@ import Modal from "@/components/Modal";
 import Icon from "@/components/Icon";
 import MinutesModal, { exportMinutes } from "@/components/MinutesModal";
 import LineList from "@/components/LineList";
-import { PROJECTS } from "@/lib/constants";
+import { PROJECTS, DATE_LOCALE } from "@/lib/constants";
 
 const EMPTY = {
   title: "", project: "", start_at: "", duration: 30, location: "",
@@ -109,7 +109,7 @@ function MeetingCard({ m, onEdit, onMinutes, onChange, dim, readOnly }) {
   const st = STATUS_AR[m.status] || STATUS_AR.Scheduled;
   const dt = m.start_at ? new Date(m.start_at) : null;
   const dateStr = dt
-    ? dt.toLocaleString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    ? dt.toLocaleString(DATE_LOCALE, { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
   const attendees = Array.isArray(m.attendees) ? m.attendees : (m.attendees ? String(m.attendees).split(",").map((x) => x.trim()) : []);
   const links = Array.isArray(m.links) ? m.links : [];

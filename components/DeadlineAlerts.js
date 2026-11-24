@@ -86,7 +86,7 @@ export default function DeadlineAlerts() {
           if (isNaN(start)) return;
           if (start >= now && start <= now + DAY) {
             const d = new Date(m.start_at);
-            const time = d.toLocaleString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+            const time = d.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { hour: "2-digit", minute: "2-digit" });
             push(`meeting:${m.id}:soon`, "info", `اجتماع قريب: ${m.title} — ${time}`);
           }
         });

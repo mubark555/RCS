@@ -111,3 +111,50 @@ test("فريق مدير الوحدة: من يتبعه مباشرة وعبر ال
   assert.deepEqual(teamOf(users[0], users).map((u) => u.name), ["أنور", "عهود"]);
   assert.deepEqual(teamOf(users[4], users), []);
 });
+
+import { recallInfo, recallPatch, currentHolder, creatorOf } from "../lib/mywork.mjs";
+
+test("سحب المهمة: صاحبها يسحبها من الشخص الذي حُوّلت له", () => {
+  const me = { name: "مبارك" };
+  const t = T({ assigned_to: "أنور", holder: "عهود", reviews: [{ decision: "created", by: "مبارك", at: "2026-11-01T00:00:00Z" }] });
+  assert.equal(creatorOf(t), "مبارك");
+  const info = recallInfo(t, [], me);
+  assert.ok(info.can);
+  assert.equal(info.from, "عهود");
+  const p = recallPatch(t, [], me, "نسيت أضيف المرفق", new Date("2026-11-24T10:00:00Z"));
+  assert.equal(p.holder, "مبارك");
+  assert.equal(p.handoffs.at(-1).kind, "recall");
+  assert.equal(p.handoffs.at(-1).from, "عهود");
+  assert.equal(p.reviews.at(-1).decision, "recalled");
+  assert.match(p.reviews.at(-1).note, /من عهود — نسيت/);
+});
+
+test("سحب المهمة: من أرسلها بالخطأ للمراجعة ترجع قيد التنفيذ", () => {
+  const t = T({ status: "Pending Review", ready_by: "أنور", holder: "سيم برايم", waiting_on: "سيم برايم" });
+  const info = recallInfo(t, [], anwar);
+  assert.ok(info.can);
+  const p = recallPatch(t, [], anwar);
+  assert.equal(p.status, "In Progress");
+  assert.equal(p.waiting_on, "");
+  assert.equal(p.holder, "أنور");
+});
+
+test("سحب المهمة: في السلسلة ترجع خطوة الساحب وما بعدها", () => {
+  const chain = [
+    { person: "أنور", type: "work", status: "done", by: "أنور", at: "x" },
+    { person: "عهود", type: "approve", status: "pending" },
+  ];
+  const t = T({ assigned_to: "أنور" });
+  assert.equal(currentHolder(t, chain), "عهود");
+  assert.ok(recallInfo(t, chain, anwar).can);
+  const p = recallPatch(t, chain, anwar);
+  assert.equal(p.chain[0].status, "pending");
+  assert.equal(currentHolder({ ...t, ...p }, p.chain), "أنور");
+});
+
+test("سحب المهمة: ممنوع لغير صاحبها/مرسلها، وللمعتمدة، ولمن هي عنده", () => {
+  const t = T({ assigned_to: "أنور", holder: "عهود", reviews: [{ decision: "created", by: "مبارك" }] });
+  assert.ok(!recallInfo(t, [], { name: "حسن" }).can);
+  assert.ok(!recallInfo({ ...t, status: "Approved" }, [], { name: "مبارك" }).can);
+  assert.ok(!recallInfo(t, [], { name: "عهود" }).can);
+});

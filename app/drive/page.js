@@ -254,7 +254,7 @@ export default function DrivePage() {
               {visibleItems.filter((x) => x.kind === "file").map((f) => (
                 <div className="drv-file" key={f.id}>
                   <span className="emo">{fileIcon(f.mime)}</span>
-                  <div className="body"><b>{f.name}</b><small>{fmtSize(f.size)}{f.created_at ? ` · ${new Date(f.created_at).toLocaleString("ar-SA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}{f.by ? ` · ${f.by}` : ""}</small></div>
+                  <div className="body"><b>{f.name}</b><small>{fmtSize(f.size)}{f.created_at ? ` · ${new Date(f.created_at).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}{f.by ? ` · ${f.by}` : ""}</small></div>
                   <button className="btn sm" onClick={() => drive.open(f)}>فتح</button>
                   {canEdit && <button className="btn sm danger icon" onClick={() => del(f)} title="حذف"><Icon name="trash" size={14} /></button>}
                 </div>

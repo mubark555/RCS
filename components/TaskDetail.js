@@ -11,11 +11,12 @@ import { useAmalEnabled } from "@/lib/amalPref";
 import ReviewDialog from "@/components/ReviewDialog";
 import { exceptionalApprove } from "@/lib/workflow";
 import { useProjectChains, templateFor, effectiveChain } from "@/lib/projectChain";
-import { stepBlock } from "@/lib/mywork.mjs";
+import { stepBlock, recallInfo, recallPatch } from "@/lib/mywork.mjs";
+import { useNotifications } from "@/components/NotificationsProvider";
 import { STATUS_META, PRIORITY_META, HEALTH_META, REVIEW_META, CHAIN_TYPE_META, normalizeChain, chainHolder, chainProgress, isOverdue, taskProgress, isFinanceFile, isDone, canExceptionalApprove } from "@/lib/constants";
 
 const FLOW = ["Not Started", "In Progress", "Pending Review", "Approved"];
-const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
 const LINK_TYPES = ["مستند", "تسجيل", "رابط", "مرجع"];
 
@@ -27,7 +28,7 @@ const colorFor = (name) => {
   return AV_COLORS[h];
 };
 
-export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged }) {
+export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, onChanged, openEditOnRecall = false }) {
   const { users, readOnly, canDeliver, projects, viewer, canManage, perms, decisionBlockFor } = useRole();
   const [amalOn] = useAmalEnabled();
   const { chains } = useProjectChains();
@@ -41,6 +42,10 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   const [handTo, setHandTo] = useState("");
   const [handNote, setHandNote] = useState("");
   const [newLink, setNewLink] = useState({ type: "مستند", label: "", url: "" });
+  const { announce } = useNotifications() || {};
+  const [recalling, setRecalling] = useState(false); // نموذج «سحب المهمة لعندي»
+  const [recallNote, setRecallNote] = useState("");
+  const [recallBusy, setRecallBusy] = useState(false);
 
   useEffect(() => setT(task), [task]);
 
@@ -68,6 +73,36 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
   async function persist(patch) {
     setT((s) => ({ ...s, ...patch }));
     if (onUpdate) await onUpdate(t.id, patch);
+  }
+
+  // سحب المهمة لعندي للتعديل — صاحب المهمة أو من أرسلها/حوّلها
+  const recall = readOnly ? { can: false } : recallInfo(t, chain, viewer);
+  async function doRecall() {
+    if (!recall.can || recallBusy) return;
+    setRecallBusy(true);
+    try {
+      const patch = recallPatch(t, chain, viewer, recallNote);
+      const fresh = await tasksStore.update(t.id, patch, { action: "update", entity: "" });
+      const next = { ...t, ...patch, ...(fresh || {}) };
+      setT(next);
+      // إشعار من كانت عنده + تسجيل في سجل الأنشطة
+      if (announce) {
+        await announce({
+          title: `${viewer?.name || ""} سحب المهمة «${t.task}» من ${recall.from} للتعديل`,
+          tone: "info", entity: "مهمة", label: t.task, action: "recall",
+          people: [recall.from, t.assigned_to].filter(Boolean), audience: "none",
+        });
+      }
+      setRecalling(false);
+      setRecallNote("");
+      if (onChanged) await onChanged();
+      // افتح نموذج التعديل مباشرة (في صفحة المهام)
+      if (openEditOnRecall && onEdit) onEdit(next);
+    } catch (e) {
+      alert(`تعذّر سحب المهمة: ${e?.message || ""}`);
+    } finally {
+      setRecallBusy(false);
+    }
   }
 
   async function doHandoff() {
@@ -260,7 +295,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
 
           {reviews.length > 0 && (
             <details className="wf-history">
-              <summary>سجل التسليم والاعتماد ({reviews.length})</summary>
+              <summary>سجل الحركات والاعتماد ({reviews.length})</summary>
               {[...reviews].reverse().map((r, i) => {
                 const m = REVIEW_META[r.decision] || REVIEW_META.submitted;
                 return (
@@ -292,12 +327,34 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
           <div className="holder-box">
             <Icon name="pin" size={17} />
             <span>حالياً عند: <b>{holder}</b></span>
+            {recall.can && !recalling && (
+              <button className="btn sm" type="button" style={{ color: "#0891b2", borderColor: "#0891b255" }} onClick={() => setRecalling(true)}
+                title="ترجع المهمة لعندك عشان تعدّل عليها، وتنسجل في حركات المهمة">
+                <Icon name="arrow" size={14} /> سحب المهمة لعندي للتعديل
+              </button>
+            )}
             {prog && (
               <span className="pill" style={{ marginInlineStart: "auto", color: prog.rejected ? "#dc2626" : prog.complete ? "#16a34a" : "var(--primary)", borderColor: "transparent", background: prog.rejected ? "#fdecec" : prog.complete ? "#e6f5ec" : "var(--primary-soft)" }}>
                 {prog.rejected ? "متوقفة (رفض)" : `${prog.done}/${prog.total} مكتملة`}
               </span>
             )}
           </div>
+
+          {recalling && recall.can && (
+            <div className="wf-alert" style={{ background: "#e3f4f8", borderColor: "#0891b244", color: "#0e5a6e", marginTop: 10 }}>
+              <b>سحب المهمة من «{recall.from}» لعندك</b>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                {t.status === "Pending Review" ? "بيُسحب التسليم من المراجعة وترجع المهمة «قيد التنفيذ». " : ""}
+                {chain.length ? "خطوتك في السلسلة ترجع «بانتظار» عشان تعيد إرسالها بعد التعديل. " : ""}
+                تنسجل الحركة في سجل المهمة ويوصل إشعار لـ{recall.from}.
+              </div>
+              <div className="inline-form" style={{ marginTop: 8 }}>
+                <input placeholder="السبب (اختياري) — مثلاً: نسيت أرفق الملف" value={recallNote} onChange={(e) => setRecallNote(e.target.value)} autoFocus />
+                <button className="btn primary" type="button" onClick={doRecall} disabled={recallBusy}>{recallBusy ? "جاري السحب…" : "سحب وتعديل"}</button>
+                <button className="btn ghost" type="button" onClick={() => { setRecalling(false); setRecallNote(""); }}>إلغاء</button>
+              </div>
+            </div>
+          )}
 
           {chain.length > 0 ? (
             <div className="chain-view">
@@ -324,7 +381,7 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                         {isActive && !done && !rejected && <span className="cv-st cur">الدور الحالي</span>}
                       </div>
                       {s.at && (done || rejected) && (
-                        <small className="cv-time">{new Date(s.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                        <small className="cv-time">{new Date(s.at).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
                       )}
                       {s.by && (done || rejected) && s.by !== s.person && <small className="cv-time">بواسطة {s.by}</small>}
                       {!readOnly && isActive && !done && !rejected && !stepBlock(t, s, viewer, perms.abilities, canManage) && (
@@ -352,9 +409,9 @@ export default function TaskDetail({ task, onClose, onEdit, onDelete, onUpdate, 
                     <div className="flow-item" key={i}>
                       <span className="flow-dot">{i + 1}</span>
                       <div className="flow-body">
-                        <b>{h.from} ← {h.to}</b>
+                        <b>{h.from} ← {h.to}{h.kind === "recall" && <span className="pill" style={{ marginInlineStart: 6, color: "#0891b2", borderColor: "#0891b255" }}>سحب للتعديل</span>}</b>
                         <small>
-                          {h.at ? new Date(h.at).toLocaleString("ar-SA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                          {h.at ? new Date(h.at).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
                           {h.note ? ` · ${h.note}` : ""}
                         </small>
                       </div>

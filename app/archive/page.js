@@ -107,7 +107,7 @@ export default function ArchivePage() {
                 {f.project && <span>{f.project}</span>}
                 {f.category && <span>{f.category}</span>}
                 {f.kind === "link" ? <span>رابط</span> : <span>{fmtSize(f.size)}</span>}
-                {f.created_at && <span>{new Date(f.created_at).toLocaleDateString("ar-SA")}</span>}
+                {f.created_at && <span>{new Date(f.created_at).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")}</span>}
               </div>
               {f.note && <div style={{ marginTop: 5, fontSize: 13 }}>{f.note}</div>}
             </div>
